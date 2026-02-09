@@ -1,0 +1,174 @@
+import { App, PluginSettingTab, Setting } from "obsidian";
+import type WeekFlowPlugin from "./main";
+import type { Category } from "./types";
+
+export class WeekFlowSettingTab extends PluginSettingTab {
+	plugin: WeekFlowPlugin;
+
+	constructor(app: App, plugin: WeekFlowPlugin) {
+		super(app, plugin);
+		this.plugin = plugin;
+	}
+
+	display(): void {
+		const { containerEl } = this;
+		containerEl.empty();
+
+		containerEl.createEl("h2", { text: "WeekFlow Settings" });
+
+		// Daily Note Path
+		const pathSetting = new Setting(containerEl)
+			.setName("Daily note path")
+			.setDesc("Path pattern using moment.js tokens (e.g., YYYY-MM-DD)")
+			.addText((text) =>
+				text
+					.setPlaceholder("YYYY-MM-DD")
+					.setValue(this.plugin.settings.dailyNotePath)
+					.onChange(async (value) => {
+						this.plugin.settings.dailyNotePath = value;
+						await this.plugin.saveSettings();
+						updatePathPreview();
+					})
+			);
+
+		const pathPreviewEl = pathSetting.descEl.createDiv({
+			cls: "weekflow-setting-preview",
+		});
+		const updatePathPreview = () => {
+			const preview = window.moment().format(this.plugin.settings.dailyNotePath);
+			pathPreviewEl.setText(`📄 Preview: ${preview}.md`);
+		};
+		updatePathPreview();
+
+		// Timeline Heading
+		new Setting(containerEl)
+			.setName("Timeline heading")
+			.setDesc("Heading under which timeline items are stored")
+			.addText((text) =>
+				text
+					.setPlaceholder("## Timeline")
+					.setValue(this.plugin.settings.timelineHeading)
+					.onChange(async (value) => {
+						this.plugin.settings.timelineHeading = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		// Day Start Hour
+		new Setting(containerEl)
+			.setName("Day start hour")
+			.setDesc("First hour shown in the timetable (0-23)")
+			.addSlider((slider) =>
+				slider
+					.setLimits(0, 23, 1)
+					.setValue(this.plugin.settings.dayStartHour)
+					.setDynamicTooltip()
+					.onChange(async (value) => {
+						this.plugin.settings.dayStartHour = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		// Day End Hour
+		new Setting(containerEl)
+			.setName("Day end hour")
+			.setDesc("Last hour shown in the timetable (1-24)")
+			.addSlider((slider) =>
+				slider
+					.setLimits(1, 24, 1)
+					.setValue(this.plugin.settings.dayEndHour)
+					.setDynamicTooltip()
+					.onChange(async (value) => {
+						this.plugin.settings.dayEndHour = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		// Week Start Day
+		new Setting(containerEl)
+			.setName("Week start day")
+			.setDesc("First day of the week")
+			.addDropdown((dropdown) =>
+				dropdown
+					.addOptions({
+						"0": "Sunday",
+						"1": "Monday",
+						"2": "Tuesday",
+						"3": "Wednesday",
+						"4": "Thursday",
+						"5": "Friday",
+						"6": "Saturday",
+					})
+					.setValue(String(this.plugin.settings.weekStartDay))
+					.onChange(async (value) => {
+						this.plugin.settings.weekStartDay = parseInt(value);
+						await this.plugin.saveSettings();
+					})
+			);
+
+		// Default Mode
+		new Setting(containerEl)
+			.setName("Default mode")
+			.setDesc("Default input mode when opening the view")
+			.addDropdown((dropdown) =>
+				dropdown
+					.addOptions({ plan: "Plan", actual: "Actual" })
+					.setValue(this.plugin.settings.defaultMode)
+					.onChange(async (value: "plan" | "actual") => {
+						this.plugin.settings.defaultMode = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		// Categories
+		containerEl.createEl("h3", { text: "Categories" });
+
+		this.plugin.settings.categories.forEach((cat, index) => {
+			const s = new Setting(containerEl)
+				.addText((text) =>
+					text
+						.setPlaceholder("tag")
+						.setValue(cat.tag)
+						.onChange(async (value) => {
+							this.plugin.settings.categories[index].tag = value;
+							await this.plugin.saveSettings();
+						})
+				)
+				.addText((text) =>
+					text
+						.setPlaceholder("label")
+						.setValue(cat.label)
+						.onChange(async (value) => {
+							this.plugin.settings.categories[index].label = value;
+							await this.plugin.saveSettings();
+						})
+				)
+				.addColorPicker((color) =>
+					color.setValue(cat.color).onChange(async (value) => {
+						this.plugin.settings.categories[index].color = value;
+						await this.plugin.saveSettings();
+					})
+				)
+				.addExtraButton((btn) =>
+					btn.setIcon("trash").onClick(async () => {
+						this.plugin.settings.categories.splice(index, 1);
+						await this.plugin.saveSettings();
+						this.display();
+					})
+				);
+			s.infoEl.remove();
+		});
+
+		new Setting(containerEl).addButton((btn) =>
+			btn.setButtonText("Add category").onClick(async () => {
+				this.plugin.settings.categories.push({
+					tag: "",
+					label: "",
+					color: "#888888",
+				});
+				await this.plugin.saveSettings();
+				this.display();
+			})
+		);
+	}
+}

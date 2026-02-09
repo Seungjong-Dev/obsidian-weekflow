@@ -1,0 +1,201 @@
+import type { CheckboxState, TimelineItem, TimeRange } from "./types";
+
+const TIMELINE_RE =
+	/^- \[([ x>])\] (\d{2}:\d{2})-(\d{2}:\d{2})(?:\s*>\s*(\d{2}:\d{2})-(\d{2}:\d{2}))?\s+(.+)$/;
+
+const TAG_RE = /#([^\s#]+)/g;
+
+// Tasks plugin emoji metadata patterns
+const TASKS_META_RE =
+	/(?:📅|⏳|🛫|✅|⏫|🔼|🔽|🔁|➕|🔄|⛔|🆔|🏷️)\s*[^\s]*/g;
+
+export function parseTime(str: string): number {
+	const [h, m] = str.split(":").map(Number);
+	return h * 60 + m;
+}
+
+export function formatTime(minutes: number): string {
+	const h = Math.floor(minutes / 60);
+	const m = minutes % 60;
+	return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
+/** Round to nearest 5 minutes */
+function roundTo5(minutes: number): number {
+	return Math.round(minutes / 5) * 5;
+}
+
+function parseCheckbox(ch: string): CheckboxState {
+	if (ch === "x") return "actual";
+	if (ch === ">") return "deferred";
+	return "plan";
+}
+
+function checkboxChar(state: CheckboxState): string {
+	if (state === "actual") return "x";
+	if (state === "deferred") return ">";
+	return " ";
+}
+
+/**
+ * Parse timeline items from a markdown note content.
+ * Finds the given heading and parses checkbox list items until the next heading or EOF.
+ */
+export function parseTimelineItems(
+	content: string,
+	heading: string
+): TimelineItem[] {
+	const lines = content.split("\n");
+
+	// Find the heading line
+	const headingLevel = (heading.match(/^#+/) || [""])[0].length;
+	let startIdx = -1;
+	for (let i = 0; i < lines.length; i++) {
+		if (lines[i].trim() === heading.trim()) {
+			startIdx = i + 1;
+			break;
+		}
+	}
+	if (startIdx === -1) return [];
+
+	// Find the end: next heading of same or higher level, or EOF
+	let endIdx = lines.length;
+	for (let i = startIdx; i < lines.length; i++) {
+		const match = lines[i].match(/^(#+)\s/);
+		if (match && match[1].length <= headingLevel) {
+			endIdx = i;
+			break;
+		}
+	}
+
+	const items: TimelineItem[] = [];
+	for (let i = startIdx; i < endIdx; i++) {
+		const line = lines[i];
+		const m = TIMELINE_RE.exec(line);
+		if (!m) continue;
+
+		const checkbox = parseCheckbox(m[1]);
+		const planStart = roundTo5(parseTime(m[2]));
+		const planEnd = roundTo5(parseTime(m[3]));
+
+		// Validate: end must be after start
+		if (planEnd <= planStart) continue;
+
+		let actualTime: TimeRange | undefined;
+		if (m[4] && m[5]) {
+			const actStart = roundTo5(parseTime(m[4]));
+			const actEnd = roundTo5(parseTime(m[5]));
+			if (actEnd > actStart) {
+				actualTime = { start: actStart, end: actEnd };
+			}
+		}
+
+		const rest = m[6];
+
+		// Extract tags
+		const tags: string[] = [];
+		let tagMatch;
+		const tagRe = new RegExp(TAG_RE.source, TAG_RE.flags);
+		while ((tagMatch = tagRe.exec(rest)) !== null) {
+			tags.push(tagMatch[1]);
+		}
+
+		// Extract Tasks metadata as rawSuffix
+		const rawSuffixParts: string[] = [];
+		let metaMatch;
+		const metaRe = new RegExp(TASKS_META_RE.source, TASKS_META_RE.flags);
+		while ((metaMatch = metaRe.exec(rest)) !== null) {
+			rawSuffixParts.push(metaMatch[0]);
+		}
+		const rawSuffix = rawSuffixParts.join(" ");
+
+		// Content = rest minus tags and Tasks metadata
+		let content_text = rest;
+		// Remove tags
+		content_text = content_text.replace(TAG_RE, "");
+		// Remove Tasks metadata
+		content_text = content_text.replace(TASKS_META_RE, "");
+		// Clean up whitespace
+		content_text = content_text.replace(/\s+/g, " ").trim();
+
+		items.push({
+			checkbox,
+			planTime: { start: planStart, end: planEnd },
+			actualTime,
+			content: content_text,
+			tags,
+			rawSuffix,
+			lineNumber: i,
+		});
+	}
+
+	return items;
+}
+
+/**
+ * Serialize a TimelineItem back to a markdown line.
+ */
+export function serializeTimelineItem(item: TimelineItem): string {
+	const ch = checkboxChar(item.checkbox);
+	let timeStr = `${formatTime(item.planTime.start)}-${formatTime(item.planTime.end)}`;
+	if (item.actualTime) {
+		timeStr += ` > ${formatTime(item.actualTime.start)}-${formatTime(item.actualTime.end)}`;
+	}
+
+	const parts = [item.content];
+	for (const tag of item.tags) {
+		parts.push(`#${tag}`);
+	}
+	if (item.rawSuffix) {
+		parts.push(item.rawSuffix);
+	}
+
+	return `- [${ch}] ${timeStr} ${parts.join(" ")}`;
+}
+
+/**
+ * Replace the timeline section in a note's content with new items.
+ * If the heading doesn't exist, appends it at the end.
+ * If content is empty (new file), creates heading + items.
+ */
+export function updateTimelineSection(
+	content: string,
+	heading: string,
+	items: TimelineItem[]
+): string {
+	const serialized = items.map(serializeTimelineItem);
+	const lines = content.split("\n");
+
+	const headingLevel = (heading.match(/^#+/) || [""])[0].length;
+	let startIdx = -1;
+	for (let i = 0; i < lines.length; i++) {
+		if (lines[i].trim() === heading.trim()) {
+			startIdx = i + 1;
+			break;
+		}
+	}
+
+	if (startIdx === -1) {
+		// Heading not found: append at end
+		const suffix = content.endsWith("\n") ? "" : "\n";
+		const newSection = `${heading}\n${serialized.join("\n")}`;
+		return content + suffix + "\n" + newSection + "\n";
+	}
+
+	// Find end of section
+	let endIdx = lines.length;
+	for (let i = startIdx; i < lines.length; i++) {
+		const match = lines[i].match(/^(#+)\s/);
+		if (match && match[1].length <= headingLevel) {
+			endIdx = i;
+			break;
+		}
+	}
+
+	// Replace section content
+	const before = lines.slice(0, startIdx);
+	const after = lines.slice(endIdx);
+	const result = [...before, ...serialized, ...after];
+
+	return result.join("\n");
+}

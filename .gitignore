@@ -1,0 +1,16 @@
+# npm
+node_modules/
+
+# build output
+main.js
+
+# obsidian
+data.json
+
+# claude
+.claude/
+
+# IDE
+.idea/
+*.swp
+*.swo

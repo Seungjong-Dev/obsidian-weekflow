@@ -1,0 +1,271 @@
+/* WeekFlow Container */
+.weekflow-container {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	overflow: hidden;
+	font-family: var(--font-interface);
+}
+
+/* Toolbar */
+.weekflow-toolbar {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 8px 12px;
+	border-bottom: 1px solid var(--background-modifier-border);
+	flex-shrink: 0;
+	flex-wrap: wrap;
+}
+
+.weekflow-toolbar-nav {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+}
+
+.weekflow-toolbar-nav button {
+	background: none;
+	border: none;
+	cursor: pointer;
+	padding: 4px 8px;
+	border-radius: 4px;
+	color: var(--text-normal);
+}
+
+.weekflow-toolbar-nav button:hover {
+	background: var(--background-modifier-hover);
+}
+
+.weekflow-week-label {
+	font-weight: 600;
+	font-size: 14px;
+	min-width: 120px;
+	text-align: center;
+}
+
+.weekflow-mode-toggle {
+	margin-left: auto;
+	display: flex;
+	border-radius: 4px;
+	overflow: hidden;
+	border: 1px solid var(--background-modifier-border);
+}
+
+.weekflow-mode-btn {
+	padding: 4px 12px;
+	border: none;
+	cursor: pointer;
+	font-size: 12px;
+	background: var(--background-primary);
+	color: var(--text-muted);
+}
+
+.weekflow-mode-btn.active {
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+}
+
+/* Category Palette */
+.weekflow-palette {
+	display: flex;
+	gap: 4px;
+	padding: 4px 0;
+}
+
+.weekflow-palette-btn {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	padding: 2px 8px;
+	border-radius: 12px;
+	border: 2px solid transparent;
+	cursor: pointer;
+	font-size: 11px;
+	background: var(--background-secondary);
+	color: var(--text-normal);
+}
+
+.weekflow-palette-btn .weekflow-palette-dot {
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+}
+
+.weekflow-palette-btn.active {
+	border-color: var(--interactive-accent);
+}
+
+/* Grid */
+.weekflow-grid-wrapper {
+	flex: 1;
+	overflow: auto;
+	position: relative;
+}
+
+.weekflow-grid {
+	display: grid;
+	min-height: 100%;
+	position: relative;
+	gap: 0;
+}
+
+/* Header cells */
+.weekflow-header-cell {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	padding: 6px 4px;
+	font-size: 12px;
+	border-bottom: 2px solid var(--background-modifier-border);
+	background: var(--background-primary);
+	position: sticky;
+	top: 0;
+	z-index: 10;
+}
+
+.weekflow-header-cell.weekflow-corner {
+	z-index: 11;
+}
+
+.weekflow-day-name {
+	font-weight: 600;
+}
+
+.weekflow-day-date {
+	font-size: 10px;
+	color: var(--text-muted);
+}
+
+.weekflow-header-cell.weekflow-today {
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+}
+
+.weekflow-header-cell.weekflow-today .weekflow-day-date {
+	color: var(--text-on-accent);
+	opacity: 0.8;
+}
+
+/* Time labels */
+.weekflow-time-label {
+	display: flex;
+	align-items: flex-start;
+	justify-content: flex-end;
+	padding: 2px 6px 0 0;
+	font-size: 10px;
+	color: var(--text-muted);
+	border-right: 1px solid var(--background-modifier-border);
+	user-select: none;
+}
+
+/* Cells — now horizontal 10-min slots within each hour row */
+.weekflow-cell {
+	border-right: 1px dotted var(--background-modifier-border-hover);
+	border-bottom: 1px solid var(--background-modifier-border);
+	cursor: crosshair;
+	transition: background 0.1s;
+}
+
+.weekflow-cell:hover {
+	background: var(--background-modifier-hover);
+}
+
+/* Left edge of each day group */
+.weekflow-cell.weekflow-cell-day-start {
+	border-left: 1px solid var(--background-modifier-border);
+}
+
+.weekflow-cell.weekflow-cell-selected {
+	background: var(--interactive-accent-hover);
+	opacity: 0.3;
+}
+
+/* Blocks */
+.weekflow-block {
+	border-radius: 3px;
+	padding: 2px 4px;
+	overflow: hidden;
+	cursor: pointer;
+	z-index: 5;
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+	transition: box-shadow 0.15s;
+}
+
+.weekflow-block:hover {
+	box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+	z-index: 6;
+}
+
+/* Plan block: outline only */
+.weekflow-block-plan {
+	border: 2px solid;
+	background: transparent;
+}
+
+/* Actual block: filled */
+.weekflow-block-actual {
+	border: 1px solid;
+}
+
+/* Deferred block: dashed + faded */
+.weekflow-block-deferred {
+	border: 2px dashed;
+	opacity: 0.5;
+	background: transparent;
+}
+
+/* Connected segments: right edge flows into next row's left edge */
+.weekflow-block-cont-right {
+	border-right: none;
+	border-top-right-radius: 0;
+	border-bottom-right-radius: 0;
+}
+
+.weekflow-block-cont-left {
+	border-left: none;
+	border-top-left-radius: 0;
+	border-bottom-left-radius: 0;
+}
+
+/* Plan outline when plan ≠ actual */
+.weekflow-block-plan-outline {
+	border: 2px dashed;
+	background: transparent;
+	pointer-events: none;
+	opacity: 0.5;
+}
+
+.weekflow-block-content {
+	font-size: 10px;
+	line-height: 1.2;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	flex: 1;
+}
+
+.weekflow-block-time {
+	font-size: 9px;
+	opacity: 0.7;
+	white-space: nowrap;
+}
+
+/* Mode emphasis: dim the opposite block type */
+.weekflow-mode-plan .weekflow-block-actual {
+	opacity: 0.3;
+}
+
+.weekflow-mode-actual .weekflow-block-plan {
+	opacity: 0.3;
+}
+
+/* Setting preview */
+.weekflow-setting-preview {
+	margin-top: 4px;
+	font-size: 12px;
+	color: var(--text-muted);
+}
