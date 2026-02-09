@@ -378,6 +378,8 @@ export class GridRenderer {
 
 		const color = this.getCategoryColor(item.tags);
 		const isOverlap = this.overlapIds.has(item.id);
+		const has5minStart = startOffset % 10 !== 0;
+		const has5minEnd = endOffset % 10 !== 0;
 
 		segments.forEach((seg, i) => {
 			const block = this.gridEl!.createDiv({ cls: "weekflow-block" });
@@ -410,6 +412,17 @@ export class GridRenderer {
 			if (segments.length > 1) {
 				if (i < segments.length - 1) block.addClass("weekflow-block-cont-right");
 				if (i > 0) block.addClass("weekflow-block-cont-left");
+			}
+
+			// 5-minute diagonal edges
+			const slots = seg.slotEnd - seg.slotStart;
+			if (i === 0 && has5minStart) {
+				block.addClass("weekflow-5min-start");
+				block.style.setProperty("--slots", String(slots));
+			}
+			if (i === segments.length - 1 && has5minEnd) {
+				block.addClass("weekflow-5min-end");
+				block.style.setProperty("--slots", String(slots));
 			}
 
 			// Content text only in first segment
@@ -472,7 +485,10 @@ export class GridRenderer {
 
 			block.addEventListener("click", (e) => {
 				e.stopPropagation();
-				if (this.dragMode === "none") {
+				const dx = e.clientX - this.blockDragStartX;
+				const dy = e.clientY - this.blockDragStartY;
+				const dist = Math.sqrt(dx * dx + dy * dy);
+				if (this.dragMode === "none" && dist < DRAG_DISTANCE_PX) {
 					this.callbacks.onBlockClick(dayIndex, item);
 				}
 			});
@@ -688,15 +704,29 @@ export class GridRenderer {
 		const dayColStart = dayIndex * 6 + 2;
 		const color = this.getCategoryColor(item.tags);
 		const segments = this.getHourSegments(startOffset, endOffset);
+		const has5minStart = startOffset % 10 !== 0;
+		const has5minEnd = endOffset % 10 !== 0;
 
-		for (const seg of segments) {
-			const outline = this.gridEl.createDiv({
+		segments.forEach((seg, i) => {
+			const outline = this.gridEl!.createDiv({
 				cls: "weekflow-block weekflow-block-plan-outline",
 			});
 			outline.style.gridRow = `${seg.row}`;
 			outline.style.gridColumn = `${dayColStart + seg.slotStart} / ${dayColStart + seg.slotEnd}`;
 			outline.style.borderColor = color;
-		}
+			outline.style.color = color;
+
+			// 5-minute diagonal edges
+			const slots = seg.slotEnd - seg.slotStart;
+			if (i === 0 && has5minStart) {
+				outline.addClass("weekflow-5min-start");
+				outline.style.setProperty("--slots", String(slots));
+			}
+			if (i === segments.length - 1 && has5minEnd) {
+				outline.addClass("weekflow-5min-end");
+				outline.style.setProperty("--slots", String(slots));
+			}
+		});
 	}
 
 	private getCategoryColor(tags: string[]): string {

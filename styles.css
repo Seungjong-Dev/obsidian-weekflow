@@ -231,6 +231,70 @@
 	border-bottom-left-radius: 0;
 }
 
+/* 5-minute diagonal edges */
+.weekflow-5min-start,
+.weekflow-5min-end {
+	position: relative;
+}
+
+.weekflow-5min-start:not(.weekflow-5min-end) {
+	clip-path: polygon(
+		calc(100% / var(--slots)) 0%,
+		0% 100%,
+		100% 100%,
+		100% 0%
+	);
+	padding-left: calc(100% / var(--slots));
+}
+
+.weekflow-5min-end:not(.weekflow-5min-start) {
+	clip-path: polygon(
+		0% 0%,
+		0% 100%,
+		calc(100% - 100% / var(--slots)) 100%,
+		100% 0%
+	);
+	padding-right: calc(100% / var(--slots));
+}
+
+.weekflow-5min-start.weekflow-5min-end {
+	clip-path: polygon(
+		calc(100% / var(--slots)) 0%,
+		0% 100%,
+		calc(100% - 100% / var(--slots)) 100%,
+		100% 0%
+	);
+	padding-left: calc(100% / var(--slots));
+	padding-right: calc(100% / var(--slots));
+}
+
+/* Diagonal border lines drawn via pseudo-elements */
+.weekflow-5min-start::before,
+.weekflow-5min-end::after {
+	content: '';
+	position: absolute;
+	top: 0;
+	width: calc(100% / var(--slots));
+	height: 100%;
+	background: linear-gradient(
+		to bottom right,
+		transparent calc(50% - 2px),
+		currentColor calc(50% - 2px),
+		currentColor 50%,
+		transparent 50%
+	);
+	pointer-events: none;
+	z-index: 1;
+}
+
+.weekflow-5min-start::before {
+	left: 0;
+}
+
+.weekflow-5min-end::after {
+	right: 0;
+}
+
 /* Plan outline when plan ≠ actual */
 .weekflow-block-plan-outline {
 	border: 2px dashed;
@@ -299,6 +363,15 @@
 .weekflow-resize-handle:hover {
 	background: var(--interactive-accent-hover);
 	opacity: 0.4;
+}
+
+/* Widen handles to cover the full diagonal area on 5-min edges */
+.weekflow-5min-start > .weekflow-resize-left {
+	width: calc(100% / var(--slots));
+}
+
+.weekflow-5min-end > .weekflow-resize-right {
+	width: calc(100% / var(--slots));
 }
 
 /* Overlap blocks */
