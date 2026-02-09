@@ -263,6 +263,80 @@
 	opacity: 0.3;
 }
 
+/* Ghost block (drag/resize preview) */
+.weekflow-block-ghost {
+	border-radius: 3px;
+	padding: 2px 4px;
+	overflow: hidden;
+	z-index: 8;
+	display: flex;
+	align-items: center;
+	pointer-events: none;
+	opacity: 0.6;
+	border: 2px dashed;
+	font-size: 10px;
+}
+
+/* Resize handles */
+.weekflow-resize-handle {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	width: 6px;
+	cursor: ew-resize;
+	z-index: 7;
+	background: transparent;
+}
+
+.weekflow-resize-left {
+	left: 0;
+}
+
+.weekflow-resize-right {
+	right: 0;
+}
+
+.weekflow-resize-handle:hover {
+	background: var(--interactive-accent-hover);
+	opacity: 0.4;
+}
+
+/* Overlap blocks */
+.weekflow-block-overlap {
+	opacity: 0.6;
+	border-style: dashed !important;
+}
+
+/* Warning banner */
+.weekflow-warning-banner {
+	padding: 8px 12px;
+	background: var(--background-modifier-error);
+	border-bottom: 1px solid var(--background-modifier-border);
+	font-size: 12px;
+	color: var(--text-normal);
+}
+
+.weekflow-warning-header {
+	font-weight: 600;
+	margin-bottom: 4px;
+}
+
+.weekflow-warning-list {
+	margin: 0;
+	padding-left: 20px;
+}
+
+.weekflow-warning-list li {
+	font-size: 11px;
+	color: var(--text-muted);
+}
+
+/* Disabled toolbar buttons */
+.weekflow-btn-disabled {
+	opacity: 0.3;
+	cursor: default;
+}
+
 /* Setting preview */
 .weekflow-setting-preview {
 	margin-top: 4px;

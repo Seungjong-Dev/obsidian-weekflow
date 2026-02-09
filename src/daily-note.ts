@@ -1,6 +1,6 @@
 import { type Vault, normalizePath, moment } from "obsidian";
 type Moment = ReturnType<typeof moment>;
-import type { TimelineItem, WeekFlowSettings } from "./types";
+import type { ParseWarning, TimelineItem, WeekFlowSettings } from "./types";
 import { parseTimelineItems, serializeTimelineItem, updateTimelineSection } from "./parser";
 
 /**
@@ -21,10 +21,10 @@ export async function getDailyNoteItems(
 	vault: Vault,
 	date: Moment,
 	settings: WeekFlowSettings
-): Promise<TimelineItem[]> {
+): Promise<{ items: TimelineItem[]; warnings: ParseWarning[] }> {
 	const path = resolveDailyNotePath(settings.dailyNotePath, date);
 	const file = vault.getAbstractFileByPath(path);
-	if (!file || !("extension" in file)) return [];
+	if (!file || !("extension" in file)) return { items: [], warnings: [] };
 
 	const content = await vault.read(file as any);
 	return parseTimelineItems(content, settings.timelineHeading);
@@ -100,20 +100,40 @@ export function getWeekDates(
 	return dates;
 }
 
+export interface WeekDataResult {
+	weekData: Map<string, TimelineItem[]>;
+	warnings: Map<string, ParseWarning[]>;
+}
+
 /**
  * Load timeline data for an entire week.
- * Returns a Map keyed by date string (YYYY-MM-DD) → items.
+ * Returns a Map keyed by date string (YYYY-MM-DD) → items, plus warnings.
  */
 export async function loadWeekData(
 	vault: Vault,
 	dates: Moment[],
 	settings: WeekFlowSettings
-): Promise<Map<string, TimelineItem[]>> {
-	const result = new Map<string, TimelineItem[]>();
+): Promise<WeekDataResult> {
+	const weekData = new Map<string, TimelineItem[]>();
+	const warnings = new Map<string, ParseWarning[]>();
 	const promises = dates.map(async (date) => {
-		const items = await getDailyNoteItems(vault, date, settings);
-		result.set(date.format("YYYY-MM-DD"), items);
+		const result = await getDailyNoteItems(vault, date, settings);
+		const dateKey = date.format("YYYY-MM-DD");
+		weekData.set(dateKey, result.items);
+		if (result.warnings.length > 0) {
+			warnings.set(dateKey, result.warnings);
+		}
 	});
 	await Promise.all(promises);
-	return result;
+	return { weekData, warnings };
+}
+
+/**
+ * Get the resolved file paths for all 7 daily notes in the current week.
+ */
+export function getWeekNotePaths(
+	dates: Moment[],
+	settings: WeekFlowSettings
+): string[] {
+	return dates.map((date) => resolveDailyNotePath(settings.dailyNotePath, date));
 }

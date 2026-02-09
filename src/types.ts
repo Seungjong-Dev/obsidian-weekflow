@@ -6,6 +6,7 @@ export interface TimeRange {
 }
 
 export interface TimelineItem {
+	id: string;
 	checkbox: CheckboxState;
 	planTime: TimeRange;
 	actualTime?: TimeRange;
@@ -46,5 +47,15 @@ export const DEFAULT_SETTINGS: WeekFlowSettings = {
 		{ tag: "personal", label: "개인", color: "#BD10E0" },
 	],
 };
+
+export interface ParseWarning {
+	line: number;
+	message: string;
+}
+
+export interface ParseResult {
+	items: TimelineItem[];
+	warnings: ParseWarning[];
+}
 
 export const VIEW_TYPE_WEEKFLOW = "weekflow-view";

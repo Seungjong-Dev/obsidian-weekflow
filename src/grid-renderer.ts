@@ -8,6 +8,8 @@ export interface GridCallbacks {
 	onCellDragMove: (dayIndex: number, minutes: number) => void;
 	onCellDragEnd: () => void;
 	onBlockClick: (dayIndex: number, item: TimelineItem) => void;
+	onBlockDragEnd: (item: TimelineItem, fromDay: number, toDay: number, newStart: number) => void;
+	onBlockResize: (item: TimelineItem, dayIndex: number, newStart: number, newEnd: number) => void;
 }
 
 interface SelectionRange {
@@ -16,6 +18,30 @@ interface SelectionRange {
 	endMinutes: number;
 }
 
+type DragMode = "none" | "cell-select" | "block-drag" | "resize";
+
+interface BlockDragState {
+	item: TimelineItem;
+	fromDay: number;
+	startOffset: number; // mouse offset from block start time (minutes)
+	lastDay: number;
+	lastStart: number;
+}
+
+interface ResizeState {
+	item: TimelineItem;
+	dayIndex: number;
+	edge: "left" | "right";
+	originalStart: number;
+	originalEnd: number;
+	currentStart: number;
+	currentEnd: number;
+}
+
+// Thresholds for distinguishing click vs drag
+const DRAG_DELAY_MS = 150;
+const DRAG_DISTANCE_PX = 5;
+
 export class GridRenderer {
 	private containerEl: HTMLElement;
 	private settings: WeekFlowSettings;
@@ -23,10 +49,28 @@ export class GridRenderer {
 	private weekData: Map<string, TimelineItem[]>;
 	private mode: "plan" | "actual";
 	private callbacks: GridCallbacks;
+	private overlapIds: Set<string>;
 	private gridEl: HTMLElement | null = null;
 	private selectionRange: SelectionRange | null = null;
-	private isDragging = false;
-	private dragAnchorMinutes = 0; // mousedown cell
+
+	// Drag state machine
+	private dragMode: DragMode = "none";
+	private dragAnchorMinutes = 0;
+
+	// Block drag state
+	private blockDragState: BlockDragState | null = null;
+	private blockDragTimer: ReturnType<typeof setTimeout> | null = null;
+	private blockDragStartX = 0;
+	private blockDragStartY = 0;
+	private ghostEls: HTMLElement[] = [];
+
+	// Resize state
+	private resizeState: ResizeState | null = null;
+	private resizeGhostEls: HTMLElement[] = [];
+
+	// Bound handlers for cleanup
+	private boundMouseMove: ((e: MouseEvent) => void) | null = null;
+	private boundMouseUp: ((e: MouseEvent) => void) | null = null;
 
 	constructor(
 		containerEl: HTMLElement,
@@ -34,7 +78,8 @@ export class GridRenderer {
 		dates: Moment[],
 		weekData: Map<string, TimelineItem[]>,
 		mode: "plan" | "actual",
-		callbacks: GridCallbacks
+		callbacks: GridCallbacks,
+		overlapIds: Set<string> = new Set()
 	) {
 		this.containerEl = containerEl;
 		this.settings = settings;
@@ -42,38 +87,27 @@ export class GridRenderer {
 		this.weekData = weekData;
 		this.mode = mode;
 		this.callbacks = callbacks;
+		this.overlapIds = overlapIds;
 	}
 
-	/**
-	 * Grid layout:
-	 *   Columns: 1 time-label + 7 days × 6 ten-minute slots = 43 columns
-	 *   Rows:    1 header + totalHours
-	 *
-	 *   Day d occupies columns: (d*6 + 2) .. (d*6 + 7)   (1-based)
-	 *   Hour h occupies row: (h - dayStartHour) + 2       (1-based, +1 for header)
-	 */
 	render(): void {
 		this.containerEl.empty();
 
 		this.gridEl = this.containerEl.createDiv({ cls: "weekflow-grid" });
 		const totalHours = this.settings.dayEndHour - this.settings.dayStartHour;
 
-		// Columns: 60px time label + 7 groups of 6 equal-width slots
 		this.gridEl.style.gridTemplateColumns =
 			`60px repeat(${7 * 6}, 1fr)`;
-		// Rows: auto header + one row per hour
 		this.gridEl.style.gridTemplateRows =
 			`auto repeat(${totalHours}, minmax(40px, 1fr))`;
 
 		// ── Header row ──
-		// Corner cell spans column 1
 		const corner = this.gridEl.createDiv({
 			cls: "weekflow-header-cell weekflow-corner",
 		});
 		corner.style.gridColumn = "1";
 		corner.style.gridRow = "1";
 
-		// Day headers — each spans 6 columns
 		for (let d = 0; d < 7; d++) {
 			const colStart = d * 6 + 2;
 			const date = this.dates[d];
@@ -93,9 +127,8 @@ export class GridRenderer {
 
 		// ── Hour rows with 10-min cells ──
 		for (let h = this.settings.dayStartHour; h < this.settings.dayEndHour; h++) {
-			const row = (h - this.settings.dayStartHour) + 2; // +1 header, +1 for 1-based
+			const row = (h - this.settings.dayStartHour) + 2;
 
-			// Time label
 			const timeLabel = this.gridEl.createDiv({
 				cls: "weekflow-time-label",
 				text: formatTime(h * 60),
@@ -103,7 +136,6 @@ export class GridRenderer {
 			timeLabel.style.gridColumn = "1";
 			timeLabel.style.gridRow = `${row}`;
 
-			// 6 ten-minute cells per day
 			for (let d = 0; d < 7; d++) {
 				const dayColStart = d * 6 + 2;
 
@@ -120,10 +152,12 @@ export class GridRenderer {
 					cell.dataset.day = String(d);
 					cell.dataset.minutes = String(minutes);
 
-					// Mouse events for drag selection
+					// Cell mousedown → start cell selection (only if no block drag in progress)
 					cell.addEventListener("mousedown", (e) => {
+						if (this.dragMode !== "none") return;
 						e.preventDefault();
-						this.isDragging = true;
+
+						this.dragMode = "cell-select";
 						this.dragAnchorMinutes = minutes;
 						this.selectionRange = {
 							dayIndex: d,
@@ -135,10 +169,9 @@ export class GridRenderer {
 					});
 
 					cell.addEventListener("mouseenter", () => {
-						if (!this.isDragging || !this.selectionRange) return;
+						if (this.dragMode !== "cell-select" || !this.selectionRange) return;
 						if (this.selectionRange.dayIndex !== d) return;
 
-						// Range = anchor cell to current cell
 						const lo = Math.min(this.dragAnchorMinutes, minutes);
 						const hi = Math.max(this.dragAnchorMinutes, minutes) + 10;
 						this.selectionRange.startMinutes = lo;
@@ -150,18 +183,52 @@ export class GridRenderer {
 			}
 		}
 
-		// Global mouseup
-		const mouseUpHandler = () => {
-			if (this.isDragging) {
-				this.isDragging = false;
-				this.callbacks.onCellDragEnd();
-			}
-		};
-		document.addEventListener("mouseup", mouseUpHandler);
+		// Global mouse handlers
+		this.boundMouseMove = (e: MouseEvent) => this.onGlobalMouseMove(e);
+		this.boundMouseUp = (e: MouseEvent) => this.onGlobalMouseUp(e);
+		document.addEventListener("mousemove", this.boundMouseMove);
+		document.addEventListener("mouseup", this.boundMouseUp);
 
-		// Render blocks on top
 		this.renderBlocks();
 	}
+
+	destroy(): void {
+		if (this.boundMouseMove) {
+			document.removeEventListener("mousemove", this.boundMouseMove);
+		}
+		if (this.boundMouseUp) {
+			document.removeEventListener("mouseup", this.boundMouseUp);
+		}
+	}
+
+	// ── Global Mouse Handlers ──
+
+	private onGlobalMouseMove(e: MouseEvent) {
+		if (this.dragMode === "block-drag" && this.blockDragState) {
+			this.onBlockDragMove(e);
+		} else if (this.dragMode === "resize" && this.resizeState) {
+			this.onResizeDragMove(e);
+		}
+	}
+
+	private onGlobalMouseUp(e: MouseEvent) {
+		if (this.dragMode === "cell-select") {
+			this.dragMode = "none";
+			this.callbacks.onCellDragEnd();
+		} else if (this.dragMode === "block-drag") {
+			this.onBlockDragFinish(e);
+		} else if (this.dragMode === "resize") {
+			this.onResizeDragFinish(e);
+		}
+
+		// Clear pending block drag timer
+		if (this.blockDragTimer) {
+			clearTimeout(this.blockDragTimer);
+			this.blockDragTimer = null;
+		}
+	}
+
+	// ── Cell Selection Highlight ──
 
 	private updateSelectionHighlight(): void {
 		if (!this.gridEl) return;
@@ -185,7 +252,7 @@ export class GridRenderer {
 
 	clearSelection(): void {
 		this.selectionRange = null;
-		this.isDragging = false;
+		this.dragMode = "none";
 		if (this.gridEl) {
 			this.gridEl
 				.querySelectorAll(".weekflow-cell-selected")
@@ -197,16 +264,58 @@ export class GridRenderer {
 		return this.selectionRange;
 	}
 
+	// ── getCellFromPoint ──
+
 	/**
-	 * Convert a TimelineItem time range to grid column/row coordinates.
-	 *
-	 * Column: dayColStart + slotOffset  (within a day's 6-column group)
-	 * Row:    hour row
-	 *
-	 * A block that spans multiple hours spans multiple rows.
-	 * A block that starts/ends at non-hour boundaries spans partial columns within its start/end rows.
-	 * For simplicity in Phase 1, blocks span full column groups for their day.
+	 * Convert mouse coordinates to {dayIndex, minutes} using grid geometry math.
+	 * Avoids iterating all cells and calling getBoundingClientRect() on each.
 	 */
+	private getCellFromPoint(clientX: number, clientY: number): { dayIndex: number; minutes: number } | null {
+		if (!this.gridEl) return null;
+
+		const gridRect = this.gridEl.getBoundingClientRect();
+		const x = clientX - gridRect.left + this.containerEl.scrollLeft;
+		const y = clientY - gridRect.top + this.containerEl.scrollTop;
+
+		// Column layout: 60px time label + 42 equal slots
+		const timeLabelWidth = 60;
+		if (x < timeLabelWidth) return null;
+
+		const slotsWidth = gridRect.width - timeLabelWidth;
+		if (slotsWidth <= 0) return null;
+
+		const slotWidth = slotsWidth / (7 * 6);
+		const slotIndex = Math.floor((x - timeLabelWidth) / slotWidth);
+		if (slotIndex < 0 || slotIndex >= 42) return null;
+
+		const dayIndex = Math.floor(slotIndex / 6);
+		const slotInDay = slotIndex % 6;
+
+		// Row layout: header row (auto height) + hour rows
+		// Find header height from the first header cell
+		const headerCell = this.gridEl.querySelector(".weekflow-header-cell");
+		if (!headerCell) return null;
+		const headerHeight = (headerCell as HTMLElement).getBoundingClientRect().height;
+
+		const bodyY = y - headerHeight;
+		if (bodyY < 0) return null;
+
+		const totalHours = this.settings.dayEndHour - this.settings.dayStartHour;
+		const bodyHeight = gridRect.height - headerHeight;
+		if (bodyHeight <= 0) return null;
+
+		const rowHeight = bodyHeight / totalHours;
+		const hourIndex = Math.floor(bodyY / rowHeight);
+		if (hourIndex < 0 || hourIndex >= totalHours) return null;
+
+		const hour = this.settings.dayStartHour + hourIndex;
+		const minutes = hour * 60 + slotInDay * 10;
+
+		return { dayIndex, minutes };
+	}
+
+	// ── Block Rendering ──
+
 	private renderBlocks(): void {
 		if (!this.gridEl) return;
 
@@ -220,14 +329,6 @@ export class GridRenderer {
 		}
 	}
 
-	/**
-	 * Compute per-hour-row segments for a time range.
-	 * Each segment = { row, colStart, colEnd } with column offsets relative to day group.
-	 *
-	 * Example: 13:30-14:30 (dayStartHour=6, startOffset=450, endOffset=510)
-	 *   → hour 7 (13:00 row): slots 3..6   (13:30-14:00)
-	 *   → hour 8 (14:00 row): slots 0..3   (14:00-14:30)
-	 */
 	private getHourSegments(
 		startOffset: number,
 		endOffset: number
@@ -247,7 +348,7 @@ export class GridRenderer {
 			const slotEnd = Math.ceil((segEnd - hourStartMin) / 10);
 
 			segments.push({
-				row: h + 2, // +1 header, +1 for 1-based grid
+				row: h + 2,
 				slotStart,
 				slotEnd: Math.min(slotEnd, 6),
 			});
@@ -276,11 +377,18 @@ export class GridRenderer {
 		if (segments.length === 0) return;
 
 		const color = this.getCategoryColor(item.tags);
+		const isOverlap = this.overlapIds.has(item.id);
 
 		segments.forEach((seg, i) => {
 			const block = this.gridEl!.createDiv({ cls: "weekflow-block" });
 			block.style.gridRow = `${seg.row}`;
 			block.style.gridColumn = `${dayColStart + seg.slotStart} / ${dayColStart + seg.slotEnd}`;
+			block.style.position = "relative";
+
+			// Overlap styling
+			if (isOverlap) {
+				block.addClass("weekflow-block-overlap");
+			}
 
 			// Style based on checkbox state
 			if (item.checkbox === "plan") {
@@ -298,7 +406,7 @@ export class GridRenderer {
 				block.style.color = color + "80";
 			}
 
-			// Connected segments: right edge → next row left edge
+			// Connected segments
 			if (segments.length > 1) {
 				if (i < segments.length - 1) block.addClass("weekflow-block-cont-right");
 				if (i > 0) block.addClass("weekflow-block-cont-left");
@@ -315,9 +423,58 @@ export class GridRenderer {
 				);
 			}
 
+			// ── Resize Handles ──
+			// Left handle on first segment (drag start time)
+			if (i === 0) {
+				const leftHandle = block.createDiv({ cls: "weekflow-resize-handle weekflow-resize-left" });
+				leftHandle.addEventListener("mousedown", (e) => {
+					e.preventDefault();
+					e.stopPropagation();
+					this.startResize(item, dayIndex, "left", e);
+				});
+			}
+
+			// Right handle on last segment (drag end time)
+			if (i === segments.length - 1) {
+				const rightHandle = block.createDiv({ cls: "weekflow-resize-handle weekflow-resize-right" });
+				rightHandle.addEventListener("mousedown", (e) => {
+					e.preventDefault();
+					e.stopPropagation();
+					this.startResize(item, dayIndex, "right", e);
+				});
+			}
+
+			// ── Block mousedown: click vs drag detection ──
+			block.addEventListener("mousedown", (e) => {
+				e.preventDefault();
+				e.stopPropagation();
+
+				this.blockDragStartX = e.clientX;
+				this.blockDragStartY = e.clientY;
+
+				const cell = this.getCellFromPoint(e.clientX, e.clientY);
+				const offsetMinutes = cell ? (cell.minutes - item.planTime.start) : 0;
+
+				// Start a timer for drag threshold
+				this.blockDragTimer = setTimeout(() => {
+					this.blockDragTimer = null;
+					this.dragMode = "block-drag";
+					this.blockDragState = {
+						item,
+						fromDay: dayIndex,
+						startOffset: Math.max(0, offsetMinutes),
+						lastDay: -1,
+						lastStart: -1,
+					};
+					this.updateGhostPosition(e);
+				}, DRAG_DELAY_MS);
+			});
+
 			block.addEventListener("click", (e) => {
 				e.stopPropagation();
-				this.callbacks.onBlockClick(dayIndex, item);
+				if (this.dragMode === "none") {
+					this.callbacks.onBlockClick(dayIndex, item);
+				}
 			});
 		});
 
@@ -326,6 +483,197 @@ export class GridRenderer {
 			this.renderPlanOutline(dayIndex, item);
 		}
 	}
+
+	// ── Block Drag ──
+
+	private updateGhostPosition(e: MouseEvent) {
+		if (!this.blockDragState || !this.gridEl) return;
+
+		const cell = this.getCellFromPoint(e.clientX, e.clientY);
+		if (!cell) return;
+
+		const item = this.blockDragState.item;
+		const duration = item.planTime.end - item.planTime.start;
+		const newStart = Math.max(
+			this.settings.dayStartHour * 60,
+			cell.minutes - this.blockDragState.startOffset
+		);
+		const snappedStart = Math.round(newStart / 10) * 10;
+
+		// Skip if nothing changed
+		if (cell.dayIndex === this.blockDragState.lastDay && snappedStart === this.blockDragState.lastStart) return;
+		this.blockDragState.lastDay = cell.dayIndex;
+		this.blockDragState.lastStart = snappedStart;
+
+		const snappedEnd = snappedStart + duration;
+		const dayStartMin = this.settings.dayStartHour * 60;
+		const startOffset = snappedStart - dayStartMin;
+		const endOffset = snappedEnd - dayStartMin;
+
+		const dayColStart = cell.dayIndex * 6 + 2;
+		const segments = this.getHourSegments(startOffset, endOffset);
+		if (segments.length === 0) return;
+
+		const color = this.getCategoryColor(item.tags);
+		this.renderGhostSegments(segments, dayColStart, color, item.content);
+	}
+
+	private removeGhost() {
+		for (const el of this.ghostEls) el.remove();
+		this.ghostEls = [];
+	}
+
+	/**
+	 * Render ghost block segments spanning all hour rows.
+	 */
+	private renderGhostSegments(
+		segments: { row: number; slotStart: number; slotEnd: number }[],
+		dayColStart: number,
+		color: string,
+		label: string
+	) {
+		this.removeGhost();
+		if (!this.gridEl) return;
+
+		segments.forEach((seg, i) => {
+			const ghost = this.gridEl!.createDiv({ cls: "weekflow-block-ghost" });
+			ghost.style.gridRow = `${seg.row}`;
+			ghost.style.gridColumn = `${dayColStart + seg.slotStart} / ${dayColStart + seg.slotEnd}`;
+			ghost.style.backgroundColor = color + "40";
+			ghost.style.borderColor = color;
+			if (i === 0) ghost.setText(label);
+			this.ghostEls.push(ghost);
+		});
+	}
+
+	private onBlockDragMove(e: MouseEvent) {
+		// Check if we've moved enough to confirm drag
+		const dx = e.clientX - this.blockDragStartX;
+		const dy = e.clientY - this.blockDragStartY;
+		if (Math.abs(dx) < DRAG_DISTANCE_PX && Math.abs(dy) < DRAG_DISTANCE_PX) return;
+
+		this.updateGhostPosition(e);
+	}
+
+	private onBlockDragFinish(e: MouseEvent) {
+		this.dragMode = "none";
+		this.removeGhost();
+
+		if (!this.blockDragState) return;
+
+		const cell = this.getCellFromPoint(e.clientX, e.clientY);
+		if (!cell) {
+			this.blockDragState = null;
+			return;
+		}
+
+		const item = this.blockDragState.item;
+		const fromDay = this.blockDragState.fromDay;
+		const newStart = Math.max(
+			this.settings.dayStartHour * 60,
+			cell.minutes - this.blockDragState.startOffset
+		);
+		const snappedStart = Math.round(newStart / 10) * 10;
+
+		this.blockDragState = null;
+
+		// Only trigger if position actually changed
+		if (cell.dayIndex === fromDay && snappedStart === item.planTime.start) return;
+
+		this.callbacks.onBlockDragEnd(item, fromDay, cell.dayIndex, snappedStart);
+	}
+
+	// ── Resize ──
+
+	private startResize(item: TimelineItem, dayIndex: number, edge: "left" | "right", e: MouseEvent) {
+		this.dragMode = "resize";
+		this.resizeState = {
+			item,
+			dayIndex,
+			edge,
+			originalStart: item.planTime.start,
+			originalEnd: item.planTime.end,
+			currentStart: item.planTime.start,
+			currentEnd: item.planTime.end,
+		};
+	}
+
+	private onResizeDragMove(e: MouseEvent) {
+		if (!this.resizeState || !this.gridEl) return;
+
+		const cell = this.getCellFromPoint(e.clientX, e.clientY);
+		if (!cell) return;
+		if (cell.dayIndex !== this.resizeState.dayIndex) return;
+
+		const snappedMinutes = Math.round(cell.minutes / 10) * 10;
+
+		let newStart = this.resizeState.originalStart;
+		let newEnd = this.resizeState.originalEnd;
+
+		if (this.resizeState.edge === "left") {
+			newStart = Math.min(snappedMinutes, newEnd - 10);
+		} else {
+			newEnd = Math.max(snappedMinutes + 10, newStart + 10);
+		}
+
+		// Clamp to day bounds
+		const dayStartMin = this.settings.dayStartHour * 60;
+		const dayEndMin = this.settings.dayEndHour * 60;
+		newStart = Math.max(dayStartMin, newStart);
+		newEnd = Math.min(dayEndMin, newEnd);
+
+		if (newEnd <= newStart) return;
+
+		// Skip if nothing changed
+		if (newStart === this.resizeState.currentStart && newEnd === this.resizeState.currentEnd) return;
+
+		// Update tracked values
+		this.resizeState.currentStart = newStart;
+		this.resizeState.currentEnd = newEnd;
+
+		// Render all ghost segments
+		const color = this.getCategoryColor(this.resizeState.item.tags);
+		const dayColStart = this.resizeState.dayIndex * 6 + 2;
+		const startOffset = newStart - dayStartMin;
+		const endOffset = newEnd - dayStartMin;
+		const segments = this.getHourSegments(startOffset, endOffset);
+
+		this.removeResizeGhost();
+		const label = `${formatTime(newStart)}-${formatTime(newEnd)}`;
+		segments.forEach((seg, i) => {
+			const ghost = this.gridEl!.createDiv({ cls: "weekflow-block-ghost" });
+			ghost.style.gridRow = `${seg.row}`;
+			ghost.style.gridColumn = `${dayColStart + seg.slotStart} / ${dayColStart + seg.slotEnd}`;
+			ghost.style.backgroundColor = color + "30";
+			ghost.style.borderColor = color;
+			if (i === 0) ghost.setText(label);
+			this.resizeGhostEls.push(ghost);
+		});
+	}
+
+	private removeResizeGhost() {
+		for (const el of this.resizeGhostEls) el.remove();
+		this.resizeGhostEls = [];
+	}
+
+	private onResizeDragFinish(e: MouseEvent) {
+		this.dragMode = "none";
+		this.removeResizeGhost();
+
+		if (!this.resizeState) return;
+
+		const { currentStart: newStart, currentEnd: newEnd } = this.resizeState;
+		const state = this.resizeState;
+		this.resizeState = null;
+
+		// Only trigger if actually changed
+		if (newStart === state.originalStart && newEnd === state.originalEnd) return;
+		if (newEnd <= newStart) return;
+
+		this.callbacks.onBlockResize(state.item, state.dayIndex, newStart, newEnd);
+	}
+
+	// ── Plan Outline ──
 
 	private renderPlanOutline(dayIndex: number, item: TimelineItem): void {
 		if (!this.gridEl) return;

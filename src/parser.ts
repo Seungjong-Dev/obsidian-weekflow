@@ -1,9 +1,17 @@
-import type { CheckboxState, TimelineItem, TimeRange } from "./types";
+import type { CheckboxState, ParseResult, ParseWarning, TimelineItem, TimeRange } from "./types";
+
+let idCounter = 0;
+export function generateItemId(): string {
+	return `wf-${Date.now()}-${idCounter++}`;
+}
 
 const TIMELINE_RE =
 	/^- \[([ x>])\] (\d{2}:\d{2})-(\d{2}:\d{2})(?:\s*>\s*(\d{2}:\d{2})-(\d{2}:\d{2}))?\s+(.+)$/;
 
 const TAG_RE = /#([^\s#]+)/g;
+
+// Loose match: any line that starts like a checkbox item (for warning detection)
+const CHECKBOX_LINE_RE = /^- \[.\]/;
 
 // Tasks plugin emoji metadata patterns
 const TASKS_META_RE =
@@ -40,12 +48,14 @@ function checkboxChar(state: CheckboxState): string {
 /**
  * Parse timeline items from a markdown note content.
  * Finds the given heading and parses checkbox list items until the next heading or EOF.
+ * Returns items and any parse warnings for malformed lines.
  */
 export function parseTimelineItems(
 	content: string,
 	heading: string
-): TimelineItem[] {
+): ParseResult {
 	const lines = content.split("\n");
+	const warnings: ParseWarning[] = [];
 
 	// Find the heading line
 	const headingLevel = (heading.match(/^#+/) || [""])[0].length;
@@ -56,7 +66,7 @@ export function parseTimelineItems(
 			break;
 		}
 	}
-	if (startIdx === -1) return [];
+	if (startIdx === -1) return { items: [], warnings: [] };
 
 	// Find the end: next heading of same or higher level, or EOF
 	let endIdx = lines.length;
@@ -72,14 +82,23 @@ export function parseTimelineItems(
 	for (let i = startIdx; i < endIdx; i++) {
 		const line = lines[i];
 		const m = TIMELINE_RE.exec(line);
-		if (!m) continue;
+		if (!m) {
+			// Warn if it looks like a checkbox item but failed to parse
+			if (line.trim() && CHECKBOX_LINE_RE.test(line.trim())) {
+				warnings.push({ line: i + 1, message: `Could not parse timeline format: "${line.trim()}"` });
+			}
+			continue;
+		}
 
 		const checkbox = parseCheckbox(m[1]);
 		const planStart = roundTo5(parseTime(m[2]));
 		const planEnd = roundTo5(parseTime(m[3]));
 
 		// Validate: end must be after start
-		if (planEnd <= planStart) continue;
+		if (planEnd <= planStart) {
+			warnings.push({ line: i + 1, message: `End time must be after start time: "${line.trim()}"` });
+			continue;
+		}
 
 		let actualTime: TimeRange | undefined;
 		if (m[4] && m[5]) {
@@ -87,6 +106,8 @@ export function parseTimelineItems(
 			const actEnd = roundTo5(parseTime(m[5]));
 			if (actEnd > actStart) {
 				actualTime = { start: actStart, end: actEnd };
+			} else {
+				warnings.push({ line: i + 1, message: `Actual end time must be after start: "${line.trim()}"` });
 			}
 		}
 
@@ -119,6 +140,7 @@ export function parseTimelineItems(
 		content_text = content_text.replace(/\s+/g, " ").trim();
 
 		items.push({
+			id: generateItemId(),
 			checkbox,
 			planTime: { start: planStart, end: planEnd },
 			actualTime,
@@ -129,7 +151,7 @@ export function parseTimelineItems(
 		});
 	}
 
-	return items;
+	return { items, warnings };
 }
 
 /**

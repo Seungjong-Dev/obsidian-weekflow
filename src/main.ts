@@ -27,6 +27,30 @@ export default class WeekFlowPlugin extends Plugin {
 			},
 		});
 
+		this.addCommand({
+			id: "weekflow-undo",
+			name: "Undo",
+			hotkeys: [{ modifiers: ["Mod"], key: "z" }],
+			checkCallback: (checking: boolean) => {
+				const view = this.getWeekFlowView();
+				if (!view) return false;
+				if (!checking) view.undo();
+				return true;
+			},
+		});
+
+		this.addCommand({
+			id: "weekflow-redo",
+			name: "Redo",
+			hotkeys: [{ modifiers: ["Mod", "Shift"], key: "z" }],
+			checkCallback: (checking: boolean) => {
+				const view = this.getWeekFlowView();
+				if (!view) return false;
+				if (!checking) view.redo();
+				return true;
+			},
+		});
+
 		this.addSettingTab(new WeekFlowSettingTab(this.app, this));
 	}
 
@@ -45,6 +69,12 @@ export default class WeekFlowPlugin extends Plugin {
 			leaf = newLeaf;
 		}
 		workspace.revealLeaf(leaf);
+	}
+
+	private getWeekFlowView(): WeekFlowView | null {
+		const leaf = this.app.workspace.getLeavesOfType(VIEW_TYPE_WEEKFLOW)[0];
+		if (!leaf) return null;
+		return leaf.view as WeekFlowView;
 	}
 
 	async loadSettings() {
