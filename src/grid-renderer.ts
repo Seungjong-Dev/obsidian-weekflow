@@ -11,6 +11,8 @@ export interface GridCallbacks {
 	onBlockDragEnd: (item: TimelineItem, fromDay: number, toDay: number, newStart: number) => void;
 	onBlockResize: (item: TimelineItem, dayIndex: number, newStart: number, newEnd: number) => void;
 	onBlockDropOutside?: (item: TimelineItem, fromDay: number) => void;
+	onBlockComplete?: (dayIndex: number, item: TimelineItem) => void;
+	onBlockUncomplete?: (dayIndex: number, item: TimelineItem) => void;
 }
 
 interface SelectionRange {
@@ -475,6 +477,23 @@ export class GridRenderer {
 				timeEl.setText(
 					`${formatTime(item.planTime.start)}-${formatTime(item.planTime.end)}`
 				);
+
+				// Toggle button (plan ↔ actual)
+				if (item.checkbox === "plan" && this.callbacks.onBlockComplete) {
+					const toggleBtn = block.createDiv({ cls: "weekflow-block-toggle" });
+					toggleBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="14" height="14"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>`;
+					toggleBtn.ariaLabel = "Mark as done";
+					const completeCb = this.callbacks.onBlockComplete;
+					toggleBtn.addEventListener("mousedown", (e) => { e.stopPropagation(); e.preventDefault(); });
+					toggleBtn.addEventListener("click", (e) => { e.stopPropagation(); completeCb(dayIndex, item); });
+				} else if (item.checkbox === "actual" && this.callbacks.onBlockUncomplete) {
+					const toggleBtn = block.createDiv({ cls: "weekflow-block-toggle" });
+					toggleBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="14" height="14"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M5 8l2 2 4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+					toggleBtn.ariaLabel = "Mark as incomplete";
+					const uncompleteCb = this.callbacks.onBlockUncomplete;
+					toggleBtn.addEventListener("mousedown", (e) => { e.stopPropagation(); e.preventDefault(); });
+					toggleBtn.addEventListener("click", (e) => { e.stopPropagation(); uncompleteCb(dayIndex, item); });
+				}
 			}
 
 			// ── Resize Handles ──
@@ -507,7 +526,8 @@ export class GridRenderer {
 				this.blockDragStartY = e.clientY;
 
 				const cell = this.getCellFromPoint(e.clientX, e.clientY);
-				const offsetMinutes = cell ? (cell.minutes - item.planTime.start) : 0;
+				const dragTime = item.checkbox === "actual" && item.actualTime ? item.actualTime : item.planTime;
+				const offsetMinutes = cell ? (cell.minutes - dragTime.start) : 0;
 
 				// Start a timer for drag threshold
 				this.blockDragTimer = setTimeout(() => {
@@ -550,7 +570,8 @@ export class GridRenderer {
 		if (!cell) return;
 
 		const item = this.blockDragState.item;
-		const duration = item.planTime.end - item.planTime.start;
+		const dragTime = item.checkbox === "actual" && item.actualTime ? item.actualTime : item.planTime;
+		const duration = dragTime.end - dragTime.start;
 		const newStart = Math.max(
 			this.settings.dayStartHour * 60,
 			cell.minutes - this.blockDragState.startOffset
@@ -645,7 +666,8 @@ export class GridRenderer {
 		this.blockDragState = null;
 
 		// Only trigger if position actually changed
-		if (cell.dayIndex === fromDay && snappedStart === item.planTime.start) return;
+		const dragTime = item.checkbox === "actual" && item.actualTime ? item.actualTime : item.planTime;
+		if (cell.dayIndex === fromDay && snappedStart === dragTime.start) return;
 
 		this.callbacks.onBlockDragEnd(item, fromDay, cell.dayIndex, snappedStart);
 	}
@@ -654,14 +676,15 @@ export class GridRenderer {
 
 	private startResize(item: TimelineItem, dayIndex: number, edge: "left" | "right", e: MouseEvent) {
 		this.dragMode = "resize";
+		const time = item.checkbox === "actual" && item.actualTime ? item.actualTime : item.planTime;
 		this.resizeState = {
 			item,
 			dayIndex,
 			edge,
-			originalStart: item.planTime.start,
-			originalEnd: item.planTime.end,
-			currentStart: item.planTime.start,
-			currentEnd: item.planTime.end,
+			originalStart: time.start,
+			originalEnd: time.end,
+			currentStart: time.start,
+			currentEnd: time.end,
 		};
 	}
 

@@ -8,6 +8,8 @@ export interface EditBlockResult {
 	tag: string;
 	startMinutes: number;
 	endMinutes: number;
+	actualStartMinutes?: number;
+	actualEndMinutes?: number;
 }
 
 export class EditBlockModal extends Modal {
@@ -31,39 +33,86 @@ export class EditBlockModal extends Modal {
 		const { contentEl } = this;
 		contentEl.empty();
 
+		const isActual = this.item.checkbox === "actual";
+
 		contentEl.createEl("h3", { text: "Edit Block" });
 
 		// Time inputs
 		let startValue = formatTime(this.item.planTime.start);
 		let endValue = formatTime(this.item.planTime.end);
+		let actualStartValue = "";
+		let actualEndValue = "";
 
-		const timeSetting = new Setting(contentEl).setName("Time");
-		const timeContainer = timeSetting.controlEl.createDiv({
-			cls: "weekflow-edit-time-container",
-		});
-		timeContainer.style.display = "flex";
-		timeContainer.style.gap = "8px";
-		timeContainer.style.alignItems = "center";
+		if (isActual) {
+			// Plan time: read-only display
+			const planSetting = new Setting(contentEl).setName("Plan time");
+			planSetting.controlEl.createSpan({
+				text: `${formatTime(this.item.planTime.start)} - ${formatTime(this.item.planTime.end)}`,
+				cls: "weekflow-edit-readonly-time",
+			});
 
-		const startInput = timeContainer.createEl("input", {
-			type: "time",
-			value: startValue,
-		});
-		startInput.style.padding = "4px";
-		startInput.addEventListener("change", () => {
-			startValue = startInput.value;
-		});
+			// Actual time: editable
+			const actualTime = this.item.actualTime || this.item.planTime;
+			actualStartValue = formatTime(actualTime.start);
+			actualEndValue = formatTime(actualTime.end);
 
-		timeContainer.createSpan({ text: " - " });
+			const actTimeSetting = new Setting(contentEl).setName("Actual time");
+			const actTimeContainer = actTimeSetting.controlEl.createDiv({
+				cls: "weekflow-edit-time-container",
+			});
+			actTimeContainer.style.display = "flex";
+			actTimeContainer.style.gap = "8px";
+			actTimeContainer.style.alignItems = "center";
 
-		const endInput = timeContainer.createEl("input", {
-			type: "time",
-			value: endValue,
-		});
-		endInput.style.padding = "4px";
-		endInput.addEventListener("change", () => {
-			endValue = endInput.value;
-		});
+			const actStartInput = actTimeContainer.createEl("input", {
+				type: "time",
+				value: actualStartValue,
+			});
+			actStartInput.style.padding = "4px";
+			actStartInput.addEventListener("change", () => {
+				actualStartValue = actStartInput.value;
+			});
+
+			actTimeContainer.createSpan({ text: " - " });
+
+			const actEndInput = actTimeContainer.createEl("input", {
+				type: "time",
+				value: actualEndValue,
+			});
+			actEndInput.style.padding = "4px";
+			actEndInput.addEventListener("change", () => {
+				actualEndValue = actEndInput.value;
+			});
+		} else {
+			// Plan block: editable time
+			const timeSetting = new Setting(contentEl).setName("Time");
+			const timeContainer = timeSetting.controlEl.createDiv({
+				cls: "weekflow-edit-time-container",
+			});
+			timeContainer.style.display = "flex";
+			timeContainer.style.gap = "8px";
+			timeContainer.style.alignItems = "center";
+
+			const startInput = timeContainer.createEl("input", {
+				type: "time",
+				value: startValue,
+			});
+			startInput.style.padding = "4px";
+			startInput.addEventListener("change", () => {
+				startValue = startInput.value;
+			});
+
+			timeContainer.createSpan({ text: " - " });
+
+			const endInput = timeContainer.createEl("input", {
+				type: "time",
+				value: endValue,
+			});
+			endInput.style.padding = "4px";
+			endInput.addEventListener("change", () => {
+				endValue = endInput.value;
+			});
+		}
 
 		// Content input
 		let contentValue = this.item.content;
@@ -77,7 +126,11 @@ export class EditBlockModal extends Modal {
 				text.inputEl.addEventListener("keydown", (e) => {
 					if (e.key === "Enter") {
 						e.preventDefault();
-						this.submitSave(contentValue, selectedTag, startValue, endValue);
+						if (isActual) {
+							this.submitActualSave(contentValue, selectedTag, actualStartValue, actualEndValue);
+						} else {
+							this.submitSave(contentValue, selectedTag, startValue, endValue);
+						}
 					}
 				});
 			});
@@ -118,7 +171,11 @@ export class EditBlockModal extends Modal {
 				.setButtonText("Save")
 				.setCta()
 				.onClick(() => {
-					this.submitSave(contentValue, selectedTag, startValue, endValue);
+					if (isActual) {
+						this.submitActualSave(contentValue, selectedTag, actualStartValue, actualEndValue);
+					} else {
+						this.submitSave(contentValue, selectedTag, startValue, endValue);
+					}
 				})
 		);
 
@@ -143,6 +200,25 @@ export class EditBlockModal extends Modal {
 					this.close();
 				})
 		);
+	}
+
+	private submitActualSave(content: string, tag: string, actualStartStr: string, actualEndStr: string) {
+		if (!content.trim()) return;
+
+		const actualStartMinutes = parseTime(actualStartStr);
+		const actualEndMinutes = parseTime(actualEndStr);
+		if (actualEndMinutes <= actualStartMinutes) return;
+
+		this.onSubmit({
+			action: "save",
+			content: content.trim(),
+			tag,
+			startMinutes: this.item.planTime.start,
+			endMinutes: this.item.planTime.end,
+			actualStartMinutes,
+			actualEndMinutes,
+		});
+		this.close();
 	}
 
 	private submitSave(content: string, tag: string, startStr: string, endStr: string) {

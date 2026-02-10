@@ -170,6 +170,10 @@ export class WeekFlowView extends ItemView {
 					this.onBlockResize(item, dayIndex, newStart, newEnd),
 				onBlockDropOutside: (item, fromDay) =>
 					this.onBlockReturnToInbox(item, fromDay),
+				onBlockComplete: (dayIndex, item) =>
+					this.onBlockComplete(dayIndex, item),
+				onBlockUncomplete: (dayIndex, item) =>
+					this.onBlockUncomplete(dayIndex, item),
 			},
 			overlapIds
 		);
@@ -504,6 +508,9 @@ export class WeekFlowView extends ItemView {
 					items[idx].content = result.content;
 					items[idx].tags = result.tag ? [result.tag] : [];
 					items[idx].planTime = { start: result.startMinutes, end: result.endMinutes };
+					if (result.actualStartMinutes != null && result.actualEndMinutes != null) {
+						items[idx].actualTime = { start: result.actualStartMinutes, end: result.actualEndMinutes };
+					}
 
 					await this.guardedSave(date, items);
 
@@ -535,7 +542,8 @@ export class WeekFlowView extends ItemView {
 		toDay: number,
 		newStart: number
 	) {
-		const duration = item.planTime.end - item.planTime.start;
+		const dragTime = item.checkbox === "actual" && item.actualTime ? item.actualTime : item.planTime;
+		const duration = dragTime.end - dragTime.start;
 		const newEnd = newStart + duration;
 		const fromDate = this.dates[fromDay];
 		const fromKey = fromDate.format("YYYY-MM-DD");
@@ -551,31 +559,53 @@ export class WeekFlowView extends ItemView {
 			const idx = items.findIndex(i => i.id === item.id);
 			if (idx === -1) return;
 
-			items[idx].planTime = { start: newStart, end: newEnd };
-			if (items[idx].actualTime) {
-				const actDuration = items[idx].actualTime!.end - items[idx].actualTime!.start;
-				items[idx].actualTime = { start: newStart, end: newStart + actDuration };
-			}
+			if (items[idx].checkbox === "actual") {
+				// Actual block: move actualTime only, preserve planTime
+				const oldActualTime = items[idx].actualTime ? { ...items[idx].actualTime! } : undefined;
+				items[idx].actualTime = { start: newStart, end: newEnd };
 
-			await this.guardedSave(fromDate, items);
+				await this.guardedSave(fromDate, items);
 
-			const action: UndoableAction = {
-				description: "Move block",
-				execute: async () => { /* already executed */ },
-				undo: async () => {
-					const items = this.weekData.get(fromKey) || [];
-					const idx = items.findIndex(i => i.id === item.id);
-					if (idx !== -1) {
-						items[idx].planTime = { start: oldStart, end: oldEnd };
-						if (items[idx].actualTime) {
-							const actDuration = items[idx].actualTime!.end - items[idx].actualTime!.start;
-							items[idx].actualTime = { start: oldStart, end: oldStart + actDuration };
+				const action: UndoableAction = {
+					description: "Move actual block",
+					execute: async () => { /* already executed */ },
+					undo: async () => {
+						const items = this.weekData.get(fromKey) || [];
+						const idx = items.findIndex(i => i.id === item.id);
+						if (idx !== -1) {
+							items[idx].actualTime = oldActualTime;
+							await this.guardedSave(fromDate, items);
 						}
-						await this.guardedSave(fromDate, items);
-					}
-				},
-			};
-			this.undoManager.pushExecuted(action);
+					},
+				};
+				this.undoManager.pushExecuted(action);
+			} else {
+				items[idx].planTime = { start: newStart, end: newEnd };
+				if (items[idx].actualTime) {
+					const actDuration = items[idx].actualTime!.end - items[idx].actualTime!.start;
+					items[idx].actualTime = { start: newStart, end: newStart + actDuration };
+				}
+
+				await this.guardedSave(fromDate, items);
+
+				const action: UndoableAction = {
+					description: "Move block",
+					execute: async () => { /* already executed */ },
+					undo: async () => {
+						const items = this.weekData.get(fromKey) || [];
+						const idx = items.findIndex(i => i.id === item.id);
+						if (idx !== -1) {
+							items[idx].planTime = { start: oldStart, end: oldEnd };
+							if (items[idx].actualTime) {
+								const actDuration = items[idx].actualTime!.end - items[idx].actualTime!.start;
+								items[idx].actualTime = { start: oldStart, end: oldStart + actDuration };
+							}
+							await this.guardedSave(fromDate, items);
+						}
+					},
+				};
+				this.undoManager.pushExecuted(action);
+			}
 		} else {
 			// Cross-day move
 			const today = window.moment().startOf("day");
@@ -685,26 +715,48 @@ export class WeekFlowView extends ItemView {
 		const idx = items.findIndex(i => i.id === item.id);
 		if (idx === -1) return;
 
-		const oldStart = items[idx].planTime.start;
-		const oldEnd = items[idx].planTime.end;
+		if (items[idx].checkbox === "actual") {
+			// Actual block: change actualTime, preserve planTime
+			const oldActualTime = items[idx].actualTime ? { ...items[idx].actualTime! } : undefined;
+			items[idx].actualTime = { start: newStart, end: newEnd };
 
-		items[idx].planTime = { start: newStart, end: newEnd };
+			await this.guardedSave(date, items);
 
-		await this.guardedSave(date, items);
+			const action: UndoableAction = {
+				description: "Resize actual block",
+				execute: async () => { /* already executed */ },
+				undo: async () => {
+					const items = this.weekData.get(dateKey) || [];
+					const idx = items.findIndex(i => i.id === item.id);
+					if (idx !== -1) {
+						items[idx].actualTime = oldActualTime;
+						await this.guardedSave(date, items);
+					}
+				},
+			};
+			this.undoManager.pushExecuted(action);
+		} else {
+			const oldStart = items[idx].planTime.start;
+			const oldEnd = items[idx].planTime.end;
 
-		const action: UndoableAction = {
-			description: "Resize block",
-			execute: async () => { /* already executed */ },
-			undo: async () => {
-				const items = this.weekData.get(dateKey) || [];
-				const idx = items.findIndex(i => i.id === item.id);
-				if (idx !== -1) {
-					items[idx].planTime = { start: oldStart, end: oldEnd };
-					await this.guardedSave(date, items);
-				}
-			},
-		};
-		this.undoManager.pushExecuted(action);
+			items[idx].planTime = { start: newStart, end: newEnd };
+
+			await this.guardedSave(date, items);
+
+			const action: UndoableAction = {
+				description: "Resize block",
+				execute: async () => { /* already executed */ },
+				undo: async () => {
+					const items = this.weekData.get(dateKey) || [];
+					const idx = items.findIndex(i => i.id === item.id);
+					if (idx !== -1) {
+						items[idx].planTime = { start: oldStart, end: oldEnd };
+						await this.guardedSave(date, items);
+					}
+				},
+			};
+			this.undoManager.pushExecuted(action);
+		}
 
 		await this.refresh();
 	}
@@ -1056,6 +1108,67 @@ export class WeekFlowView extends ItemView {
 		};
 		this.undoManager.pushExecuted(action);
 
+		await this.refresh();
+	}
+
+	// ── Block Complete/Uncomplete ──
+
+	private async onBlockComplete(dayIndex: number, item: TimelineItem) {
+		const date = this.dates[dayIndex];
+		const dateKey = date.format("YYYY-MM-DD");
+		const items = this.weekData.get(dateKey) || [];
+		const idx = items.findIndex(i => i.id === item.id);
+		if (idx === -1) return;
+
+		const oldCheckbox = items[idx].checkbox;
+		items[idx].checkbox = "actual";
+
+		await this.guardedSave(date, items);
+
+		const action: UndoableAction = {
+			description: "Complete block",
+			execute: async () => { /* already executed */ },
+			undo: async () => {
+				const items = this.weekData.get(dateKey) || [];
+				const idx = items.findIndex(i => i.id === item.id);
+				if (idx !== -1) {
+					items[idx].checkbox = oldCheckbox;
+					await this.guardedSave(date, items);
+				}
+			},
+		};
+		this.undoManager.pushExecuted(action);
+		await this.refresh();
+	}
+
+	private async onBlockUncomplete(dayIndex: number, item: TimelineItem) {
+		const date = this.dates[dayIndex];
+		const dateKey = date.format("YYYY-MM-DD");
+		const items = this.weekData.get(dateKey) || [];
+		const idx = items.findIndex(i => i.id === item.id);
+		if (idx === -1) return;
+
+		const oldCheckbox = items[idx].checkbox;
+		const oldActualTime = items[idx].actualTime ? { ...items[idx].actualTime! } : undefined;
+		items[idx].checkbox = "plan";
+		items[idx].actualTime = undefined;
+
+		await this.guardedSave(date, items);
+
+		const action: UndoableAction = {
+			description: "Uncomplete block",
+			execute: async () => { /* already executed */ },
+			undo: async () => {
+				const items = this.weekData.get(dateKey) || [];
+				const idx = items.findIndex(i => i.id === item.id);
+				if (idx !== -1) {
+					items[idx].checkbox = oldCheckbox;
+					items[idx].actualTime = oldActualTime;
+					await this.guardedSave(date, items);
+				}
+			},
+		};
+		this.undoManager.pushExecuted(action);
 		await this.refresh();
 	}
 

@@ -444,6 +444,38 @@
 	font-size: 10px;
 }
 
+/* Block toggle button (complete/uncomplete) */
+.weekflow-block-toggle {
+	position: absolute;
+	top: 1px;
+	right: 1px;
+	width: 16px;
+	height: 16px;
+	border-radius: 50%;
+	opacity: 0;
+	z-index: 8;
+	background: var(--background-primary);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	cursor: pointer;
+	box-shadow: 0 0 2px rgba(0, 0, 0, 0.2);
+}
+
+.weekflow-block:hover .weekflow-block-toggle {
+	opacity: 1;
+}
+
+.weekflow-block-toggle:hover {
+	background: var(--background-modifier-hover);
+}
+
+/* Read-only time display in edit modal */
+.weekflow-edit-readonly-time {
+	font-size: 13px;
+	color: var(--text-muted);
+}
+
 /* Resize handles */
 .weekflow-resize-handle {
 	position: absolute;
