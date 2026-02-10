@@ -382,13 +382,21 @@ export class WeekFlowView extends ItemView {
 			end: selection.endMinutes,
 		};
 
+		const dayIndex = selection.dayIndex;
+		const targetDate = this.dates[dayIndex];
+		const today = window.moment().startOf("day");
+		const isPast = targetDate.isBefore(today, "day");
+
+		// Past dates always use actual mode
+		const effectiveMode = isPast ? "actual" : this.mode;
+
 		new BlockModal(
 			this.app,
 			planTime,
-			this.mode,
+			effectiveMode,
 			this.plugin.settings.categories,
 			async (result) => {
-				const checkbox = this.mode === "plan" ? "plan" : "actual";
+				const checkbox = effectiveMode === "actual" ? "actual" : "plan";
 				const newItem: TimelineItem = {
 					id: generateItemId(),
 					checkbox: checkbox,
@@ -397,10 +405,6 @@ export class WeekFlowView extends ItemView {
 					tags: result.tag ? [result.tag] : [],
 					rawSuffix: "",
 				};
-
-				if (this.mode === "actual") {
-					newItem.checkbox = "actual";
-				}
 
 				const dayIndex = selection.dayIndex;
 				const date = this.dates[dayIndex];
@@ -879,17 +883,20 @@ export class WeekFlowView extends ItemView {
 		const snappedStart = Math.round(cell.minutes / 10) * 10;
 		const snappedEnd = snappedStart + duration;
 
+		const date = this.dates[cell.dayIndex];
+		const dateKey = date.format("YYYY-MM-DD");
+		const today = window.moment().startOf("day");
+		const isPast = date.isBefore(today, "day");
+
 		const newItem: TimelineItem = {
 			id: generateItemId(),
-			checkbox: "plan",
+			checkbox: isPast ? "actual" : "plan",
 			planTime: { start: snappedStart, end: snappedEnd },
 			content: item.content,
 			tags: [...item.tags],
 			rawSuffix: item.rawSuffix,
 		};
 
-		const date = this.dates[cell.dayIndex];
-		const dateKey = date.format("YYYY-MM-DD");
 		const existing = this.weekData.get(dateKey) || [];
 		existing.push(newItem);
 		this.weekData.set(dateKey, existing);
