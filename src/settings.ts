@@ -120,6 +120,62 @@ export class WeekFlowSettingTab extends PluginSettingTab {
 					})
 			);
 
+		// Planning Panel section
+		containerEl.createEl("h3", { text: "Planning Panel" });
+
+		// Inbox Note Path
+		const inboxPathSetting = new Setting(containerEl)
+			.setName("Inbox note path")
+			.setDesc("Path pattern for weekly inbox note (moment.js tokens)")
+			.addText((text) =>
+				text
+					.setPlaceholder("YYYY-[W]ww")
+					.setValue(this.plugin.settings.inboxNotePath)
+					.onChange(async (value) => {
+						this.plugin.settings.inboxNotePath = value;
+						await this.plugin.saveSettings();
+						updateInboxPreview();
+					})
+			);
+
+		const inboxPreviewEl = inboxPathSetting.descEl.createDiv({
+			cls: "weekflow-setting-preview",
+		});
+		const updateInboxPreview = () => {
+			const preview = window.moment().format(this.plugin.settings.inboxNotePath);
+			inboxPreviewEl.setText(`Preview: ${preview}.md`);
+		};
+		updateInboxPreview();
+
+		// Inbox Heading
+		new Setting(containerEl)
+			.setName("Inbox heading")
+			.setDesc("Heading under which inbox items are stored")
+			.addText((text) =>
+				text
+					.setPlaceholder("### To Do")
+					.setValue(this.plugin.settings.inboxHeading)
+					.onChange(async (value) => {
+						this.plugin.settings.inboxHeading = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		// Default Block Duration
+		new Setting(containerEl)
+			.setName("Default block duration")
+			.setDesc("Duration (minutes) when dragging inbox items to grid")
+			.addSlider((slider) =>
+				slider
+					.setLimits(10, 120, 10)
+					.setValue(this.plugin.settings.defaultBlockDuration)
+					.setDynamicTooltip()
+					.onChange(async (value) => {
+						this.plugin.settings.defaultBlockDuration = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
 		// Categories
 		containerEl.createEl("h3", { text: "Categories" });
 

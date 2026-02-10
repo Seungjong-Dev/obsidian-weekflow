@@ -51,6 +51,17 @@ export default class WeekFlowPlugin extends Plugin {
 			},
 		});
 
+		this.addCommand({
+			id: "weekflow-toggle-panel",
+			name: "Toggle planning panel",
+			checkCallback: (checking: boolean) => {
+				const view = this.getWeekFlowView();
+				if (!view) return false;
+				if (!checking) view.togglePlanningPanel();
+				return true;
+			},
+		});
+
 		this.addSettingTab(new WeekFlowSettingTab(this.app, this));
 	}
 

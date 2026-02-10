@@ -1,7 +1,8 @@
 import { type Vault, normalizePath, moment } from "obsidian";
 type Moment = ReturnType<typeof moment>;
 import type { ParseWarning, TimelineItem, WeekFlowSettings } from "./types";
-import { parseTimelineItems, serializeTimelineItem, updateTimelineSection } from "./parser";
+import { parseTimelineItems, parseCheckboxItems, serializeTimelineItem, updateTimelineSection } from "./parser";
+import type { CheckboxItem } from "./parser";
 
 /**
  * Resolve a daily note path from a moment.js pattern + date.
@@ -136,4 +137,80 @@ export function getWeekNotePaths(
 	settings: WeekFlowSettings
 ): string[] {
 	return dates.map((date) => resolveDailyNotePath(settings.dailyNotePath, date));
+}
+
+// ── Inbox I/O ──
+
+/**
+ * Resolve inbox note path from a moment.js pattern (uses current date).
+ */
+export function resolveInboxNotePath(pattern: string): string {
+	return normalizePath(window.moment().format(pattern) + ".md");
+}
+
+/**
+ * Read unchecked checkbox items from the inbox note.
+ */
+export async function getInboxItems(
+	vault: Vault,
+	settings: WeekFlowSettings
+): Promise<CheckboxItem[]> {
+	const path = resolveInboxNotePath(settings.inboxNotePath);
+	const file = vault.getAbstractFileByPath(path);
+	if (!file || !("extension" in file)) return [];
+
+	const content = await vault.read(file as any);
+	return parseCheckboxItems(content, settings.inboxHeading);
+}
+
+/**
+ * Add a checkbox line to the inbox note under the configured heading.
+ * Creates the note and/or heading if they don't exist.
+ */
+export async function addToInbox(
+	vault: Vault,
+	settings: WeekFlowSettings,
+	line: string
+): Promise<void> {
+	const path = resolveInboxNotePath(settings.inboxNotePath);
+	const file = vault.getAbstractFileByPath(path);
+
+	if (file && "extension" in file) {
+		const content = await vault.read(file as any);
+		const heading = settings.inboxHeading;
+		const headingLevel = (heading.match(/^#+/) || [""])[0].length;
+		const lines = content.split("\n");
+
+		let insertIdx = -1;
+		for (let i = 0; i < lines.length; i++) {
+			if (lines[i].trim() === heading.trim()) {
+				// Find the end of items under this heading
+				let j = i + 1;
+				for (; j < lines.length; j++) {
+					const match = lines[j].match(/^(#+)\s/);
+					if (match && match[1].length <= headingLevel) break;
+				}
+				insertIdx = j;
+				break;
+			}
+		}
+
+		if (insertIdx === -1) {
+			// Heading not found: append heading + line at end
+			const suffix = content.endsWith("\n") ? "" : "\n";
+			const updated = content + suffix + "\n" + heading + "\n" + line + "\n";
+			await vault.modify(file as any, updated);
+		} else {
+			lines.splice(insertIdx, 0, line);
+			await vault.modify(file as any, lines.join("\n"));
+		}
+	} else {
+		// Create new file
+		const dir = path.substring(0, path.lastIndexOf("/"));
+		if (dir) {
+			await ensureFolderExists(vault, dir);
+		}
+		const content = `${settings.inboxHeading}\n${line}\n`;
+		await vault.create(path, content);
+	}
 }

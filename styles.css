@@ -96,6 +96,109 @@
 	border-color: var(--interactive-accent);
 }
 
+/* Body layout (panel + grid) */
+.weekflow-body {
+	display: flex;
+	flex: 1;
+	overflow: hidden;
+}
+
+/* Planning Panel */
+.weekflow-panel {
+	width: 280px;
+	min-width: 280px;
+	border-right: 1px solid var(--background-modifier-border);
+	overflow-y: auto;
+	flex-shrink: 0;
+	transition: width 0.15s ease, min-width 0.15s ease;
+}
+
+.weekflow-panel.collapsed {
+	width: 0;
+	min-width: 0;
+	overflow: hidden;
+	border: none;
+}
+
+.weekflow-panel-section {
+	border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.weekflow-panel-header {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	padding: 8px;
+	cursor: pointer;
+	font-size: 12px;
+	font-weight: 600;
+	color: var(--text-normal);
+	user-select: none;
+}
+
+.weekflow-panel-header:hover {
+	background: var(--background-modifier-hover);
+}
+
+.weekflow-panel-chevron {
+	display: flex;
+	align-items: center;
+}
+
+.weekflow-panel-chevron svg,
+.weekflow-panel-icon svg {
+	width: 14px;
+	height: 14px;
+}
+
+.weekflow-panel-icon {
+	display: flex;
+	align-items: center;
+	color: var(--text-muted);
+}
+
+.weekflow-panel-title {
+	flex: 1;
+}
+
+.weekflow-panel-list {
+	padding: 0 4px 4px;
+}
+
+.weekflow-panel-item {
+	padding: 4px 8px;
+	cursor: grab;
+	font-size: 12px;
+	border-radius: 4px;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	color: var(--text-normal);
+}
+
+.weekflow-panel-item:hover {
+	background: var(--background-modifier-hover);
+}
+
+.weekflow-panel-item-tag {
+	margin-left: 4px;
+	color: var(--text-muted);
+	font-size: 11px;
+}
+
+.weekflow-panel-empty {
+	padding: 8px;
+	font-size: 11px;
+	color: var(--text-muted);
+	text-align: center;
+}
+
+/* Panel toggle button active state */
+.weekflow-toolbar-nav button.active {
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+}
+
 /* Grid */
 .weekflow-grid-wrapper {
 	flex: 1;

@@ -10,6 +10,7 @@ export interface GridCallbacks {
 	onBlockClick: (dayIndex: number, item: TimelineItem) => void;
 	onBlockDragEnd: (item: TimelineItem, fromDay: number, toDay: number, newStart: number) => void;
 	onBlockResize: (item: TimelineItem, dayIndex: number, newStart: number, newEnd: number) => void;
+	onBlockDropOutside?: (item: TimelineItem, fromDay: number) => void;
 }
 
 interface SelectionRange {
@@ -262,6 +263,46 @@ export class GridRenderer {
 
 	getSelection(): SelectionRange | null {
 		return this.selectionRange;
+	}
+
+	// ── Public API for external drag (Panel→Grid) ──
+
+	public getGridCellFromPoint(x: number, y: number): { dayIndex: number; minutes: number } | null {
+		return this.getCellFromPoint(x, y);
+	}
+
+	private externalGhostEls: HTMLElement[] = [];
+
+	public renderExternalGhost(dayIndex: number, startMin: number, endMin: number, color: string, label: string): void {
+		this.removeExternalGhost();
+		if (!this.gridEl) return;
+
+		const dayStartMin = this.settings.dayStartHour * 60;
+		const dayEndMin = this.settings.dayEndHour * 60;
+
+		const clampedStart = Math.max(dayStartMin, Math.round(startMin / 10) * 10);
+		const clampedEnd = Math.min(dayEndMin, Math.round(endMin / 10) * 10);
+		if (clampedEnd <= clampedStart) return;
+
+		const startOffset = clampedStart - dayStartMin;
+		const endOffset = clampedEnd - dayStartMin;
+		const dayColStart = dayIndex * 6 + 2;
+		const segments = this.getHourSegments(startOffset, endOffset);
+
+		segments.forEach((seg, i) => {
+			const ghost = this.gridEl!.createDiv({ cls: "weekflow-block-ghost" });
+			ghost.style.gridRow = `${seg.row}`;
+			ghost.style.gridColumn = `${dayColStart + seg.slotStart} / ${dayColStart + seg.slotEnd}`;
+			ghost.style.backgroundColor = color + "40";
+			ghost.style.borderColor = color;
+			if (i === 0) ghost.setText(label);
+			this.externalGhostEls.push(ghost);
+		});
+	}
+
+	public removeExternalGhost(): void {
+		for (const el of this.externalGhostEls) el.remove();
+		this.externalGhostEls = [];
 	}
 
 	// ── getCellFromPoint ──
@@ -579,7 +620,17 @@ export class GridRenderer {
 
 		const cell = this.getCellFromPoint(e.clientX, e.clientY);
 		if (!cell) {
+			// Dropped outside the grid — check for panel drop target
+			const item = this.blockDragState.item;
+			const fromDay = this.blockDragState.fromDay;
 			this.blockDragState = null;
+
+			// Check if the drag actually moved (not just a click)
+			const dx = e.clientX - this.blockDragStartX;
+			const dy = e.clientY - this.blockDragStartY;
+			if (Math.sqrt(dx * dx + dy * dy) >= DRAG_DISTANCE_PX && this.callbacks.onBlockDropOutside) {
+				this.callbacks.onBlockDropOutside(item, fromDay);
+			}
 			return;
 		}
 

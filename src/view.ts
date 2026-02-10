@@ -1,14 +1,16 @@
-import { ItemView, type WorkspaceLeaf, type TAbstractFile, moment } from "obsidian";
+import { ItemView, setIcon, type WorkspaceLeaf, type TAbstractFile, moment } from "obsidian";
 type Moment = ReturnType<typeof moment>;
 import type WeekFlowPlugin from "./main";
 import { VIEW_TYPE_WEEKFLOW } from "./types";
-import type { ParseWarning, TimelineItem, WeekFlowSettings } from "./types";
-import { getWeekDates, getWeekNotePaths, loadWeekData, saveDailyNoteItems } from "./daily-note";
+import type { PanelItem, ParseWarning, TimelineItem, WeekFlowSettings } from "./types";
+import { getWeekDates, getWeekNotePaths, loadWeekData, saveDailyNoteItems, resolveInboxNotePath, getInboxItems, addToInbox } from "./daily-note";
 import { GridRenderer } from "./grid-renderer";
 import { BlockModal } from "./block-modal";
 import { EditBlockModal } from "./edit-block-modal";
-import { generateItemId } from "./parser";
+import { generateItemId, serializeCheckboxItem } from "./parser";
 import { UndoManager, type UndoableAction } from "./undo-manager";
+import { PlanningPanel, type PanelSection } from "./planning-panel";
+import type { CheckboxItem } from "./parser";
 
 export class WeekFlowView extends ItemView {
 	plugin: WeekFlowPlugin;
@@ -25,6 +27,16 @@ export class WeekFlowView extends ItemView {
 	private isSelfWriting = false;
 	private syncDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 	private weekNotePaths: string[] = [];
+
+	// Planning panel
+	private planningPanel: PlanningPanel | null = null;
+	private panelSections: PanelSection[] = [];
+	private inboxItems: CheckboxItem[] = [];
+
+	// Panel drag state
+	private panelDragItem: PanelItem | null = null;
+	private boundPanelDragMove: ((e: MouseEvent) => void) | null = null;
+	private boundPanelDragUp: ((e: MouseEvent) => void) | null = null;
 
 	constructor(leaf: WorkspaceLeaf, plugin: WeekFlowPlugin) {
 		super(leaf);
@@ -91,13 +103,21 @@ export class WeekFlowView extends ItemView {
 		const settings = this.plugin.settings;
 		this.dates = getWeekDates(this.currentDate, settings.weekStartDay);
 		this.weekNotePaths = getWeekNotePaths(this.dates, settings);
-		const result = await loadWeekData(
-			this.app.vault,
-			this.dates,
-			settings
-		);
+
+		// Add inbox note path to watched files
+		const inboxPath = resolveInboxNotePath(settings.inboxNotePath);
+		if (!this.weekNotePaths.includes(inboxPath)) {
+			this.weekNotePaths.push(inboxPath);
+		}
+
+		// Load week data and inbox items in parallel
+		const [result, inbox] = await Promise.all([
+			loadWeekData(this.app.vault, this.dates, settings),
+			getInboxItems(this.app.vault, settings),
+		]);
 		this.weekData = result.weekData;
 		this.weekWarnings = result.warnings;
+		this.inboxItems = inbox;
 		this.renderView();
 	}
 
@@ -112,8 +132,22 @@ export class WeekFlowView extends ItemView {
 		// Warning banner
 		this.renderWarnings(container);
 
+		// Body: panel + grid
+		const body = container.createDiv({ cls: "weekflow-body" });
+
+		// Planning panel
+		const panelEl = body.createDiv({ cls: "weekflow-panel" });
+		if (!this.plugin.settings.planningPanelOpen) {
+			panelEl.addClass("collapsed");
+		}
+		this.planningPanel = new PlanningPanel(panelEl, {
+			onItemDragStart: (item, e) => this.onPanelDragStart(item, e),
+		});
+		this.buildPanelSections();
+		this.planningPanel.render(this.panelSections);
+
 		// Grid wrapper
-		const gridWrapper = container.createDiv({ cls: "weekflow-grid-wrapper" });
+		const gridWrapper = body.createDiv({ cls: "weekflow-grid-wrapper" });
 
 		// Detect overlapping items per day
 		const overlapIds = this.detectOverlaps();
@@ -134,6 +168,8 @@ export class WeekFlowView extends ItemView {
 					this.onBlockDragEnd(item, fromDay, toDay, newStart),
 				onBlockResize: (item, dayIndex, newStart, newEnd) =>
 					this.onBlockResize(item, dayIndex, newStart, newEnd),
+				onBlockDropOutside: (item, fromDay) =>
+					this.onBlockReturnToInbox(item, fromDay),
 			},
 			overlapIds
 		);
@@ -194,6 +230,13 @@ export class WeekFlowView extends ItemView {
 
 		// Navigation
 		const nav = toolbar.createDiv({ cls: "weekflow-toolbar-nav" });
+
+		// Panel toggle button
+		const panelToggleBtn = nav.createEl("button");
+		setIcon(panelToggleBtn, "layout-sidebar-left");
+		panelToggleBtn.ariaLabel = "Toggle planning panel";
+		if (this.plugin.settings.planningPanelOpen) panelToggleBtn.addClass("active");
+		panelToggleBtn.addEventListener("click", () => this.togglePanel());
 
 		const prevBtn = nav.createEl("button", { text: "\u25C0" });
 		prevBtn.addEventListener("click", () => this.navigateWeek(-1));
@@ -531,52 +574,94 @@ export class WeekFlowView extends ItemView {
 			this.undoManager.pushExecuted(action);
 		} else {
 			// Cross-day move
+			const today = window.moment().startOf("day");
+			const isPastDay = fromDate.isBefore(today, "day");
+
 			const fromItems = this.weekData.get(fromKey) || [];
 			const movedItem = fromItems.find(i => i.id === item.id);
 			if (!movedItem) return;
 
-			// Remove from original day
-			this.weekData.set(fromKey, fromItems.filter(i => i.id !== item.id));
+			const oldCheckbox = movedItem.checkbox;
 
-			// Update times and add to new day
-			movedItem.planTime = { start: newStart, end: newEnd };
-			if (movedItem.actualTime) {
-				const actDuration = movedItem.actualTime.end - movedItem.actualTime.start;
-				movedItem.actualTime = { start: newStart, end: newStart + actDuration };
+			if (isPastDay && movedItem.checkbox === "plan") {
+				// Deferred logic: mark original as deferred, create new plan on target day
+				movedItem.checkbox = "deferred";
+				await this.guardedSave(fromDate, fromItems);
+
+				const newItem: TimelineItem = {
+					id: generateItemId(),
+					checkbox: "plan",
+					planTime: { start: newStart, end: newEnd },
+					content: movedItem.content,
+					tags: [...movedItem.tags],
+					rawSuffix: movedItem.rawSuffix,
+				};
+
+				const toItems = this.weekData.get(toKey) || [];
+				toItems.push(newItem);
+				this.weekData.set(toKey, toItems);
+				await this.guardedSave(toDate, toItems);
+
+				const action: UndoableAction = {
+					description: "Defer block to another day",
+					execute: async () => { /* already executed */ },
+					undo: async () => {
+						// Restore original checkbox
+						const fi = this.weekData.get(fromKey) || [];
+						const idx = fi.findIndex(i => i.id === item.id);
+						if (idx !== -1) {
+							fi[idx].checkbox = oldCheckbox;
+							await this.guardedSave(fromDate, fi);
+						}
+						// Remove new item from target day
+						const ti = this.weekData.get(toKey) || [];
+						this.weekData.set(toKey, ti.filter(i => i.id !== newItem.id));
+						await this.guardedSave(toDate, this.weekData.get(toKey)!);
+					},
+				};
+				this.undoManager.pushExecuted(action);
+			} else {
+				// Simple move: remove from original day, add to new day
+				this.weekData.set(fromKey, fromItems.filter(i => i.id !== item.id));
+
+				movedItem.planTime = { start: newStart, end: newEnd };
+				if (movedItem.actualTime) {
+					const actDuration = movedItem.actualTime.end - movedItem.actualTime.start;
+					movedItem.actualTime = { start: newStart, end: newStart + actDuration };
+				}
+
+				const toItems = this.weekData.get(toKey) || [];
+				toItems.push(movedItem);
+				this.weekData.set(toKey, toItems);
+
+				await this.guardedSave(fromDate, this.weekData.get(fromKey)!);
+				await this.guardedSave(toDate, toItems);
+
+				const action: UndoableAction = {
+					description: "Move block to another day",
+					execute: async () => { /* already executed */ },
+					undo: async () => {
+						const toItems = this.weekData.get(toKey) || [];
+						const itemBack = toItems.find(i => i.id === item.id);
+						if (!itemBack) return;
+
+						this.weekData.set(toKey, toItems.filter(i => i.id !== item.id));
+						itemBack.planTime = { start: oldStart, end: oldEnd };
+						if (itemBack.actualTime) {
+							const actDuration = itemBack.actualTime.end - itemBack.actualTime.start;
+							itemBack.actualTime = { start: oldStart, end: oldStart + actDuration };
+						}
+
+						const fromItems = this.weekData.get(fromKey) || [];
+						fromItems.push(itemBack);
+						this.weekData.set(fromKey, fromItems);
+
+						await this.guardedSave(toDate, this.weekData.get(toKey)!);
+						await this.guardedSave(fromDate, fromItems);
+					},
+				};
+				this.undoManager.pushExecuted(action);
 			}
-
-			const toItems = this.weekData.get(toKey) || [];
-			toItems.push(movedItem);
-			this.weekData.set(toKey, toItems);
-
-			await this.guardedSave(fromDate, this.weekData.get(fromKey)!);
-			await this.guardedSave(toDate, toItems);
-
-			const action: UndoableAction = {
-				description: "Move block to another day",
-				execute: async () => { /* already executed */ },
-				undo: async () => {
-					// Move back
-					const toItems = this.weekData.get(toKey) || [];
-					const itemBack = toItems.find(i => i.id === item.id);
-					if (!itemBack) return;
-
-					this.weekData.set(toKey, toItems.filter(i => i.id !== item.id));
-					itemBack.planTime = { start: oldStart, end: oldEnd };
-					if (itemBack.actualTime) {
-						const actDuration = itemBack.actualTime.end - itemBack.actualTime.start;
-						itemBack.actualTime = { start: oldStart, end: oldStart + actDuration };
-					}
-
-					const fromItems = this.weekData.get(fromKey) || [];
-					fromItems.push(itemBack);
-					this.weekData.set(fromKey, fromItems);
-
-					await this.guardedSave(toDate, this.weekData.get(toKey)!);
-					await this.guardedSave(fromDate, fromItems);
-				},
-			};
-			this.undoManager.pushExecuted(action);
 		}
 
 		await this.refresh();
@@ -658,6 +743,321 @@ export class WeekFlowView extends ItemView {
 		};
 
 		return { today, tomorrow, todayKey, tomorrowKey, todayDayIndex, tomorrowDayIndex };
+	}
+
+	// ── Planning Panel ──
+
+	togglePlanningPanel() {
+		this.togglePanel();
+	}
+
+	private togglePanel() {
+		this.plugin.settings.planningPanelOpen = !this.plugin.settings.planningPanelOpen;
+		this.plugin.saveSettings();
+		const panelEl = this.contentEl.querySelector(".weekflow-panel") as HTMLElement | null;
+		if (panelEl) {
+			panelEl.toggleClass("collapsed", !this.plugin.settings.planningPanelOpen);
+		}
+	}
+
+	private buildPanelSections(): void {
+		this.panelSections = [
+			{
+				type: "overdue",
+				title: "Overdue",
+				icon: "alert-triangle",
+				items: this.collectOverdueItems(),
+				collapsed: false,
+			},
+			{
+				type: "inbox",
+				title: "Inbox",
+				icon: "inbox",
+				items: this.collectInboxPanelItems(),
+				collapsed: false,
+			},
+		];
+	}
+
+	private collectOverdueItems(): PanelItem[] {
+		const today = window.moment().startOf("day");
+		const items: PanelItem[] = [];
+		for (let i = 0; i < 7; i++) {
+			if (this.dates[i].isSameOrAfter(today, "day")) continue;
+			const dateKey = this.dates[i].format("YYYY-MM-DD");
+			for (const item of (this.weekData.get(dateKey) || [])) {
+				if (item.checkbox !== "plan") continue;
+				items.push({
+					id: generateItemId(),
+					content: item.content,
+					tags: [...item.tags],
+					rawSuffix: item.rawSuffix,
+					source: {
+						type: "overdue",
+						dateKey,
+						planTime: { ...item.planTime },
+						originalId: item.id,
+					},
+				});
+			}
+		}
+		return items;
+	}
+
+	private collectInboxPanelItems(): PanelItem[] {
+		const inboxPath = resolveInboxNotePath(this.plugin.settings.inboxNotePath);
+		return this.inboxItems.map((ci) => ({
+			id: generateItemId(),
+			content: ci.content,
+			tags: [...ci.tags],
+			rawSuffix: ci.rawSuffix,
+			source: {
+				type: "inbox" as const,
+				notePath: inboxPath,
+				lineNumber: ci.lineNumber,
+			},
+		}));
+	}
+
+	// ── Panel Drag → Grid ──
+
+	private onPanelDragStart(item: PanelItem, e: MouseEvent): void {
+		this.panelDragItem = item;
+
+		this.boundPanelDragMove = (ev: MouseEvent) => this.onPanelDragMove(ev);
+		this.boundPanelDragUp = (ev: MouseEvent) => this.onPanelDragEnd(ev);
+		document.addEventListener("mousemove", this.boundPanelDragMove);
+		document.addEventListener("mouseup", this.boundPanelDragUp);
+	}
+
+	private onPanelDragMove(e: MouseEvent): void {
+		if (!this.panelDragItem || !this.gridRenderer) return;
+
+		const cell = this.gridRenderer.getGridCellFromPoint(e.clientX, e.clientY);
+		if (cell) {
+			const src = this.panelDragItem.source;
+			const duration = src.type === "overdue"
+				? (src.planTime.end - src.planTime.start)
+				: this.plugin.settings.defaultBlockDuration;
+			const color = this.getCategoryColorForTags(this.panelDragItem.tags);
+			this.gridRenderer.renderExternalGhost(
+				cell.dayIndex,
+				cell.minutes,
+				cell.minutes + duration,
+				color,
+				this.panelDragItem.content
+			);
+		} else {
+			this.gridRenderer.removeExternalGhost();
+		}
+	}
+
+	private async onPanelDragEnd(e: MouseEvent): Promise<void> {
+		this.cleanupPanelDrag();
+
+		if (!this.panelDragItem || !this.gridRenderer) {
+			this.panelDragItem = null;
+			return;
+		}
+
+		const cell = this.gridRenderer.getGridCellFromPoint(e.clientX, e.clientY);
+		this.gridRenderer.removeExternalGhost();
+
+		if (!cell) {
+			this.panelDragItem = null;
+			return;
+		}
+
+		const item = this.panelDragItem;
+		this.panelDragItem = null;
+
+		const src = item.source;
+		const duration = src.type === "overdue"
+			? (src.planTime.end - src.planTime.start)
+			: this.plugin.settings.defaultBlockDuration;
+
+		const snappedStart = Math.round(cell.minutes / 10) * 10;
+		const snappedEnd = snappedStart + duration;
+
+		const newItem: TimelineItem = {
+			id: generateItemId(),
+			checkbox: "plan",
+			planTime: { start: snappedStart, end: snappedEnd },
+			content: item.content,
+			tags: [...item.tags],
+			rawSuffix: item.rawSuffix,
+		};
+
+		const date = this.dates[cell.dayIndex];
+		const dateKey = date.format("YYYY-MM-DD");
+		const existing = this.weekData.get(dateKey) || [];
+		existing.push(newItem);
+		this.weekData.set(dateKey, existing);
+
+		await this.guardedSave(date, existing);
+
+		// Handle source-specific side effects
+		if (src.type === "overdue") {
+			// Mark original as deferred
+			const origDate = this.dates.find(d => d.format("YYYY-MM-DD") === src.dateKey);
+			if (origDate) {
+				const origItems = this.weekData.get(src.dateKey) || [];
+				const origIdx = origItems.findIndex(i => i.id === src.originalId);
+				if (origIdx !== -1) {
+					const oldCheckbox = origItems[origIdx].checkbox;
+					origItems[origIdx].checkbox = "deferred";
+					await this.guardedSave(origDate, origItems);
+
+					const action: UndoableAction = {
+						description: "Schedule overdue item",
+						execute: async () => { /* already executed */ },
+						undo: async () => {
+							// Restore original
+							const oi = this.weekData.get(src.dateKey) || [];
+							const idx = oi.findIndex(i => i.id === src.originalId);
+							if (idx !== -1) {
+								oi[idx].checkbox = oldCheckbox;
+								await this.guardedSave(origDate, oi);
+							}
+							// Remove new block
+							const ni = this.weekData.get(dateKey) || [];
+							this.weekData.set(dateKey, ni.filter(i => i.id !== newItem.id));
+							await this.guardedSave(date, this.weekData.get(dateKey)!);
+						},
+					};
+					this.undoManager.pushExecuted(action);
+				}
+			}
+		} else if (src.type === "inbox") {
+			// Remove from inbox note
+			const inboxLine = serializeCheckboxItem(item.content, item.tags, item.rawSuffix);
+			await this.removeFromInbox(src.lineNumber);
+
+			const action: UndoableAction = {
+				description: "Schedule inbox item",
+				execute: async () => { /* already executed */ },
+				undo: async () => {
+					// Remove new block
+					const ni = this.weekData.get(dateKey) || [];
+					this.weekData.set(dateKey, ni.filter(i => i.id !== newItem.id));
+					await this.guardedSave(date, this.weekData.get(dateKey)!);
+					// Re-add to inbox
+					await addToInbox(this.app.vault, this.plugin.settings, inboxLine);
+				},
+			};
+			this.undoManager.pushExecuted(action);
+		} else {
+			const action: UndoableAction = {
+				description: "Schedule panel item",
+				execute: async () => { /* already executed */ },
+				undo: async () => {
+					const ni = this.weekData.get(dateKey) || [];
+					this.weekData.set(dateKey, ni.filter(i => i.id !== newItem.id));
+					await this.guardedSave(date, this.weekData.get(dateKey)!);
+				},
+			};
+			this.undoManager.pushExecuted(action);
+		}
+
+		await this.refresh();
+	}
+
+	private cleanupPanelDrag(): void {
+		if (this.boundPanelDragMove) {
+			document.removeEventListener("mousemove", this.boundPanelDragMove);
+			this.boundPanelDragMove = null;
+		}
+		if (this.boundPanelDragUp) {
+			document.removeEventListener("mouseup", this.boundPanelDragUp);
+			this.boundPanelDragUp = null;
+		}
+	}
+
+	private async removeFromInbox(lineNumber: number): Promise<void> {
+		const path = resolveInboxNotePath(this.plugin.settings.inboxNotePath);
+		const file = this.app.vault.getAbstractFileByPath(path);
+		if (!file || !("extension" in file)) return;
+
+		this.isSelfWriting = true;
+		try {
+			const content = await this.app.vault.read(file as any);
+			const lines = content.split("\n");
+			if (lineNumber >= 0 && lineNumber < lines.length) {
+				lines.splice(lineNumber, 1);
+				await this.app.vault.modify(file as any, lines.join("\n"));
+			}
+		} finally {
+			this.isSelfWriting = false;
+		}
+	}
+
+	// ── Block Return to Inbox ──
+
+	private async onBlockReturnToInbox(item: TimelineItem, fromDay: number): Promise<void> {
+		const fromDate = this.dates[fromDay];
+		const fromKey = fromDate.format("YYYY-MM-DD");
+		const today = window.moment().startOf("day");
+
+		// Serialize as inbox checkbox line
+		const inboxLine = serializeCheckboxItem(item.content, item.tags, item.rawSuffix);
+
+		// Add to inbox
+		this.isSelfWriting = true;
+		try {
+			await addToInbox(this.app.vault, this.plugin.settings, inboxLine);
+		} finally {
+			this.isSelfWriting = false;
+		}
+
+		const fromItems = this.weekData.get(fromKey) || [];
+		const oldCheckbox = item.checkbox;
+
+		if (fromDate.isBefore(today, "day")) {
+			// Past day: mark as deferred
+			const idx = fromItems.findIndex(i => i.id === item.id);
+			if (idx !== -1) {
+				fromItems[idx].checkbox = "deferred";
+				await this.guardedSave(fromDate, fromItems);
+			}
+		} else {
+			// Today or future: delete
+			this.weekData.set(fromKey, fromItems.filter(i => i.id !== item.id));
+			await this.guardedSave(fromDate, this.weekData.get(fromKey)!);
+		}
+
+		// Undo
+		const action: UndoableAction = {
+			description: "Return block to inbox",
+			execute: async () => { /* already executed */ },
+			undo: async () => {
+				// TODO: Remove from inbox (would need to track the line)
+				// Restore block
+				const fi = this.weekData.get(fromKey) || [];
+				if (fromDate.isBefore(today, "day")) {
+					const idx = fi.findIndex(i => i.id === item.id);
+					if (idx !== -1) {
+						fi[idx].checkbox = oldCheckbox;
+						await this.guardedSave(fromDate, fi);
+					}
+				} else {
+					item.checkbox = oldCheckbox;
+					fi.push(item);
+					this.weekData.set(fromKey, fi);
+					await this.guardedSave(fromDate, fi);
+				}
+			},
+		};
+		this.undoManager.pushExecuted(action);
+
+		await this.refresh();
+	}
+
+	private getCategoryColorForTags(tags: string[]): string {
+		for (const tag of tags) {
+			const cat = this.plugin.settings.categories.find(c => c.tag === tag);
+			if (cat) return cat.color;
+		}
+		return "#888888";
 	}
 
 	// Persist/restore view state

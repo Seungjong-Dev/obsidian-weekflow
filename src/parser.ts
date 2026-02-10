@@ -154,6 +154,112 @@ export function parseTimelineItems(
 	return { items, warnings };
 }
 
+// ── Inbox Checkbox Item Parsing ──
+
+export interface CheckboxItem {
+	content: string;
+	tags: string[];
+	rawSuffix: string;
+	checked: boolean;
+	lineNumber: number;
+}
+
+const INBOX_CHECKBOX_RE = /^- \[([ x>])\] (.+)$/;
+
+/**
+ * Parse checkbox items (without time ranges) from a note under a given heading.
+ * Returns only unchecked items (- [ ]).
+ */
+export function parseCheckboxItems(
+	content: string,
+	heading: string
+): CheckboxItem[] {
+	const lines = content.split("\n");
+
+	const headingLevel = (heading.match(/^#+/) || [""])[0].length;
+	let startIdx = -1;
+	for (let i = 0; i < lines.length; i++) {
+		if (lines[i].trim() === heading.trim()) {
+			startIdx = i + 1;
+			break;
+		}
+	}
+	if (startIdx === -1) return [];
+
+	let endIdx = lines.length;
+	for (let i = startIdx; i < lines.length; i++) {
+		const match = lines[i].match(/^(#+)\s/);
+		if (match && match[1].length <= headingLevel) {
+			endIdx = i;
+			break;
+		}
+	}
+
+	const items: CheckboxItem[] = [];
+	for (let i = startIdx; i < endIdx; i++) {
+		const line = lines[i];
+		const m = INBOX_CHECKBOX_RE.exec(line);
+		if (!m) continue;
+
+		const checkChar = m[1];
+		// Only include unchecked items
+		if (checkChar !== " ") continue;
+
+		const rest = m[2];
+
+		// Extract tags
+		const tags: string[] = [];
+		let tagMatch;
+		const tagRe = new RegExp(TAG_RE.source, TAG_RE.flags);
+		while ((tagMatch = tagRe.exec(rest)) !== null) {
+			tags.push(tagMatch[1]);
+		}
+
+		// Extract Tasks metadata as rawSuffix
+		const rawSuffixParts: string[] = [];
+		let metaMatch;
+		const metaRe = new RegExp(TASKS_META_RE.source, TASKS_META_RE.flags);
+		while ((metaMatch = metaRe.exec(rest)) !== null) {
+			rawSuffixParts.push(metaMatch[0]);
+		}
+		const rawSuffix = rawSuffixParts.join(" ");
+
+		// Content = rest minus tags and Tasks metadata
+		let contentText = rest;
+		contentText = contentText.replace(TAG_RE, "");
+		contentText = contentText.replace(TASKS_META_RE, "");
+		contentText = contentText.replace(/\s+/g, " ").trim();
+
+		items.push({
+			content: contentText,
+			tags,
+			rawSuffix,
+			checked: false,
+			lineNumber: i,
+		});
+	}
+
+	return items;
+}
+
+/**
+ * Serialize content/tags/rawSuffix back to an inbox checkbox line.
+ */
+export function serializeCheckboxItem(
+	content: string,
+	tags: string[],
+	rawSuffix: string
+): string {
+	const parts = [content];
+	for (const tag of tags) {
+		parts.push(`#${tag}`);
+	}
+	if (rawSuffix) {
+		parts.push(rawSuffix);
+	}
+	return `- [ ] ${parts.join(" ")}`;
+}
+
 /**
  * Serialize a TimelineItem back to a markdown line.
  */

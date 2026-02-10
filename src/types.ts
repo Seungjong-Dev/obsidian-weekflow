@@ -30,6 +30,10 @@ export interface WeekFlowSettings {
 	weekStartDay: number; // 0=Sun, 1=Mon, ...
 	defaultMode: "plan" | "actual";
 	categories: Category[];
+	inboxNotePath: string;
+	inboxHeading: string;
+	defaultBlockDuration: number; // minutes
+	planningPanelOpen: boolean;
 }
 
 export const DEFAULT_SETTINGS: WeekFlowSettings = {
@@ -46,6 +50,10 @@ export const DEFAULT_SETTINGS: WeekFlowSettings = {
 		{ tag: "rest", label: "휴식", color: "#9B9B9B" },
 		{ tag: "personal", label: "개인", color: "#BD10E0" },
 	],
+	inboxNotePath: "YYYY-[W]ww",
+	inboxHeading: "### To Do",
+	defaultBlockDuration: 60,
+	planningPanelOpen: true,
 };
 
 export interface ParseWarning {
@@ -59,3 +67,18 @@ export interface ParseResult {
 }
 
 export const VIEW_TYPE_WEEKFLOW = "weekflow-view";
+
+// Planning Panel types
+
+export type PanelItemSource =
+	| { type: "overdue"; dateKey: string; planTime: TimeRange; originalId: string }
+	| { type: "inbox"; notePath: string; lineNumber: number }
+	| { type: "project"; projectPath: string; blockId?: string };
+
+export interface PanelItem {
+	id: string;
+	content: string;
+	tags: string[];
+	rawSuffix: string;
+	source: PanelItemSource;
+}
