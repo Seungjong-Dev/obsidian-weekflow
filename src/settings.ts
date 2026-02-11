@@ -40,6 +40,20 @@ export class WeekFlowSettingTab extends PluginSettingTab {
 		};
 		updatePathPreview();
 
+		// Daily Note Template Path
+		new Setting(containerEl)
+			.setName("Daily note template")
+			.setDesc("Path to template file used when creating new daily notes (leave empty to skip)")
+			.addText((text) =>
+				text
+					.setPlaceholder("Templates/Daily Note")
+					.setValue(this.plugin.settings.dailyNoteTemplatePath)
+					.onChange(async (value) => {
+						this.plugin.settings.dailyNoteTemplatePath = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
 		// Timeline Heading
 		new Setting(containerEl)
 			.setName("Timeline heading")

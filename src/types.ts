@@ -36,6 +36,7 @@ export interface TimeSlotPreset {
 
 export interface WeekFlowSettings {
 	dailyNotePath: string;
+	dailyNoteTemplatePath: string;
 	timelineHeading: string;
 	dayStartHour: number;
 	dayEndHour: number;
@@ -59,6 +60,7 @@ export interface WeekFlowSettings {
 
 export const DEFAULT_SETTINGS: WeekFlowSettings = {
 	dailyNotePath: "YYYY-MM-DD",
+	dailyNoteTemplatePath: "",
 	timelineHeading: "## Timeline",
 	dayStartHour: 6,
 	dayEndHour: 24,

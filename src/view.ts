@@ -112,24 +112,32 @@ export class WeekFlowView extends ItemView {
 			this.weekNotePaths.push(inboxPath);
 		}
 
-		// Load project list
-		const projects = getActiveProjects(this.app, settings);
-
-		// Load week data, inbox items, and project tasks in parallel
-		const [result, inbox, ...projectTaskResults] = await Promise.all([
+		// Load week data and inbox
+		const [result, inbox] = await Promise.all([
 			loadWeekData(this.app.vault, this.dates, settings),
 			getInboxItems(this.app.vault, settings),
-			...projects.map((p) =>
-				getProjectTasks(this.app.vault, p.path, settings.projectTasksHeading)
-			),
 		]);
 		this.weekData = result.weekData;
 		this.weekWarnings = result.warnings;
 		this.inboxItems = inbox;
-		this.projectData = projects.map((p, i) => ({
-			project: p,
-			tasks: projectTaskResults[i],
-		}));
+
+		// Load project data (non-blocking — failure should not prevent rendering)
+		try {
+			const projects = getActiveProjects(this.app, settings);
+			const projectTaskResults = await Promise.all(
+				projects.map((p) =>
+					getProjectTasks(this.app.vault, p.path, settings.projectTasksHeading)
+				)
+			);
+			this.projectData = projects.map((p, i) => ({
+				project: p,
+				tasks: projectTaskResults[i],
+			}));
+		} catch (e) {
+			console.error("WeekFlow: failed to load project data", e);
+			this.projectData = [];
+		}
+
 		this.renderView();
 	}
 

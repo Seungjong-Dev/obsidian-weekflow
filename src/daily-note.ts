@@ -54,9 +54,26 @@ export async function saveDailyNoteItems(
 		);
 		await vault.modify(file as any, updated);
 	} else {
-		// Create new file with heading + items
+		// Create new file — use template if configured
+		let baseContent = "";
+		if (settings.dailyNoteTemplatePath) {
+			baseContent = await readTemplate(vault, settings.dailyNoteTemplatePath);
+		}
+
 		const serialized = items.map(serializeTimelineItem).join("\n");
-		const content = `${settings.timelineHeading}\n${serialized}\n`;
+
+		let content: string;
+		if (baseContent && baseContent.includes(settings.timelineHeading.trim())) {
+			// Template already contains the heading — insert items under it
+			content = updateTimelineSection(baseContent, settings.timelineHeading, items);
+		} else if (baseContent) {
+			// Template exists but has no timeline heading — append it
+			const suffix = baseContent.endsWith("\n") ? "" : "\n";
+			content = baseContent + suffix + "\n" + settings.timelineHeading + "\n" + serialized + "\n";
+		} else {
+			// No template — heading + items only
+			content = `${settings.timelineHeading}\n${serialized}\n`;
+		}
 
 		// Ensure parent folders exist
 		const dir = path.substring(0, path.lastIndexOf("/"));
@@ -78,6 +95,24 @@ async function ensureFolderExists(vault: Vault, dir: string): Promise<void> {
 	} catch {
 		// folder may have been created concurrently
 	}
+}
+
+/**
+ * Read a template file content as-is (no token replacement).
+ * Template plugins (Templater etc.) handle their own processing.
+ */
+async function readTemplate(
+	vault: Vault,
+	templatePath: string
+): Promise<string> {
+	let path = templatePath.trim();
+	if (!path.endsWith(".md")) path += ".md";
+	path = normalizePath(path);
+
+	const file = vault.getAbstractFileByPath(path);
+	if (!file || !(file instanceof TFile)) return "";
+
+	return vault.read(file);
 }
 
 /**
@@ -235,9 +270,12 @@ export function getActiveProjects(
 		if (!cache) continue;
 
 		// Check tags: frontmatter tags + inline tags
-		const fmTags = (cache.frontmatter?.tags || []).map((t: string) =>
-			t.replace(/^#/, "")
-		);
+		const rawFmTags = cache.frontmatter?.tags;
+		const fmTags: string[] = Array.isArray(rawFmTags)
+			? rawFmTags.map((t: string) => t.replace(/^#/, ""))
+			: typeof rawFmTags === "string"
+				? [rawFmTags.replace(/^#/, "")]
+				: [];
 		const inlineTags = (cache.tags || []).map((t) =>
 			t.tag.replace(/^#/, "")
 		);
