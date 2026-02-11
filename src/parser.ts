@@ -5,6 +5,17 @@ export function generateItemId(): string {
 	return `wf-${Date.now()}-${idCounter++}`;
 }
 
+/** Extract a block ID (^block-id) from the end of a line */
+export function extractBlockId(line: string): string | undefined {
+	const m = line.match(/\^([a-zA-Z0-9-]+)\s*$/);
+	return m ? m[1] : undefined;
+}
+
+/** Generate a unique block ID for project task linking */
+export function generateBlockId(): string {
+	return `wf-${Date.now().toString(36)}`;
+}
+
 const TIMELINE_RE =
 	/^- \[([ x>])\] (\d{2}:\d{2})-(\d{2}:\d{2})(?:\s*>\s*(\d{2}:\d{2})-(\d{2}:\d{2}))?\s+(.+)$/;
 

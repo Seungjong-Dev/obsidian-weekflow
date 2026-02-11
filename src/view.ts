@@ -3,11 +3,14 @@ type Moment = ReturnType<typeof moment>;
 import type WeekFlowPlugin from "./main";
 import { VIEW_TYPE_WEEKFLOW } from "./types";
 import type { PanelItem, ParseWarning, TimelineItem, WeekFlowSettings } from "./types";
-import { getWeekDates, getWeekNotePaths, loadWeekData, saveDailyNoteItems, resolveInboxNotePath, getInboxItems, addToInbox } from "./daily-note";
+import { getWeekDates, getWeekNotePaths, loadWeekData, saveDailyNoteItems, resolveInboxNotePath, getInboxItems, addToInbox, getActiveProjects, getProjectTasks, appendBlockIdToLine, completeProjectTask } from "./daily-note";
+import type { ProjectInfo } from "./daily-note";
 import { GridRenderer } from "./grid-renderer";
 import { BlockModal } from "./block-modal";
 import { EditBlockModal } from "./edit-block-modal";
-import { generateItemId, serializeCheckboxItem } from "./parser";
+import { ConfirmModal } from "./confirm-modal";
+import { PresetModal, ApplyPresetModal, CreatePresetModal } from "./preset-modal";
+import { generateItemId, serializeCheckboxItem, extractBlockId, generateBlockId, formatTime } from "./parser";
 import { UndoManager, type UndoableAction } from "./undo-manager";
 import { PlanningPanel, type PanelSection } from "./planning-panel";
 import type { CheckboxItem } from "./parser";
@@ -31,6 +34,7 @@ export class WeekFlowView extends ItemView {
 	private planningPanel: PlanningPanel | null = null;
 	private panelSections: PanelSection[] = [];
 	private inboxItems: CheckboxItem[] = [];
+	private projectData: { project: ProjectInfo; tasks: CheckboxItem[] }[] = [];
 
 	// Panel drag state
 	private panelDragItem: PanelItem | null = null;
@@ -108,14 +112,24 @@ export class WeekFlowView extends ItemView {
 			this.weekNotePaths.push(inboxPath);
 		}
 
-		// Load week data and inbox items in parallel
-		const [result, inbox] = await Promise.all([
+		// Load project list
+		const projects = getActiveProjects(this.app, settings);
+
+		// Load week data, inbox items, and project tasks in parallel
+		const [result, inbox, ...projectTaskResults] = await Promise.all([
 			loadWeekData(this.app.vault, this.dates, settings),
 			getInboxItems(this.app.vault, settings),
+			...projects.map((p) =>
+				getProjectTasks(this.app.vault, p.path, settings.projectTasksHeading)
+			),
 		]);
 		this.weekData = result.weekData;
 		this.weekWarnings = result.warnings;
 		this.inboxItems = inbox;
+		this.projectData = projects.map((p, i) => ({
+			project: p,
+			tasks: projectTaskResults[i],
+		}));
 		this.renderView();
 	}
 
@@ -263,6 +277,20 @@ export class WeekFlowView extends ItemView {
 		redoBtn.ariaLabel = "Redo";
 		if (!this.undoManager.canRedo()) redoBtn.addClass("weekflow-btn-disabled");
 		redoBtn.addEventListener("click", () => this.redo());
+
+		// Sort button
+		const sortBtn = nav.createEl("button");
+		setIcon(sortBtn, "arrow-up-narrow-wide");
+		sortBtn.ariaLabel = "Compact plan blocks";
+		sortBtn.addEventListener("click", () => this.sortBlocksCompact());
+
+		// Preset dropdown
+		const presetBtn = nav.createEl("button");
+		setIcon(presetBtn, "clock");
+		presetBtn.ariaLabel = "Presets";
+		presetBtn.addEventListener("click", (e) =>
+			this.showPresetMenu(e)
+		);
 
 		// Category palette
 		const palette = toolbar.createDiv({ cls: "weekflow-palette" });
@@ -795,7 +823,38 @@ export class WeekFlowView extends ItemView {
 				items: this.collectInboxPanelItems(),
 				collapsed: false,
 			},
+			...this.collectProjectSections(),
 		];
+	}
+
+	private collectProjectSections(): PanelSection[] {
+		return this.projectData.map(({ project, tasks }) => ({
+			type: "project" as const,
+			title: project.title,
+			icon: "folder",
+			key: `project:${project.path}`,
+			items: tasks.map((task) => ({
+				id: generateItemId(),
+				content: task.content,
+				tags: [...task.tags],
+				rawSuffix: task.rawSuffix,
+				source: {
+					type: "project" as const,
+					projectPath: project.path,
+					blockId: this.extractBlockIdFromRaw(task),
+				},
+			})),
+			collapsed: false,
+		}));
+	}
+
+	private extractBlockIdFromRaw(task: CheckboxItem): string | undefined {
+		// Reconstruct the raw line and extract block ID
+		const parts = [task.content];
+		for (const tag of task.tags) parts.push(`#${tag}`);
+		if (task.rawSuffix) parts.push(task.rawSuffix);
+		const line = `- [ ] ${parts.join(" ")}`;
+		return extractBlockId(line);
 	}
 
 	private collectOverdueItems(): PanelItem[] {
@@ -903,11 +962,49 @@ export class WeekFlowView extends ItemView {
 		const today = window.moment().startOf("day");
 		const isPast = date.isBefore(today, "day");
 
+		// For project source: ensure block ID and create linked content
+		let contentForTimeline = item.content;
+		if (src.type === "project") {
+			let blockId = src.blockId;
+			if (!blockId) {
+				// Auto-assign block ID to project note line
+				blockId = generateBlockId();
+				// Find the matching task's line number
+				const pd = this.projectData.find(
+					(d) => d.project.path === src.projectPath
+				);
+				if (pd) {
+					const taskIdx = pd.tasks.findIndex(
+						(t) => t.content === item.content
+					);
+					if (taskIdx !== -1) {
+						this.isSelfWriting = true;
+						try {
+							await appendBlockIdToLine(
+								this.app.vault,
+								src.projectPath,
+								pd.tasks[taskIdx].lineNumber,
+								blockId
+							);
+						} finally {
+							this.isSelfWriting = false;
+						}
+					}
+				}
+			}
+			// Build the project link for the timeline item
+			const projectFile = this.app.vault.getAbstractFileByPath(src.projectPath);
+			const projectName = projectFile
+				? projectFile.name.replace(/\.md$/, "")
+				: src.projectPath.replace(/\.md$/, "");
+			contentForTimeline = `${item.content} [[${projectName}#^${blockId}]]`;
+		}
+
 		const newItem: TimelineItem = {
 			id: generateItemId(),
 			checkbox: isPast ? "actual" : "plan",
 			planTime: { start: snappedStart, end: snappedEnd },
-			content: item.content,
+			content: contentForTimeline,
 			tags: [...item.tags],
 			rawSuffix: item.rawSuffix,
 		};
@@ -969,8 +1066,9 @@ export class WeekFlowView extends ItemView {
 			};
 			this.undoManager.pushExecuted(action);
 		} else {
+			// Project source: don't remove from panel (copy model)
 			const action: UndoableAction = {
-				description: "Schedule panel item",
+				description: "Schedule project task",
 				execute: async () => { /* already executed */ },
 				undo: async () => {
 					const ni = this.weekData.get(dateKey) || [];
@@ -1101,6 +1199,36 @@ export class WeekFlowView extends ItemView {
 			},
 		};
 		this.undoManager.pushExecuted(action);
+
+		// Check for project task link: [[...#^...]]
+		const linkMatch = item.content.match(/\[\[([^#\]]+)#\^([a-zA-Z0-9-]+)\]\]/);
+		if (linkMatch) {
+			const projectNoteName = linkMatch[1];
+			const blockId = linkMatch[2];
+			// Find the project file path
+			const projectFile = this.app.vault.getMarkdownFiles().find(
+				(f) => f.basename === projectNoteName
+			);
+			if (projectFile) {
+				new ConfirmModal(
+					this.app,
+					"Mark the original project task as complete too?",
+					async () => {
+						this.isSelfWriting = true;
+						try {
+							await completeProjectTask(
+								this.app.vault,
+								projectFile.path,
+								blockId
+							);
+						} finally {
+							this.isSelfWriting = false;
+						}
+					}
+				).open();
+			}
+		}
+
 		await this.refresh();
 	}
 
@@ -1133,6 +1261,212 @@ export class WeekFlowView extends ItemView {
 		};
 		this.undoManager.pushExecuted(action);
 		await this.refresh();
+	}
+
+	// ── Block Sorting (Compact) ──
+
+	private async sortBlocksCompact() {
+		const settings = this.plugin.settings;
+		const dayStartMinutes = settings.dayStartHour * 60;
+
+		// Save old state for undo
+		const oldWeekData = new Map<string, TimelineItem[]>();
+		for (const [key, items] of this.weekData) {
+			oldWeekData.set(
+				key,
+				items.map((i) => ({
+					...i,
+					planTime: { ...i.planTime },
+					actualTime: i.actualTime ? { ...i.actualTime } : undefined,
+					tags: [...i.tags],
+				}))
+			);
+		}
+
+		// Compact each day
+		for (let d = 0; d < 7; d++) {
+			const dateKey = this.dates[d].format("YYYY-MM-DD");
+			const items = this.weekData.get(dateKey) || [];
+
+			const plans = items
+				.filter((i) => i.checkbox === "plan")
+				.sort((a, b) => a.planTime.start - b.planTime.start);
+			const others = items.filter((i) => i.checkbox !== "plan");
+
+			let cursor = dayStartMinutes;
+			for (const item of plans) {
+				const duration = item.planTime.end - item.planTime.start;
+				item.planTime = { start: cursor, end: cursor + duration };
+				cursor += duration;
+			}
+
+			this.weekData.set(dateKey, [...plans, ...others]);
+			await this.guardedSave(this.dates[d], this.weekData.get(dateKey)!);
+		}
+
+		const action: UndoableAction = {
+			description: "Compact plan blocks",
+			execute: async () => {
+				/* already executed */
+			},
+			undo: async () => {
+				for (let d = 0; d < 7; d++) {
+					const dateKey = this.dates[d].format("YYYY-MM-DD");
+					const oldItems = oldWeekData.get(dateKey) || [];
+					this.weekData.set(dateKey, oldItems);
+					await this.guardedSave(this.dates[d], oldItems);
+				}
+			},
+		};
+		this.undoManager.pushExecuted(action);
+		await this.refresh();
+	}
+
+	// ── Preset Menu ──
+
+	private showPresetMenu(e: MouseEvent) {
+		const menu = document.createElement("div");
+		menu.className = "weekflow-preset-menu";
+		menu.style.position = "fixed";
+		menu.style.left = `${e.clientX}px`;
+		menu.style.top = `${e.clientY}px`;
+		menu.style.zIndex = "1000";
+		menu.style.background = "var(--background-primary)";
+		menu.style.border = "1px solid var(--background-modifier-border)";
+		menu.style.borderRadius = "6px";
+		menu.style.padding = "4px";
+		menu.style.boxShadow = "0 2px 8px rgba(0,0,0,0.15)";
+		menu.style.minWidth = "180px";
+
+		// "Create preset from today" option
+		const createItem = document.createElement("div");
+		createItem.className = "weekflow-preset-menu-item";
+		createItem.textContent = "Save current day as preset...";
+		createItem.addEventListener("click", () => {
+			menu.remove();
+			this.createPresetFromToday();
+		});
+		menu.appendChild(createItem);
+
+		// Saved presets
+		for (const preset of this.plugin.settings.presets) {
+			const item = document.createElement("div");
+			item.className = "weekflow-preset-menu-item";
+			item.textContent = `${preset.name} (${preset.slots.length})`;
+			item.addEventListener("click", () => {
+				menu.remove();
+				this.applyPreset(preset);
+			});
+			menu.appendChild(item);
+		}
+
+		if (this.plugin.settings.presets.length === 0) {
+			const empty = document.createElement("div");
+			empty.className = "weekflow-preset-menu-item";
+			empty.style.color = "var(--text-muted)";
+			empty.textContent = "No presets saved";
+			menu.appendChild(empty);
+		}
+
+		document.body.appendChild(menu);
+		const closeMenu = (ev: MouseEvent) => {
+			if (!menu.contains(ev.target as Node)) {
+				menu.remove();
+				document.removeEventListener("mousedown", closeMenu);
+			}
+		};
+		setTimeout(() => document.addEventListener("mousedown", closeMenu), 0);
+	}
+
+	private createPresetFromToday() {
+		const todayKey = window.moment().format("YYYY-MM-DD");
+		const items = this.weekData.get(todayKey) || [];
+		const planItems = items.filter((i) => i.checkbox === "plan");
+		const slots = planItems.map((i) => ({
+			start: i.planTime.start,
+			end: i.planTime.end,
+			content: i.content,
+			tag: i.tags[0] || "",
+		}));
+		new CreatePresetModal(this.app, slots, async (preset) => {
+			this.plugin.settings.presets.push(preset);
+			await this.plugin.saveSettings();
+		}).open();
+	}
+
+	private applyPreset(preset: import("./types").TimeSlotPreset) {
+		new ApplyPresetModal(
+			this.app,
+			preset,
+			this.dates,
+			async (selectedDays, overwrite) => {
+				// Save old state for undo
+				const oldData = new Map<string, TimelineItem[]>();
+				for (const d of selectedDays) {
+					const dateKey = this.dates[d].format("YYYY-MM-DD");
+					const items = this.weekData.get(dateKey) || [];
+					oldData.set(
+						dateKey,
+						items.map((i) => ({
+							...i,
+							planTime: { ...i.planTime },
+							actualTime: i.actualTime
+								? { ...i.actualTime }
+								: undefined,
+							tags: [...i.tags],
+						}))
+					);
+				}
+
+				for (const d of selectedDays) {
+					const date = this.dates[d];
+					const dateKey = date.format("YYYY-MM-DD");
+					let existing = this.weekData.get(dateKey) || [];
+
+					if (overwrite) {
+						existing = existing.filter(
+							(i) => i.checkbox !== "plan"
+						);
+					}
+
+					for (const slot of preset.slots) {
+						existing.push({
+							id: generateItemId(),
+							checkbox: "plan",
+							planTime: { start: slot.start, end: slot.end },
+							content: slot.content,
+							tags: slot.tag ? [slot.tag] : [],
+							rawSuffix: "",
+						});
+					}
+
+					this.weekData.set(dateKey, existing);
+					await this.guardedSave(date, existing);
+				}
+
+				const action: UndoableAction = {
+					description: "Apply preset",
+					execute: async () => {
+						/* already executed */
+					},
+					undo: async () => {
+						for (const [dateKey, items] of oldData) {
+							this.weekData.set(dateKey, items);
+							const d = selectedDays.find(
+								(i) =>
+									this.dates[i].format("YYYY-MM-DD") ===
+									dateKey
+							);
+							if (d !== undefined) {
+								await this.guardedSave(this.dates[d], items);
+							}
+						}
+					},
+				};
+				this.undoManager.pushExecuted(action);
+				await this.refresh();
+			}
+		).open();
 	}
 
 	private getCategoryColorForTags(tags: string[]): string {

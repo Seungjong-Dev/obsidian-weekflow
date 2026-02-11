@@ -176,6 +176,88 @@ export class WeekFlowSettingTab extends PluginSettingTab {
 					})
 			);
 
+		// Project Integration section
+		containerEl.createEl("h3", { text: "Project Integration" });
+
+		new Setting(containerEl)
+			.setName("Project tag")
+			.setDesc("Tag used to identify project notes (without #)")
+			.addText((text) =>
+				text
+					.setPlaceholder("type/project")
+					.setValue(this.plugin.settings.projectTag)
+					.onChange(async (value) => {
+						this.plugin.settings.projectTag = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName("Project status field")
+			.setDesc("Frontmatter field name for project status")
+			.addText((text) =>
+				text
+					.setPlaceholder("status")
+					.setValue(this.plugin.settings.projectStatusField)
+					.onChange(async (value) => {
+						this.plugin.settings.projectStatusField = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName("Active project statuses")
+			.setDesc("Comma-separated list of statuses considered active")
+			.addText((text) =>
+				text
+					.setPlaceholder("🟡 In Progress, 🔴 Urgent")
+					.setValue(this.plugin.settings.projectActiveStatuses.join(", "))
+					.onChange(async (value) => {
+						this.plugin.settings.projectActiveStatuses = value
+							.split(",")
+							.map((s) => s.trim())
+							.filter((s) => s.length > 0);
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName("Project tasks heading")
+			.setDesc("Heading under which project tasks are listed")
+			.addText((text) =>
+				text
+					.setPlaceholder("## Tasks")
+					.setValue(this.plugin.settings.projectTasksHeading)
+					.onChange(async (value) => {
+						this.plugin.settings.projectTasksHeading = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		// Presets section
+		containerEl.createEl("h3", { text: "Presets" });
+
+		if (this.plugin.settings.presets.length === 0) {
+			containerEl.createEl("p", {
+				text: "No presets saved. Use the toolbar to create presets from the current day.",
+				cls: "setting-item-description",
+			});
+		} else {
+			for (let i = 0; i < this.plugin.settings.presets.length; i++) {
+				const preset = this.plugin.settings.presets[i];
+				new Setting(containerEl)
+					.setName(preset.name)
+					.setDesc(`${preset.slots.length} slot(s)`)
+					.addExtraButton((btn) =>
+						btn.setIcon("trash").onClick(async () => {
+							this.plugin.settings.presets.splice(i, 1);
+							await this.plugin.saveSettings();
+							this.display();
+						})
+					);
+			}
+		}
+
 		// Categories
 		containerEl.createEl("h3", { text: "Categories" });
 

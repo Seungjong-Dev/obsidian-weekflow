@@ -22,6 +22,18 @@ export interface Category {
 	color: string;
 }
 
+export interface PresetSlot {
+	start: number; // minutes from midnight
+	end: number;
+	content: string;
+	tag: string;
+}
+
+export interface TimeSlotPreset {
+	name: string;
+	slots: PresetSlot[];
+}
+
 export interface WeekFlowSettings {
 	dailyNotePath: string;
 	timelineHeading: string;
@@ -34,6 +46,15 @@ export interface WeekFlowSettings {
 	inboxHeading: string;
 	defaultBlockDuration: number; // minutes
 	planningPanelOpen: boolean;
+
+	// Project integration
+	projectTag: string;
+	projectStatusField: string;
+	projectActiveStatuses: string[];
+	projectTasksHeading: string;
+
+	// Presets
+	presets: TimeSlotPreset[];
 }
 
 export const DEFAULT_SETTINGS: WeekFlowSettings = {
@@ -54,6 +75,11 @@ export const DEFAULT_SETTINGS: WeekFlowSettings = {
 	inboxHeading: "### To Do",
 	defaultBlockDuration: 60,
 	planningPanelOpen: true,
+	projectTag: "type/project",
+	projectStatusField: "status",
+	projectActiveStatuses: ["🟡 In Progress", "🔴 Urgent"],
+	projectTasksHeading: "## Tasks",
+	presets: [],
 };
 
 export interface ParseWarning {

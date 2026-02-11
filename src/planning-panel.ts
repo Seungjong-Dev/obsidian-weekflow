@@ -8,6 +8,7 @@ export interface PanelSection {
 	icon: string;
 	items: PanelItem[];
 	collapsed: boolean;
+	key?: string; // unique key for collapse state (defaults to type)
 }
 
 export interface PlanningPanelCallbacks {
@@ -28,8 +29,9 @@ export class PlanningPanel {
 		this.containerEl.empty();
 
 		for (const section of sections) {
+			const collapseKey = section.key || section.type;
 			// Restore persisted collapse state
-			const savedCollapsed = this.sectionCollapseState.get(section.type);
+			const savedCollapsed = this.sectionCollapseState.get(collapseKey);
 			const isCollapsed = savedCollapsed !== undefined ? savedCollapsed : section.collapsed;
 
 			const sectionEl = this.containerEl.createDiv({ cls: "weekflow-panel-section" });
@@ -46,16 +48,16 @@ export class PlanningPanel {
 
 			// Toggle collapse
 			header.addEventListener("click", () => {
-				const nowCollapsed = !this.sectionCollapseState.get(section.type);
-				this.sectionCollapseState.set(section.type, nowCollapsed);
+				const nowCollapsed = !this.sectionCollapseState.get(collapseKey);
+				this.sectionCollapseState.set(collapseKey, nowCollapsed);
 				this.render(sections);
 			});
 
 			if (isCollapsed) {
-				this.sectionCollapseState.set(section.type, true);
+				this.sectionCollapseState.set(collapseKey, true);
 				continue;
 			}
-			this.sectionCollapseState.set(section.type, false);
+			this.sectionCollapseState.set(collapseKey, false);
 
 			// Items
 			if (section.items.length === 0) {

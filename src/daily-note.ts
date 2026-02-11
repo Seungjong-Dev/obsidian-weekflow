@@ -1,7 +1,7 @@
-import { type Vault, normalizePath, moment } from "obsidian";
+import { type App, type Vault, normalizePath, moment, TFile } from "obsidian";
 type Moment = ReturnType<typeof moment>;
 import type { ParseWarning, TimelineItem, WeekFlowSettings } from "./types";
-import { parseTimelineItems, parseCheckboxItems, serializeTimelineItem, updateTimelineSection } from "./parser";
+import { parseTimelineItems, parseCheckboxItems, serializeTimelineItem, updateTimelineSection, extractBlockId } from "./parser";
 import type { CheckboxItem } from "./parser";
 
 /**
@@ -213,4 +213,103 @@ export async function addToInbox(
 		const content = `${settings.inboxHeading}\n${line}\n`;
 		await vault.create(path, content);
 	}
+}
+
+// ── Project I/O ──
+
+export interface ProjectInfo {
+	path: string;
+	title: string;
+}
+
+/**
+ * Find all active project notes based on tag and status frontmatter.
+ */
+export function getActiveProjects(
+	app: App,
+	settings: WeekFlowSettings
+): ProjectInfo[] {
+	const projects: ProjectInfo[] = [];
+	for (const file of app.vault.getMarkdownFiles()) {
+		const cache = app.metadataCache.getFileCache(file);
+		if (!cache) continue;
+
+		// Check tags: frontmatter tags + inline tags
+		const fmTags = (cache.frontmatter?.tags || []).map((t: string) =>
+			t.replace(/^#/, "")
+		);
+		const inlineTags = (cache.tags || []).map((t) =>
+			t.tag.replace(/^#/, "")
+		);
+		const allTags = [...fmTags, ...inlineTags];
+		if (!allTags.includes(settings.projectTag)) continue;
+
+		// Check status
+		const status = cache.frontmatter?.[settings.projectStatusField];
+		if (!status || !settings.projectActiveStatuses.includes(status))
+			continue;
+
+		projects.push({ path: file.path, title: file.basename });
+	}
+	return projects;
+}
+
+/**
+ * Read unchecked tasks from a project note under the configured heading.
+ */
+export async function getProjectTasks(
+	vault: Vault,
+	projectPath: string,
+	heading: string
+): Promise<CheckboxItem[]> {
+	const file = vault.getAbstractFileByPath(projectPath);
+	if (!file || !(file instanceof TFile)) return [];
+	const content = await vault.read(file);
+	return parseCheckboxItems(content, heading);
+}
+
+/**
+ * Append a block ID to a specific line in a file.
+ */
+export async function appendBlockIdToLine(
+	vault: Vault,
+	filePath: string,
+	lineNumber: number,
+	blockId: string
+): Promise<void> {
+	const file = vault.getAbstractFileByPath(filePath);
+	if (!file || !(file instanceof TFile)) return;
+	const content = await vault.read(file);
+	const lines = content.split("\n");
+	if (lineNumber < 0 || lineNumber >= lines.length) return;
+	lines[lineNumber] = lines[lineNumber].trimEnd() + ` ^${blockId}`;
+	await vault.modify(file, lines.join("\n"));
+}
+
+/**
+ * Complete a project task by finding the line with a given block ID
+ * and changing `- [ ]` to `- [x]`.
+ */
+export async function completeProjectTask(
+	vault: Vault,
+	projectPath: string,
+	blockId: string
+): Promise<boolean> {
+	const file = vault.getAbstractFileByPath(projectPath);
+	if (!file || !(file instanceof TFile)) return false;
+	const content = await vault.read(file);
+	const lines = content.split("\n");
+	let changed = false;
+	for (let i = 0; i < lines.length; i++) {
+		const id = extractBlockId(lines[i]);
+		if (id === blockId && lines[i].match(/^- \[ \]/)) {
+			lines[i] = lines[i].replace(/^- \[ \]/, "- [x]");
+			changed = true;
+			break;
+		}
+	}
+	if (changed) {
+		await vault.modify(file, lines.join("\n"));
+	}
+	return changed;
 }
