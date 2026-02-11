@@ -1,7 +1,7 @@
 # WeekFlow 작업 핸드오프
 
-> 작성일: 2026-02-09
-> 마지막 커밋: `f525edf` docs: defer 5-min diagonal cell click from Phase 2 scope
+> 작성일: 2026-02-11
+> 마지막 커밋: `44141fa` feat: implement Phase 3 remainder — project integration, block sorting, presets
 
 ## 프로젝트 개요
 
@@ -9,33 +9,42 @@ WeekFlow는 Obsidian 플러그인으로, 데일리 노트의 마크다운 체크
 
 ## 완료된 Phase
 
-### Phase 1 (Core MVP) — 커밋 `18d1cbe`
+### Phase 1 (Core MVP)
 - 주간 타임테이블 그리드 렌더링 (10분 단위 셀, CSS Grid)
 - 데일리 노트 파싱/직렬화 (Tasks 플러그인 메타데이터 보존)
 - 셀 드래그로 블록 생성 → BlockModal → 데일리 노트 저장
-- Plan/Actual 모드 토글, 카테고리 팔레트
-- 주간 네비게이션, 설정 탭
+- 통합 뷰 (Plan/Actual 동시 표시, 날짜 기준 자동 결정)
+- 카테고리 팔레트, 주간 네비게이션, 설정 탭
 
-### Phase 2 (Block Editing & Sync) — 커밋 `5fd95be` + `47fa0b8` + `f525edf`
-구현된 서브태스크:
-- **2-A** TimelineItem에 런타임 `id: string` 추가 (마크다운에는 저장 안 함)
-- **2-B** EditBlockModal — 블록 클릭 시 시간/내용/카테고리 편집 + 삭제
-- **2-C** 블록 드래그 이동 — 같은 날 시간 이동 + 다른 날 크로스데이 이동
-- **2-D** 블록 좌/우 경계 리사이즈 (ew-resize 핸들)
-- **2-E** 양방향 동기화 — `vault.on('modify')` + `active-leaf-change`, `isSelfWriting` 가드, 300ms debounce
-- **2-F** 5분 단위 — EditBlockModal의 time input에서 5분 단위 입력 가능
-- **2-G** 자정 넘김 자동 분리 (dayEndHour 초과 시 다음 날로 split)
-- **2-H** Undo/Redo 스택 (Command pattern, 50개 제한, Mod+Z / Mod+Shift+Z)
-- **2-I** 에러 핸들링 — ParseResult에 warnings 포함, 경고 배너, 시간 겹침 블록 시각적 표시
-- **2-J** 5분 대각선 렌더링 — `clip-path`로 5분 블록 엣지를 대각선으로 시각화, `::before`/`::after`로 대각선 경계선, 리사이즈 핸들 대각 영역 확장, 텍스트 잘림 방지 padding
-- **2-K** 블록 클릭/드래그 판별 개선 — `click` 이벤트에서 마우스 이동 거리(`DRAG_DISTANCE_PX`) 체크 추가, 드래그 후 의도치 않은 모달 열림 방지
+### Phase 2 (Block Editing & Sync)
+- TimelineItem에 런타임 `id: string` 추가 (마크다운에는 저장 안 함)
+- EditBlockModal — 블록 편집 + 삭제, Actual 블록은 planTime 읽기 전용 + actualTime 편집
+- 블록 완료 토글 (○/✓ 버튼으로 Plan ↔ Actual 전환)
+- 블록 드래그 이동 (같은 날 + 크로스데이), Actual 블록은 actualTime만 변경
+- 블록 좌/우 경계 리사이즈, Actual 블록은 actualTime만 변경
+- 양방향 동기화 (`vault.on('modify')` + `active-leaf-change`, `isSelfWriting` 가드, 300ms debounce)
+- 5분 단위 입력 + 대각선 렌더링 (`clip-path`, `::before`/`::after`)
+- 자정 넘김 자동 분리 (overnight)
+- Undo/Redo 스택 (Command pattern, 50개 제한, Mod+Z / Mod+Shift+Z)
+- 에러 핸들링 (경고 배너, 시간 겹침 반투명 오버랩)
 
 보류 항목:
-- ~~대각선 셀 클릭으로 5분 단위 선택~~ — 셀 크기가 작아 정밀 클릭이 비현실적이고 UX가 번잡해짐. 향후 Shift+드래그 등 대안 검토.
+- ~~대각선 셀 클릭으로 5분 단위 선택~~ — 셀 크기가 작아 비현실적. 향후 Shift+드래그 등 대안 검토.
+
+### Phase 3 (Planning Workflow)
+- Planning Panel (사이드바, 토글 가능, 상태 저장)
+- 미완료(Overdue) 수집: 현재 주의 과거 날짜에서 `- [ ]` 항목 표시
+- 인박스 연동: 설정된 인박스 노트에서 미완료 태스크 읽기, 드래그→그리드 배치, 인박스에서 제거
+- Deferred 처리: 과거 날짜 이동 시 `- [>]`, 오늘/미래는 단순 이동
+- 인박스로 되돌리기: 블록을 그리드 밖으로 드래그 시 인박스에 반환
+- 프로젝트 태스크 연동: `metadataCache`로 활성 프로젝트 탐색, 미완료 태스크 패널 표시
+- 프로젝트 드래그 배치: block ID 자동 부여 + `[[Project#^block-id]]` 링크 포함
+- 완료 시 원본 동기화: `[[...#^...]]` 감지 → ConfirmModal → 프로젝트 노트 `- [x]` 변환
+- 블록 정렬: 시간순 컴팩션 (Plan 블록만, 주 전체, Undo 지원)
+- 타임 슬롯 프리셋: 현재 날짜에서 생성, 요일 선택 적용, 덮어쓰기/병합, Undo 지원
 
 ## 미완료 Phase (SPEC.md 참조)
 
-- **Phase 3**: Planning workflow (인박스, 프로젝트 통합)
 - **Phase 4**: Review & 통계
 - **Phase 5**: 외부 캘린더 & 커맨드
 - **Phase 6**: 모바일 최적화
@@ -44,17 +53,20 @@ WeekFlow는 Obsidian 플러그인으로, 데일리 노트의 마크다운 체크
 
 ```
 src/
-├── types.ts              # TimelineItem, WeekFlowSettings, ParseResult 등 타입 정의
-├── parser.ts             # 마크다운 ↔ TimelineItem 파싱/직렬화, generateItemId()
-├── daily-note.ts         # 데일리 노트 읽기/쓰기, getWeekDates(), loadWeekData()
-├── grid-renderer.ts      # CSS Grid 렌더링, 드래그 상태머신, 리사이즈, 고스트 블록, 5분 대각선
-├── view.ts               # WeekFlowView (ItemView) — 메인 뷰 컨트롤러, 콜백, 동기화, undo
+├── types.ts              # TimelineItem, WeekFlowSettings, PresetSlot/TimeSlotPreset, PanelItem 등 타입
+├── parser.ts             # 마크다운 ↔ TimelineItem 파싱/직렬화, generateItemId(), extractBlockId(), generateBlockId()
+├── daily-note.ts         # 데일리 노트 읽기/쓰기, 인박스 I/O, 프로젝트 I/O (getActiveProjects, getProjectTasks, completeProjectTask)
+├── grid-renderer.ts      # CSS Grid 렌더링, 드래그 상태머신, 리사이즈, 고스트 블록, 5분 대각선, 완료 토글
+├── view.ts               # WeekFlowView — 메인 뷰 컨트롤러, 패널/그리드 통합, 정렬, 프리셋, undo
+├── planning-panel.ts     # PlanningPanel — overdue/inbox/project 섹션 렌더링, 접기/펼치기
 ├── main.ts               # 플러그인 엔트리포인트, 커맨드 등록
 ├── block-modal.ts        # 새 블록 생성 모달
-├── edit-block-modal.ts   # 기존 블록 편집/삭제 모달 (Phase 2 신규)
-├── undo-manager.ts       # UndoableAction 인터페이스 + UndoManager 클래스 (Phase 2 신규)
-└── settings.ts           # 설정 탭 UI
-styles.css                # 전체 CSS (그리드, 블록, 고스트, 리사이즈 핸들, 대각선, 경고 배너 등)
+├── edit-block-modal.ts   # 기존 블록 편집/삭제 모달 (Actual 시간 편집 포함)
+├── confirm-modal.ts      # Yes/No 확인 다이얼로그 (프로젝트 태스크 완료 동기화 용)
+├── preset-modal.ts       # CreatePresetModal, ApplyPresetModal, PresetModal
+├── undo-manager.ts       # UndoableAction + UndoManager (50개 제한)
+└── settings.ts           # 설정 탭 UI (기본 + Planning Panel + Project Integration + Presets + Categories)
+styles.css                # 전체 CSS
 ```
 
 ## 주요 아키텍처 결정사항

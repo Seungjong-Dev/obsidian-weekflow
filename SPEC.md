@@ -57,7 +57,7 @@ Plan (계획)  ──▶  Actual (실행)  ──▶  Review (회고)
 | Plan only | `- [ ] 09:00-11:00 내용 #tag` | 테두리(outline) | 계획만 있음 (미실행) |
 | Plan = Actual | `- [x] 09:00-11:00 내용 #tag` | 채우기(fill) | 계획대로 실행됨 |
 | Plan ≠ Actual | `- [x] 09:00-11:00 > 09:00-10:30 내용 #tag` | 채우기(fill) + 테두리(outline) | 계획과 실행 시간이 다름 |
-| Deferred | `- [>] 09:00-11:00 내용 #tag` | 취소선 + 흐린 테두리 | 다른 날로 미룸 |
+| Deferred | `- [>] 09:00-11:00 내용 #tag` | 파선 테두리(dashed) + 반투명(50%) | 다른 날로 미룸 |
 
 ## Interaction
 
@@ -65,30 +65,36 @@ Plan (계획)  ──▶  Actual (실행)  ──▶  Review (회고)
 
 1. **클릭:** 단일 셀 선택/토글
 2. **드래그:** 연속된 셀 범위 선택 (같은 날 내에서 수직 드래그)
-3. 셀 선택 후 내용과 카테고리를 지정하여 블록 생성
-4. Plan/Actual 모드를 전환하여 기록
+3. 셀 선택 후 내용과 카테고리를 지정하여 블록 생성 (날짜에 따라 Plan/Actual 자동 결정)
 
-### 모드 전환
+### 통합 뷰 (Unified View)
 
-- **Plan 모드:** 셀에 할당하면 `- [ ]` (미체크)로 기록 → 테두리로 표시
-- **Actual 모드:** 셀에 할당하면 기존 항목을 `- [x]`로 체크. 시간이 다르면 `>` 뒤에 실행 시간 추가. 계획 없이 새로 기록하면 바로 `- [x]`로 생성.
-- 모드 전환은 테이블 상단의 토글 버튼으로 수행
+Plan과 Actual 블록을 하나의 뷰에서 동시에 표시한다. 별도의 모드 전환 없이 날짜에 따라 자동으로 결정된다.
+
+- **오늘/미래 날짜에 블록 생성:** `- [ ]` (Plan)으로 기록 → 테두리로 표시
+- **과거 날짜에 블록 생성:** `- [x]` (Actual)로 기록 → 채우기로 표시
+- **블록 완료 토글:** Plan 블록에 표시되는 ○ 버튼을 클릭하면 `- [x]` (Actual)로 변환. Actual 블록의 ✓ 버튼을 클릭하면 `- [ ]` (Plan)으로 되돌림.
+- **Actual 시간 편집:** Actual 블록 클릭 시 편집 모달에서 계획 시간은 읽기 전용으로 표시되고, 실행 시간(Actual time)을 별도로 편집할 수 있다. 실행 시간이 계획 시간과 다르면 `> HH:MM-HH:MM` 형식으로 저장.
 
 ### 블록 편집
 
-- 기존 블록 클릭 시 내용/카테고리 변경 또는 삭제 가능
+- 기존 블록 클릭 시 내용/카테고리/시간 변경 또는 삭제 가능
+  - Plan 블록: 계획 시간, 내용, 카테고리 편집
+  - Actual 블록: 계획 시간은 읽기 전용, 실행 시간(Actual time)과 내용/카테고리 편집
 - 블록 경계를 드래그하여 시간 범위 조정 (리사이즈)
+  - Actual 블록 리사이즈 시 actualTime만 변경, planTime은 보존
 - 블록을 드래그하여 다른 시간대/요일로 이동 (같은 주 내)
   - 다른 요일로 이동 시 해당 날짜의 데일리 노트로 데이터가 옮겨짐
+  - Actual 블록 이동 시 actualTime만 변경, planTime은 보존
 
 ### 블록 정렬
 
-블록들을 규칙에 따라 자동 배치하는 기능. Plan 모드에서 계획을 빠르게 정리할 때 유용하다.
+블록들을 규칙에 따라 자동 배치하는 기능. 계획을 빠르게 정리할 때 유용하다.
 
-- **카테고리별 정렬:** 같은 카테고리끼리 모아서 연속 배치
-- **시간순 정렬:** 빈 시간 없이 위에서부터 밀착 정렬 (compaction)
-- 정렬 대상: 선택한 날 또는 주 전체
-- 정렬은 Plan 데이터에만 적용 (Actual은 실제 기록이므로 정렬하지 않음)
+- **시간순 컴팩션:** Plan 블록만 대상으로 시간순 정렬 후 Day Start Hour부터 빈 시간 없이 밀착 배치
+- 툴바의 정렬 버튼(↕)을 클릭하면 현재 주 전체의 Plan 블록을 컴팩션
+- Actual 블록은 실제 기록이므로 정렬 대상에서 제외
+- Undo로 정렬 전 상태 복원 가능
 
 ### 타임 슬롯 프리셋
 
@@ -105,9 +111,13 @@ Plan (계획)  ──▶  Actual (실행)  ──▶  Review (회고)
 └──────────────────────────┘
 ```
 
-- 설정에서 프리셋을 생성/편집/삭제 (프리셋 데이터는 플러그인 설정에 저장)
-- 프리셋 적용 시 지정한 요일들에 Plan 블록을 일괄 생성
-- 기존 Plan 블록이 있는 날에 적용 시 덮어쓰기/병합 선택 가능
+- 프리셋 데이터는 플러그인 설정에 저장 (설정 화면에서 삭제 가능)
+- 툴바의 프리셋 버튼(🕐)을 클릭하면 드롭다운 메뉴 표시:
+  - **"Save current day as preset..."**: 오늘 날짜의 Plan 블록으로 새 프리셋 생성
+  - **저장된 프리셋 목록**: 클릭 시 적용 모달 열기
+- **프리셋 적용 모달**: 적용할 요일 선택(7개 체크박스) + "기존 Plan 블록 덮어쓰기" 옵션
+- 적용 시 선택된 요일에 Plan 블록 일괄 생성
+- Undo로 적용 전 상태 복원 가능
 
 ## Categories (Settings)
 
@@ -321,24 +331,26 @@ WeekFlow 뷰 사이드에 플래닝 패널을 제공한다. 시간 배정이 필
 
 ## Settings
 
-| 항목 | 설명 | 기본값 |
-|------|------|--------|
-| Daily Note Path | 데일리 노트 경로 패턴 (moment.js) | `YYYY-MM-DD` |
-| Timeline Heading | 타임라인 데이터가 위치할 헤딩 | `## Timeline` |
-| Review Heading | 회고 데이터가 위치할 헤딩 | `## Review` |
-| Inbox Note Path | 인박스 노트 경로 패턴 (moment.js) | `YYYY-[W]ww` |
-| Inbox Heading | 인박스 태스크가 위치할 헤딩 | `### To Do` |
-| Project Tag | 프로젝트 노트를 식별하는 태그 | `#type/project` |
-| Project Status Field | 프로젝트 상태를 나타내는 frontmatter 필드 | `status` |
-| Project Active Statuses | 활성으로 간주할 상태 값 목록 | `🟡 In Progress`, `🔴 Urgent` |
-| Project Tasks Heading | 프로젝트 내 태스크가 위치할 헤딩 | `## Tasks` |
-| Categories | 카테고리 목록 관리 | 기본 5개 |
-| Day Start Hour | 테이블 시작 시간 | `6` (06:00) |
-| Day End Hour | 테이블 종료 시간 | `24` (00:00) |
-| Week Start Day | 주 시작 요일 | `Monday` |
-| Default Mode | 기본 입력 모드 | `Plan` |
-| Calendar Sources | 외부 캘린더 ICS URL 목록 | (빈 목록) |
-| Calendar Cache Duration | 캘린더 캐시 갱신 간격 (분) | `30` |
+| 항목 | 설명 | 기본값 | Phase |
+|------|------|--------|-------|
+| Daily Note Path | 데일리 노트 경로 패턴 (moment.js) | `YYYY-MM-DD` | 1 |
+| Timeline Heading | 타임라인 데이터가 위치할 헤딩 | `## Timeline` | 1 |
+| Day Start Hour | 테이블 시작 시간 | `6` (06:00) | 1 |
+| Day End Hour | 테이블 종료 시간 | `24` (00:00) | 1 |
+| Week Start Day | 주 시작 요일 | `Monday` | 1 |
+| Categories | 카테고리 목록 관리 | 기본 5개 | 1 |
+| Inbox Note Path | 인박스 노트 경로 패턴 (moment.js) | `YYYY-[W]ww` | 3 |
+| Inbox Heading | 인박스 태스크가 위치할 헤딩 | `### To Do` | 3 |
+| Default Block Duration | 패널에서 드래그 시 기본 블록 길이 (분) | `60` | 3 |
+| Planning Panel Open | 패널 열림/닫힘 상태 유지 | `true` | 3 |
+| Project Tag | 프로젝트 노트를 식별하는 태그 | `type/project` | 3 |
+| Project Status Field | 프로젝트 상태를 나타내는 frontmatter 필드 | `status` | 3 |
+| Project Active Statuses | 활성으로 간주할 상태 값 목록 (쉼표 구분) | `🟡 In Progress, 🔴 Urgent` | 3 |
+| Project Tasks Heading | 프로젝트 내 태스크가 위치할 헤딩 | `## Tasks` | 3 |
+| Presets | 타임 슬롯 프리셋 목록 | (빈 목록) | 3 |
+| Review Heading | 회고 데이터가 위치할 헤딩 | `## Review` | 4 |
+| Calendar Sources | 외부 캘린더 ICS URL 목록 | (빈 목록) | 5 |
+| Calendar Cache Duration | 캘린더 캐시 갱신 간격 (분) | `30` | 5 |
 
 #### 경로 미리보기
 
@@ -357,8 +369,8 @@ Inbox Note Path:  [5. Periodic Notes/YYYY/YYYY-[W]ww     ]
 ### 1. Timetable View (Main)
 
 - Obsidian 커스텀 뷰(Leaf)로 표시되는 메인 타임테이블
-- 상단: 주차 표시 + 네비게이션 (이전/다음 주) + Plan/Actual 토글
-- 본문: 7일 x 시간대 그리드
+- 상단 툴바: 패널 토글 | ◀ 주차 표시 ▶ | Today | ↻ Refresh | ↩ Undo | ↪ Redo | ↕ Sort | 🕐 Presets | 카테고리 팔레트
+- 본문: Planning Panel(좌측) + 7일 x 시간대 그리드
 
 ### 2. Category Palette
 
@@ -610,7 +622,7 @@ const isIPad   = isTablet && document.body.hasClass("is-ios");
 
 ## Implementation Phases
 
-### Phase 1 — Core (MVP)
+### Phase 1 — Core (MVP) ✅
 
 **목표:** 데일리 노트를 읽어서 주간 타임테이블로 보여주고, 타임테이블에서 블록을 만들면 데일리 노트에 기록되는 기본 루프 완성.
 
@@ -619,45 +631,48 @@ const isIPad   = isTablet && document.body.hasClass("is-ios");
 - 타임라인 파서: 지정된 헤딩 아래 `- [ ]` / `- [x]` / `- [>]` 리스트 읽기/쓰기
 - 타임테이블 뷰 (`ItemView`): 7일 × 시간대 그리드 렌더링
 - 셀 클릭/드래그로 새 블록 생성 (내용, 카테고리 입력 모달)
-- Plan/Actual 모드 토글 및 시각적 구분 (outline vs fill)
+- 통합 뷰: Plan(outline)과 Actual(fill)을 동시 표시. 과거 날짜는 자동으로 Actual, 오늘/미래는 Plan으로 생성
 - 카테고리 팔레트 (태그 → 색상 매핑)
 - 주 네비게이션 (이전/다음 주)
 - `- [x] HH:MM-HH:MM > HH:MM-HH:MM` 형식 파싱 및 렌더링
 
 **이 Phase가 끝나면:** WeekFlow를 열고, 블록을 만들고, 데일리 노트에서 결과를 확인할 수 있다. 데일리 노트를 직접 수정하면 뷰를 다시 열 때 반영된다.
 
-### Phase 2 — 블록 편집 & 동기화
+### Phase 2 — 블록 편집 & 동기화 ✅
 
 **목표:** 블록을 자유롭게 조작하고, 데일리 노트와 실시간으로 동기화.
 
 - 블록 드래그 이동 (같은 날 시간 이동 + 다른 날로 이동)
 - 블록 경계 드래그 리사이즈
-- 블록 클릭 시 내용/카테고리 편집, 삭제
+- 블록 클릭 시 내용/카테고리/시간 편집, 삭제
+- 블록 완료 토글 (○/✓ 버튼으로 Plan ↔ Actual 전환)
+- Actual 블록 편집 시 계획 시간 읽기 전용 + 실행 시간 편집
 - 실시간 양방향 동기화 (WeekFlow ↔ 데일리 노트 능동 편집 시)
 - 포커스 복귀 시 데이터 재로딩
 - 자정 넘김 항목 자동 분리 (overnight)
-- Undo/Redo 스택 (블록 이동, 리사이즈, 생성, 삭제에 대한 되돌리기)
+- Undo/Redo 스택 (블록 이동, 리사이즈, 생성, 삭제, 완료/미완료에 대한 되돌리기)
 - 5분 단위 대각선 블록 렌더링 (clip-path), EditBlockModal에서 5분 단위 입력. ~~대각선 셀 클릭~~ 보류.
-- 에러 핸들링: 파싱 불가 항목은 무시하되, 뷰 하단에 경고 표시. 시간 겹침 블록은 시각적으로 구분 (반투명 오버랩).
+- 에러 핸들링: 파싱 불가 항목은 무시하되, 뷰 상단에 경고 배너 표시. 시간 겹침 블록은 시각적으로 구분 (반투명 오버랩).
 
 **이 Phase가 끝나면:** 타임테이블에서 블록을 자유롭게 드래그하고 편집할 수 있고, 데일리 노트와 실시간으로 연동된다.
 
-### Phase 3 — 플래닝 워크플로우
+### Phase 3 — 플래닝 워크플로우 ✅
 
 **목표:** 할 일을 모아보고, 시간에 배치하고, 미완료 항목을 관리하는 플래닝 사이클.
 
-- Planning Panel (사이드바)
+- Planning Panel (사이드바, 토글 가능)
 - 인박스 연동: 설정된 인박스 노트에서 미완료 태스크 읽기
-- 설정: Inbox Note Path, Inbox Heading
+- 설정: Inbox Note Path, Inbox Heading, Default Block Duration
 - 미완료(Overdue) 항목 수집 및 표시
 - Deferred 처리: 과거 날짜 이동 시 `- [>]`, 오늘/미래는 단순 이동
 - 인박스로 되돌리기 기능
-- 프로젝트 태스크 연동: 프로젝트 노트에서 미완료 태스크 읽기
+- 프로젝트 태스크 연동: `metadataCache`로 활성 프로젝트 탐색, 미완료 태스크 패널 표시
 - 설정: Project Tag, Project Status Field, Project Active Statuses, Project Tasks Heading
-- 드래그로 타임라인에 배치 시 텍스트 복사 + `[[프로젝트#^block-id]]` 링크
-- 완료 시 원본 태스크 완료 확인 다이얼로그
-- 블록 정렬 (카테고리별, 시간순 compaction)
-- 타임 슬롯 프리셋
+- 드래그로 타임라인에 배치 시 텍스트 복사 + `[[프로젝트#^block-id]]` 링크 (block ID 자동 부여)
+- 완료 시 원본 태스크 완료 확인 다이얼로그 (ConfirmModal)
+- 블록 정렬: 시간순 compaction (Plan 블록만 대상, 주 전체 적용)
+- 타임 슬롯 프리셋: 현재 날짜에서 생성, 요일 선택 적용, 덮어쓰기/병합 옵션
+- 모든 동작에 Undo 지원
 
 **이 Phase가 끝나면:** 인박스와 프로젝트에서 할 일을 끌어와 주간 계획을 세우고, 미완료 항목을 추적/미루기 할 수 있다.
 
@@ -684,13 +699,14 @@ const isIPad   = isTablet && document.body.hasClass("is-ios");
 
 - Calendar Overlay: ICS URL 구독, 캐싱, 반투명 오버레이 렌더링
 - 설정: Calendar Sources, Calendar Cache Duration
-- Obsidian 커맨드 등록:
-  - `WeekFlow: Open weekly view`
+- Obsidian 커맨드 등록 (Phase 1~3에서 이미 구현된 것 포함):
+  - `WeekFlow: Open weekly view` ✅
+  - `WeekFlow: Undo` (Mod+Z) ✅
+  - `WeekFlow: Redo` (Mod+Shift+Z) ✅
+  - `WeekFlow: Toggle planning panel` ✅
   - `WeekFlow: Go to this week`
-  - `WeekFlow: Toggle Plan/Actual mode`
-  - `WeekFlow: Open planning panel`
   - `WeekFlow: Open statistics`
-- 리본 아이콘 (사이드바에서 WeekFlow 열기)
+- 리본 아이콘 (사이드바에서 WeekFlow 열기) ✅
 
 **이 Phase가 끝나면:** 외부 일정을 참고하면서 계획을 세울 수 있고, 커맨드 팔레트로 빠르게 접근할 수 있다.
 
