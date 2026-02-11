@@ -50,7 +50,6 @@ export class GridRenderer {
 	private settings: WeekFlowSettings;
 	private dates: Moment[];
 	private weekData: Map<string, TimelineItem[]>;
-	private mode: "plan" | "actual";
 	private callbacks: GridCallbacks;
 	private overlapIds: Set<string>;
 	private gridEl: HTMLElement | null = null;
@@ -80,7 +79,6 @@ export class GridRenderer {
 		settings: WeekFlowSettings,
 		dates: Moment[],
 		weekData: Map<string, TimelineItem[]>,
-		mode: "plan" | "actual",
 		callbacks: GridCallbacks,
 		overlapIds: Set<string> = new Set()
 	) {
@@ -88,7 +86,6 @@ export class GridRenderer {
 		this.settings = settings;
 		this.dates = dates;
 		this.weekData = weekData;
-		this.mode = mode;
 		this.callbacks = callbacks;
 		this.overlapIds = overlapIds;
 	}
@@ -557,7 +554,10 @@ export class GridRenderer {
 
 		// Plan outline when plan ≠ actual
 		if (item.checkbox === "actual" && item.actualTime) {
-			this.renderPlanOutline(dayIndex, item);
+			const p = item.planTime;
+			const a = item.actualTime;
+			const overlaps = p.start < a.end && a.start < p.end;
+			this.renderPlanOutline(dayIndex, item, !overlaps);
 		}
 	}
 
@@ -765,7 +765,7 @@ export class GridRenderer {
 
 	// ── Plan Outline ──
 
-	private renderPlanOutline(dayIndex: number, item: TimelineItem): void {
+	private renderPlanOutline(dayIndex: number, item: TimelineItem, showText = true): void {
 		if (!this.gridEl) return;
 
 		const dayStartMin = this.settings.dayStartHour * 60;
@@ -789,6 +789,17 @@ export class GridRenderer {
 			outline.style.gridColumn = `${dayColStart + seg.slotStart} / ${dayColStart + seg.slotEnd}`;
 			outline.style.borderColor = color;
 			outline.style.color = color;
+
+			// Content and time in first segment (only when not overlapping with actual)
+			if (i === 0 && showText) {
+				const contentEl = outline.createDiv({ cls: "weekflow-block-content" });
+				contentEl.setText(item.content);
+
+				const timeEl = outline.createDiv({ cls: "weekflow-block-time" });
+				timeEl.setText(
+					`${formatTime(item.planTime.start)}-${formatTime(item.planTime.end)}`
+				);
+			}
 
 			// 5-minute diagonal edges
 			const slots = seg.slotEnd - seg.slotStart;

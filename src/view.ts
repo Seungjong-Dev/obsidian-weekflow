@@ -15,7 +15,6 @@ import type { CheckboxItem } from "./parser";
 export class WeekFlowView extends ItemView {
 	plugin: WeekFlowPlugin;
 	private currentDate: Moment = window.moment();
-	private mode: "plan" | "actual";
 	private dates: Moment[] = [];
 	private weekData: Map<string, TimelineItem[]> = new Map();
 	private weekWarnings: Map<string, ParseWarning[]> = new Map();
@@ -41,7 +40,6 @@ export class WeekFlowView extends ItemView {
 	constructor(leaf: WorkspaceLeaf, plugin: WeekFlowPlugin) {
 		super(leaf);
 		this.plugin = plugin;
-		this.mode = plugin.settings.defaultMode;
 	}
 
 	getViewType(): string {
@@ -157,7 +155,6 @@ export class WeekFlowView extends ItemView {
 			this.plugin.settings,
 			this.dates,
 			this.weekData,
-			this.mode,
 			{
 				onCellDragStart: () => {},
 				onCellDragMove: () => {},
@@ -178,7 +175,6 @@ export class WeekFlowView extends ItemView {
 			overlapIds
 		);
 		this.gridRenderer.render();
-		this.applyModeToGrid();
 	}
 
 	private renderWarnings(container: HTMLElement) {
@@ -223,11 +219,6 @@ export class WeekFlowView extends ItemView {
 		return overlapIds;
 	}
 
-	private applyModeToGrid() {
-		const container = this.contentEl;
-		container.removeClass("weekflow-mode-plan", "weekflow-mode-actual");
-		container.addClass(`weekflow-mode-${this.mode}`);
-	}
 
 	private renderToolbar(container: HTMLElement) {
 		const toolbar = container.createDiv({ cls: "weekflow-toolbar" });
@@ -296,34 +287,6 @@ export class WeekFlowView extends ItemView {
 			});
 		}
 
-		// Mode toggle
-		const modeToggle = toolbar.createDiv({ cls: "weekflow-mode-toggle" });
-
-		const planBtn = modeToggle.createEl("button", {
-			text: "Plan",
-			cls: "weekflow-mode-btn",
-		});
-		const actualBtn = modeToggle.createEl("button", {
-			text: "Actual",
-			cls: "weekflow-mode-btn",
-		});
-
-		if (this.mode === "plan") planBtn.addClass("active");
-		else actualBtn.addClass("active");
-
-		planBtn.addEventListener("click", () => {
-			this.mode = "plan";
-			planBtn.addClass("active");
-			actualBtn.removeClass("active");
-			this.applyModeToGrid();
-		});
-
-		actualBtn.addEventListener("click", () => {
-			this.mode = "actual";
-			actualBtn.addClass("active");
-			planBtn.removeClass("active");
-			this.applyModeToGrid();
-		});
 	}
 
 	private async navigateWeek(delta: number) {
@@ -391,8 +354,8 @@ export class WeekFlowView extends ItemView {
 		const today = window.moment().startOf("day");
 		const isPast = targetDate.isBefore(today, "day");
 
-		// Past dates always use actual mode
-		const effectiveMode = isPast ? "actual" : this.mode;
+		// Past dates → actual, today/future → plan
+		const effectiveMode = isPast ? "actual" : "plan";
 
 		new BlockModal(
 			this.app,
@@ -1184,16 +1147,12 @@ export class WeekFlowView extends ItemView {
 	getState(): Record<string, unknown> {
 		return {
 			currentDate: this.currentDate.format("YYYY-MM-DD"),
-			mode: this.mode,
 		};
 	}
 
 	async setState(state: any, result: { history: boolean }): Promise<void> {
 		if (typeof state.currentDate === "string") {
 			this.currentDate = window.moment(state.currentDate, "YYYY-MM-DD");
-		}
-		if (state.mode === "plan" || state.mode === "actual") {
-			this.mode = state.mode;
 		}
 		await this.refresh();
 	}
