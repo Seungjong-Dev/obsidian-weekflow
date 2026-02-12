@@ -478,10 +478,17 @@
 	width: calc(100% / var(--slots));
 }
 
-/* Overlap blocks */
+/* Overlap blocks — stacked with offset, hover to reveal */
 .weekflow-block-overlap {
-	opacity: 0.6;
-	border-style: dashed !important;
+	opacity: 0.85;
+	box-shadow: 1px 1px 4px rgba(0, 0, 0, 0.15);
+	transition: opacity 0.15s, z-index 0s, transform 0.15s, box-shadow 0.15s;
+}
+
+.weekflow-block-overlap:hover {
+	opacity: 1;
+	z-index: 20 !important;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
 /* Warning banner */

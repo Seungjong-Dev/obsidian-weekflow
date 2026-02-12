@@ -51,7 +51,7 @@ export class GridRenderer {
 	private dates: Moment[];
 	private weekData: Map<string, TimelineItem[]>;
 	private callbacks: GridCallbacks;
-	private overlapIds: Set<string>;
+	private overlapDepths: Map<string, number>;
 	private gridEl: HTMLElement | null = null;
 	private selectionRange: SelectionRange | null = null;
 
@@ -80,14 +80,14 @@ export class GridRenderer {
 		dates: Moment[],
 		weekData: Map<string, TimelineItem[]>,
 		callbacks: GridCallbacks,
-		overlapIds: Set<string> = new Set()
+		overlapDepths: Map<string, number> = new Map()
 	) {
 		this.containerEl = containerEl;
 		this.settings = settings;
 		this.dates = dates;
 		this.weekData = weekData;
 		this.callbacks = callbacks;
-		this.overlapIds = overlapIds;
+		this.overlapDepths = overlapDepths;
 	}
 
 	render(): void {
@@ -417,7 +417,8 @@ export class GridRenderer {
 		if (segments.length === 0) return;
 
 		const color = this.getCategoryColor(item.tags);
-		const isOverlap = this.overlapIds.has(item.id);
+		const overlapDepth = this.overlapDepths.get(item.id);
+		const isOverlap = overlapDepth !== undefined;
 		const has5minStart = startOffset % 10 !== 0;
 		const has5minEnd = endOffset % 10 !== 0;
 
@@ -427,9 +428,12 @@ export class GridRenderer {
 			block.style.gridColumn = `${dayColStart + seg.slotStart} / ${dayColStart + seg.slotEnd}`;
 			block.style.position = "relative";
 
-			// Overlap styling
+			// Overlap styling — offset stack
 			if (isOverlap) {
 				block.addClass("weekflow-block-overlap");
+				const offset = (overlapDepth ?? 0) * 4;
+				block.style.transform = `translate(${offset}px, ${offset}px)`;
+				block.style.zIndex = String(5 + (overlapDepth ?? 0));
 			}
 
 			// Style based on checkbox state

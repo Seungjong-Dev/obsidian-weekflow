@@ -170,7 +170,7 @@ export class WeekFlowView extends ItemView {
 		const gridWrapper = body.createDiv({ cls: "weekflow-grid-wrapper" });
 
 		// Detect overlapping items per day
-		const overlapIds = this.detectOverlaps();
+		const overlapDepths = this.detectOverlaps();
 
 		this.gridRenderer = new GridRenderer(
 			gridWrapper,
@@ -194,7 +194,7 @@ export class WeekFlowView extends ItemView {
 				onBlockUncomplete: (dayIndex, item) =>
 					this.onBlockUncomplete(dayIndex, item),
 			},
-			overlapIds
+			overlapDepths
 		);
 		this.gridRenderer.render();
 	}
@@ -219,26 +219,38 @@ export class WeekFlowView extends ItemView {
 		}
 	}
 
-	private detectOverlaps(): Set<string> {
-		const overlapIds = new Set<string>();
+	private detectOverlaps(): Map<string, number> {
+		const overlapDepths = new Map<string, number>();
+
+		const getTime = (item: TimelineItem) =>
+			item.checkbox === "actual" && item.actualTime ? item.actualTime : item.planTime;
 
 		for (const [, items] of this.weekData) {
-			for (let i = 0; i < items.length; i++) {
-				for (let j = i + 1; j < items.length; j++) {
-					const a = items[i];
-					const b = items[j];
-					const aTime = a.checkbox === "actual" && a.actualTime ? a.actualTime : a.planTime;
-					const bTime = b.checkbox === "actual" && b.actualTime ? b.actualTime : b.planTime;
+			const sorted = [...items].sort((a, b) => getTime(a).start - getTime(b).start);
 
-					if (aTime.start < bTime.end && bTime.start < aTime.end) {
-						overlapIds.add(a.id);
-						overlapIds.add(b.id);
+			for (let i = 0; i < sorted.length; i++) {
+				const iTime = getTime(sorted[i]);
+				let depth = 0;
+				let hasOverlap = false;
+
+				for (let j = 0; j < i; j++) {
+					const jTime = getTime(sorted[j]);
+					if (iTime.start < jTime.end && jTime.start < iTime.end) {
+						hasOverlap = true;
+						depth = Math.max(depth, (overlapDepths.get(sorted[j].id) ?? 0) + 1);
+						if (!overlapDepths.has(sorted[j].id)) {
+							overlapDepths.set(sorted[j].id, 0);
+						}
 					}
+				}
+
+				if (hasOverlap) {
+					overlapDepths.set(sorted[i].id, depth);
 				}
 			}
 		}
 
-		return overlapIds;
+		return overlapDepths;
 	}
 
 
