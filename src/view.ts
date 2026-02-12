@@ -169,9 +169,6 @@ export class WeekFlowView extends ItemView {
 		// Grid wrapper
 		const gridWrapper = body.createDiv({ cls: "weekflow-grid-wrapper" });
 
-		// Detect overlapping items per day
-		const overlapDepths = this.detectOverlaps();
-
 		this.gridRenderer = new GridRenderer(
 			gridWrapper,
 			this.plugin.settings,
@@ -193,8 +190,7 @@ export class WeekFlowView extends ItemView {
 					this.onBlockComplete(dayIndex, item),
 				onBlockUncomplete: (dayIndex, item) =>
 					this.onBlockUncomplete(dayIndex, item),
-			},
-			overlapDepths
+			}
 		);
 		this.gridRenderer.render();
 	}
@@ -218,41 +214,6 @@ export class WeekFlowView extends ItemView {
 			li.setText(`${date} line ${warning.line}: ${warning.message}`);
 		}
 	}
-
-	private detectOverlaps(): Map<string, number> {
-		const overlapDepths = new Map<string, number>();
-
-		const getTime = (item: TimelineItem) =>
-			item.checkbox === "actual" && item.actualTime ? item.actualTime : item.planTime;
-
-		for (const [, items] of this.weekData) {
-			const sorted = [...items].sort((a, b) => getTime(a).start - getTime(b).start);
-
-			for (let i = 0; i < sorted.length; i++) {
-				const iTime = getTime(sorted[i]);
-				let depth = 0;
-				let hasOverlap = false;
-
-				for (let j = 0; j < i; j++) {
-					const jTime = getTime(sorted[j]);
-					if (iTime.start < jTime.end && jTime.start < iTime.end) {
-						hasOverlap = true;
-						depth = Math.max(depth, (overlapDepths.get(sorted[j].id) ?? 0) + 1);
-						if (!overlapDepths.has(sorted[j].id)) {
-							overlapDepths.set(sorted[j].id, 0);
-						}
-					}
-				}
-
-				if (hasOverlap) {
-					overlapDepths.set(sorted[i].id, depth);
-				}
-			}
-		}
-
-		return overlapDepths;
-	}
-
 
 	private renderToolbar(container: HTMLElement) {
 		const toolbar = container.createDiv({ cls: "weekflow-toolbar" });

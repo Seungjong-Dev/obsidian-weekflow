@@ -51,9 +51,12 @@ export class GridRenderer {
 	private dates: Moment[];
 	private weekData: Map<string, TimelineItem[]>;
 	private callbacks: GridCallbacks;
-	private overlapDepths: Map<string, number>;
 	private gridEl: HTMLElement | null = null;
 	private selectionRange: SelectionRange | null = null;
+	private selectedBlockId: string | null = null;
+	private overlapGroupMap: Map<string, number> = new Map();
+	private handleBarElements: Map<number, HTMLElement> = new Map();
+	private groupHoverTimers: Map<number, ReturnType<typeof setTimeout>> = new Map();
 
 	// Drag state machine
 	private dragMode: DragMode = "none";
@@ -80,14 +83,12 @@ export class GridRenderer {
 		dates: Moment[],
 		weekData: Map<string, TimelineItem[]>,
 		callbacks: GridCallbacks,
-		overlapDepths: Map<string, number> = new Map()
 	) {
 		this.containerEl = containerEl;
 		this.settings = settings;
 		this.dates = dates;
 		this.weekData = weekData;
 		this.callbacks = callbacks;
-		this.overlapDepths = overlapDepths;
 	}
 
 	render(): void {
@@ -156,6 +157,7 @@ export class GridRenderer {
 					cell.addEventListener("mousedown", (e) => {
 						if (this.dragMode !== "none") return;
 						e.preventDefault();
+						this.deselectOverlapBlock();
 
 						this.dragMode = "cell-select";
 						this.dragAnchorMinutes = minutes;
@@ -288,13 +290,19 @@ export class GridRenderer {
 		const dayColStart = dayIndex * 6 + 2;
 		const segments = this.getHourSegments(startOffset, endOffset);
 
+		const widestIdx = segments.reduce((best, seg, idx) => {
+			const w = seg.slotEnd - seg.slotStart;
+			const bw = segments[best].slotEnd - segments[best].slotStart;
+			return w > bw ? idx : best;
+		}, 0);
+
 		segments.forEach((seg, i) => {
 			const ghost = this.gridEl!.createDiv({ cls: "weekflow-block-ghost" });
 			ghost.style.gridRow = `${seg.row}`;
 			ghost.style.gridColumn = `${dayColStart + seg.slotStart} / ${dayColStart + seg.slotEnd}`;
 			ghost.style.backgroundColor = color + "40";
 			ghost.style.borderColor = color;
-			if (i === 0) ghost.setText(label);
+			if (i === widestIdx) ghost.setText(label);
 			this.externalGhostEls.push(ghost);
 		});
 	}
@@ -359,6 +367,8 @@ export class GridRenderer {
 	private renderBlocks(): void {
 		if (!this.gridEl) return;
 
+		this.computeOverlapGroups();
+
 		for (let d = 0; d < 7; d++) {
 			const dateKey = this.dates[d].format("YYYY-MM-DD");
 			const items = this.weekData.get(dateKey) || [];
@@ -366,6 +376,8 @@ export class GridRenderer {
 			for (const item of items) {
 				this.renderBlock(d, item);
 			}
+
+			this.renderOverlapHandlesForDay(d, items);
 		}
 	}
 
@@ -417,10 +429,16 @@ export class GridRenderer {
 		if (segments.length === 0) return;
 
 		const color = this.getCategoryColor(item.tags);
-		const overlapDepth = this.overlapDepths.get(item.id);
-		const isOverlap = overlapDepth !== undefined;
+		const isOverlap = this.overlapGroupMap.has(item.id);
 		const has5minStart = startOffset % 10 !== 0;
 		const has5minEnd = endOffset % 10 !== 0;
+
+		// Put content text in the widest segment to avoid row height expansion
+		const widestIdx = segments.reduce((best, seg, idx) => {
+			const w = seg.slotEnd - seg.slotStart;
+			const bw = segments[best].slotEnd - segments[best].slotStart;
+			return w > bw ? idx : best;
+		}, 0);
 
 		segments.forEach((seg, i) => {
 			const block = this.gridEl!.createDiv({ cls: "weekflow-block" });
@@ -428,12 +446,22 @@ export class GridRenderer {
 			block.style.gridColumn = `${dayColStart + seg.slotStart} / ${dayColStart + seg.slotEnd}`;
 			block.style.position = "relative";
 
-			// Overlap styling — offset stack
+			// Overlap styling
 			if (isOverlap) {
 				block.addClass("weekflow-block-overlap");
-				const offset = (overlapDepth ?? 0) * 4;
-				block.style.transform = `translate(${offset}px, ${offset}px)`;
-				block.style.zIndex = String(5 + (overlapDepth ?? 0));
+				block.dataset.itemId = item.id;
+				const groupIdx = this.overlapGroupMap.get(item.id)!;
+				block.dataset.overlapGroup = String(groupIdx);
+				const selectedGroup = this.selectedBlockId !== null
+					? this.overlapGroupMap.get(this.selectedBlockId) : undefined;
+				if (this.selectedBlockId === item.id) {
+					block.addClass("weekflow-block-selected");
+				} else if (selectedGroup !== undefined &&
+					this.overlapGroupMap.get(item.id) === selectedGroup) {
+					block.addClass("weekflow-block-dimmed");
+				}
+				block.addEventListener("mouseenter", () => this.showGroupHandles(groupIdx));
+				block.addEventListener("mouseleave", () => this.scheduleHideGroupHandles(groupIdx));
 			}
 
 			// Style based on checkbox state
@@ -469,8 +497,8 @@ export class GridRenderer {
 				block.style.setProperty("--slots", String(slots));
 			}
 
-			// Content text only in first segment
-			if (i === 0) {
+			// Content text in widest segment
+			if (i === widestIdx) {
 				const contentEl = block.createDiv({ cls: "weekflow-block-content" });
 				contentEl.setText(item.content);
 
@@ -478,8 +506,10 @@ export class GridRenderer {
 				timeEl.setText(
 					`${formatTime(item.planTime.start)}-${formatTime(item.planTime.end)}`
 				);
+			}
 
-				// Toggle button (plan ↔ actual)
+			// Toggle button in last segment
+			if (i === segments.length - 1) {
 				if (item.checkbox === "plan" && this.callbacks.onBlockComplete) {
 					const toggleBtn = block.createDiv({ cls: "weekflow-block-toggle" });
 					toggleBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="14" height="14"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>`;
@@ -617,13 +647,19 @@ export class GridRenderer {
 		this.removeGhost();
 		if (!this.gridEl) return;
 
+		const widestIdx = segments.reduce((best, seg, idx) => {
+			const w = seg.slotEnd - seg.slotStart;
+			const bw = segments[best].slotEnd - segments[best].slotStart;
+			return w > bw ? idx : best;
+		}, 0);
+
 		segments.forEach((seg, i) => {
 			const ghost = this.gridEl!.createDiv({ cls: "weekflow-block-ghost" });
 			ghost.style.gridRow = `${seg.row}`;
 			ghost.style.gridColumn = `${dayColStart + seg.slotStart} / ${dayColStart + seg.slotEnd}`;
 			ghost.style.backgroundColor = color + "40";
 			ghost.style.borderColor = color;
-			if (i === 0) ghost.setText(label);
+			if (i === widestIdx) ghost.setText(label);
 			this.ghostEls.push(ghost);
 		});
 	}
@@ -734,13 +770,18 @@ export class GridRenderer {
 
 		this.removeResizeGhost();
 		const label = `${formatTime(newStart)}-${formatTime(newEnd)}`;
+		const widestIdx = segments.reduce((best, seg, idx) => {
+			const w = seg.slotEnd - seg.slotStart;
+			const bw = segments[best].slotEnd - segments[best].slotStart;
+			return w > bw ? idx : best;
+		}, 0);
 		segments.forEach((seg, i) => {
 			const ghost = this.gridEl!.createDiv({ cls: "weekflow-block-ghost" });
 			ghost.style.gridRow = `${seg.row}`;
 			ghost.style.gridColumn = `${dayColStart + seg.slotStart} / ${dayColStart + seg.slotEnd}`;
 			ghost.style.backgroundColor = color + "30";
 			ghost.style.borderColor = color;
-			if (i === 0) ghost.setText(label);
+			if (i === widestIdx) ghost.setText(label);
 			this.resizeGhostEls.push(ghost);
 		});
 	}
@@ -814,6 +855,193 @@ export class GridRenderer {
 			if (i === segments.length - 1 && has5minEnd) {
 				outline.addClass("weekflow-5min-end");
 				outline.style.setProperty("--slots", String(slots));
+			}
+		});
+	}
+
+	// ── Overlap Groups & Handles ──
+
+	private computeOverlapGroups(): void {
+		this.overlapGroupMap.clear();
+		let groupIndex = 0;
+		const getTime = (item: TimelineItem) =>
+			item.checkbox === "actual" && item.actualTime ? item.actualTime : item.planTime;
+
+		for (let d = 0; d < 7; d++) {
+			const dateKey = this.dates[d].format("YYYY-MM-DD");
+			const items = this.weekData.get(dateKey) || [];
+
+			const adj = new Map<string, Set<string>>();
+			for (const item of items) adj.set(item.id, new Set());
+
+			for (let i = 0; i < items.length; i++) {
+				for (let j = i + 1; j < items.length; j++) {
+					const aTime = getTime(items[i]);
+					const bTime = getTime(items[j]);
+					if (aTime.start < bTime.end && bTime.start < aTime.end) {
+						adj.get(items[i].id)!.add(items[j].id);
+						adj.get(items[j].id)!.add(items[i].id);
+					}
+				}
+			}
+
+			const visited = new Set<string>();
+			for (const item of items) {
+				if (visited.has(item.id)) continue;
+				const neighbors = adj.get(item.id);
+				if (!neighbors || neighbors.size === 0) continue;
+
+				const group: string[] = [];
+				const stack = [item.id];
+				while (stack.length) {
+					const curr = stack.pop()!;
+					if (visited.has(curr)) continue;
+					visited.add(curr);
+					group.push(curr);
+					for (const nid of adj.get(curr)!) {
+						if (!visited.has(nid)) stack.push(nid);
+					}
+				}
+
+				if (group.length >= 2) {
+					for (const id of group) {
+						this.overlapGroupMap.set(id, groupIndex);
+					}
+					groupIndex++;
+				}
+			}
+		}
+	}
+
+	private renderOverlapHandlesForDay(dayIndex: number, items: TimelineItem[]): void {
+		if (!this.gridEl) return;
+
+		const groups = new Map<number, TimelineItem[]>();
+		for (const item of items) {
+			const gIdx = this.overlapGroupMap.get(item.id);
+			if (gIdx === undefined) continue;
+			if (!groups.has(gIdx)) groups.set(gIdx, []);
+			groups.get(gIdx)!.push(item);
+		}
+
+		for (const [, group] of groups) {
+			if (group.length < 2) continue;
+			this.renderHandleBar(dayIndex, group);
+		}
+	}
+
+	private renderHandleBar(dayIndex: number, group: TimelineItem[]): void {
+		if (!this.gridEl) return;
+
+		const getTime = (item: TimelineItem) =>
+			item.checkbox === "actual" && item.actualTime ? item.actualTime : item.planTime;
+
+		const dayStartMin = this.settings.dayStartHour * 60;
+		let minStart = Infinity;
+		for (const item of group) {
+			minStart = Math.min(minStart, getTime(item).start);
+		}
+
+		const startOffset = minStart - dayStartMin;
+		const startHour = Math.floor(startOffset / 60);
+		const row = startHour + 2;
+		const dayColStart = dayIndex * 6 + 2;
+
+		const groupIdx = this.overlapGroupMap.get(group[0].id)!;
+
+		const handleBar = this.gridEl.createDiv({ cls: "weekflow-overlap-handles" });
+		handleBar.style.gridRow = String(row);
+		handleBar.style.gridColumn = `${dayColStart} / ${dayColStart + 6}`;
+		handleBar.style.display = "none";
+
+		this.handleBarElements.set(groupIdx, handleBar);
+
+		handleBar.addEventListener("mouseenter", () => this.showGroupHandles(groupIdx));
+		handleBar.addEventListener("mouseleave", () => this.scheduleHideGroupHandles(groupIdx));
+
+		const sorted = [...group].sort((a, b) => getTime(a).start - getTime(b).start);
+
+		for (const item of sorted) {
+			const color = this.getCategoryColor(item.tags);
+			const handle = handleBar.createDiv({ cls: "weekflow-overlap-handle" });
+			handle.style.backgroundColor = color;
+			handle.title = item.content;
+			handle.dataset.itemId = item.id;
+
+			if (this.selectedBlockId === item.id) {
+				handle.addClass("weekflow-overlap-handle-active");
+			}
+
+			handle.addEventListener("mousedown", (e) => {
+				e.stopPropagation();
+				e.preventDefault();
+			});
+
+			handle.addEventListener("click", (e) => {
+				e.stopPropagation();
+				this.selectOverlapBlock(item.id);
+			});
+		}
+	}
+
+	private showGroupHandles(groupIdx: number): void {
+		const timer = this.groupHoverTimers.get(groupIdx);
+		if (timer) {
+			clearTimeout(timer);
+			this.groupHoverTimers.delete(groupIdx);
+		}
+		const bar = this.handleBarElements.get(groupIdx);
+		if (bar) bar.style.display = "flex";
+	}
+
+	private scheduleHideGroupHandles(groupIdx: number): void {
+		const timer = setTimeout(() => {
+			this.groupHoverTimers.delete(groupIdx);
+			const bar = this.handleBarElements.get(groupIdx);
+			if (bar) bar.style.display = "none";
+		}, 150);
+		this.groupHoverTimers.set(groupIdx, timer);
+	}
+
+	private selectOverlapBlock(id: string): void {
+		this.selectedBlockId = (this.selectedBlockId === id) ? null : id;
+		this.updateOverlapStyles();
+	}
+
+	private deselectOverlapBlock(): void {
+		if (this.selectedBlockId === null) return;
+		this.selectedBlockId = null;
+		this.updateOverlapStyles();
+	}
+
+	private updateOverlapStyles(): void {
+		if (!this.gridEl) return;
+
+		const selectedGroup = this.selectedBlockId !== null
+			? this.overlapGroupMap.get(this.selectedBlockId) : undefined;
+
+		this.gridEl.querySelectorAll(".weekflow-block-overlap").forEach((el) => {
+			const htmlEl = el as HTMLElement;
+			const itemId = htmlEl.dataset.itemId;
+			const group = itemId ? this.overlapGroupMap.get(itemId) : undefined;
+
+			htmlEl.removeClass("weekflow-block-selected");
+			htmlEl.removeClass("weekflow-block-dimmed");
+
+			if (this.selectedBlockId !== null && group === selectedGroup) {
+				if (itemId === this.selectedBlockId) {
+					htmlEl.addClass("weekflow-block-selected");
+				} else {
+					htmlEl.addClass("weekflow-block-dimmed");
+				}
+			}
+		});
+
+		this.gridEl.querySelectorAll(".weekflow-overlap-handle").forEach((el) => {
+			const htmlEl = el as HTMLElement;
+			htmlEl.removeClass("weekflow-overlap-handle-active");
+			if (this.selectedBlockId && htmlEl.dataset.itemId === this.selectedBlockId) {
+				htmlEl.addClass("weekflow-overlap-handle-active");
 			}
 		});
 	}
