@@ -200,6 +200,7 @@
 .weekflow-grid-wrapper {
 	flex: 1;
 	overflow: auto;
+	scrollbar-gutter: stable;
 	position: relative;
 }
 
@@ -627,7 +628,8 @@
 	flex-shrink: 0;
 	min-height: 120px;
 	max-height: 200px;
-	overflow: hidden;
+	overflow-y: auto;
+	scrollbar-gutter: stable;
 }
 
 .weekflow-review-panel.collapsed {
