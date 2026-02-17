@@ -1,7 +1,7 @@
 # WeekFlow 작업 핸드오프
 
-> 작성일: 2026-02-12
-> 마지막 커밋: `f5b81ef` fix: overlap block UX — hover handles, selection, segment layout
+> 작성일: 2026-02-17
+> 마지막 커밋: `ee5eea4` fix: review panel toggle — clear inline styles before collapse
 
 ## 프로젝트 개요
 
@@ -45,9 +45,28 @@ WeekFlow는 Obsidian 플러그인으로, 데일리 노트의 마크다운 체크
 - 블록 정렬: 시간순 컴팩션 (Plan 블록만, 주 전체, Undo 지원)
 - 타임 슬롯 프리셋: 현재 날짜에서 생성, 요일 선택 적용, 덮어쓰기/병합, Undo 지원
 
+### Phase 4 (Review & Statistics)
+- **Daily Review Panel**: 타임테이블 하단에 7칸 리뷰 패널, 날짜 칼럼과 정렬
+  - 인라인 textarea 편집, 300ms debounce 저장 + blur 즉시 저장
+  - 토글 버튼으로 접기/펼치기, 상태 저장
+  - 드래그 리사이즈 핸들 (min 60px, max 500px, 높이 설정 저장)
+  - `scrollbar-gutter: stable`로 그리드-리뷰 칼럼 정렬
+  - Review 헤딩 자동 삽입 (Timeline 섹션 바로 뒤에 위치)
+- **Statistics View**: 별도 ItemView 탭 (`weekflow-stats-view`)
+  - 카테고리별 Plan/Actual 시간 + 달성률 프로그레스 바
+  - 프로젝트별 시간 집계
+  - Plan vs Actual 요약 카드 (Completion Rate, Deferred Rate, Unplanned Actuals)
+  - 다중 범위: Weekly / Monthly / Quarterly / Yearly
+  - 범위별 네비게이션 (◀ ▶ Today)
+  - Burning Rate 추이 차트 (스택형 바 차트, 순수 HTML/CSS)
+  - 시간 분포 차트 (가로 막대)
+  - 증분 파싱 캐시 (`StatsCache`, `mtime` 기반 캐시 히트)
+- **Daily Note Navigation**
+  - 날짜 헤더 더블클릭 → 데일리 노트 열기
+  - 블록 우클릭 메뉴 "Go to daily note" → 해당 라인에 커서 위치
+
 ## 미완료 Phase (SPEC.md 참조)
 
-- **Phase 4**: Review & 통계
 - **Phase 5**: 외부 캘린더 & 커맨드
 - **Phase 6**: 모바일 최적화
 
@@ -55,20 +74,23 @@ WeekFlow는 Obsidian 플러그인으로, 데일리 노트의 마크다운 체크
 
 ```
 src/
-├── types.ts              # TimelineItem, WeekFlowSettings, PresetSlot/TimeSlotPreset, PanelItem 등 타입
-├── parser.ts             # 마크다운 ↔ TimelineItem 파싱/직렬화, generateItemId(), extractBlockId(), generateBlockId()
-├── daily-note.ts         # 데일리 노트 읽기/쓰기, 인박스 I/O, 프로젝트 I/O (getActiveProjects, getProjectTasks, completeProjectTask)
-├── grid-renderer.ts      # CSS Grid 렌더링, 드래그 상태머신, 리사이즈, 고스트 블록, 5분 대각선, 완료 토글, 우클릭 콜백
-├── view.ts               # WeekFlowView — 메인 뷰 컨트롤러, 패널/그리드 통합, 정렬, 프리셋, undo, 컨텍스트 메뉴
+├── types.ts              # TimelineItem, WeekFlowSettings, CategoryStats, PlanActualSummary 등 타입
+├── parser.ts             # 마크다운 ↔ TimelineItem 파싱/직렬화, Review 섹션 파싱/업데이트
+├── daily-note.ts         # 데일리 노트 읽기/쓰기, 인박스 I/O, 프로젝트 I/O, 리뷰 I/O
+├── grid-renderer.ts      # CSS Grid 렌더링, 드래그 상태머신, 리사이즈, 헤더 더블클릭 콜백
+├── view.ts               # WeekFlowView — 메인 뷰 컨트롤러, 리뷰 패널, 리사이즈, 데일리 노트 네비게이션
 ├── planning-panel.ts     # PlanningPanel — overdue/inbox/project 섹션 렌더링, 접기/펼치기
-├── main.ts               # 플러그인 엔트리포인트, 커맨드 등록
+├── statistics.ts          # 통계 계산 (카테고리, 프로젝트, Plan vs Actual, Burning Rate, 시간 분포)
+├── stats-view.ts          # StatsView (ItemView) — 통계 뷰, 범위 선택, 차트 렌더링
+├── stats-cache.ts         # StatsCache — mtime 기반 증분 파싱 캐시
+├── main.ts               # 플러그인 엔트리포인트, 커맨드 등록, StatsView 등록
 ├── block-modal.ts        # 새 블록 생성 모달
-├── edit-block-modal.ts   # 기존 블록 편집/삭제/완료토글 모달 (Actual 시간 편집 포함)
-├── confirm-modal.ts      # Yes/No 확인 다이얼로그 (프로젝트 태스크 완료 동기화 용)
+├── edit-block-modal.ts   # 기존 블록 편집/삭제/완료토글 모달
+├── confirm-modal.ts      # Yes/No 확인 다이얼로그
 ├── preset-modal.ts       # CreatePresetModal, ApplyPresetModal, PresetModal
 ├── undo-manager.ts       # UndoableAction + UndoManager (50개 제한)
-└── settings.ts           # 설정 탭 UI (기본 + Planning Panel + Project Integration + Presets + Categories)
-styles.css                # 전체 CSS
+└── settings.ts           # 설정 탭 UI (기본 + Planning + Project + Presets + Categories + Review)
+styles.css                # 전체 CSS (그리드, 리뷰 패널, 통계 뷰, 차트)
 ```
 
 ## 주요 아키텍처 결정사항
@@ -80,7 +102,11 @@ styles.css                # 전체 CSS
 5. **고스트 블록**: 단일 element가 아닌 배열 (`ghostEls`, `resizeGhostEls`)로 다중 hour-row 세그먼트 표현
 6. **리사이즈 핸들**: 좌(시작시간)/우(종료시간) 방향 — 시간이 가로로 흐르므로
 7. **Undo**: `pushExecuted()` 패턴 — 작업 실행 후 undo 액션만 등록 (execute()는 비어있음)
-8. **5분 대각선**: `clip-path: polygon()`으로 블록 엣지를 대각선으로 자르고, `::before`/`::after` pseudo-element에 `linear-gradient`로 경계선 렌더링. `--slots` CSS custom property로 세그먼트 폭에 비례한 대각선 크기 계산.
+8. **5분 대각선**: `clip-path: polygon()`으로 블록 엣지를 대각선으로 자르고, `::before`/`::after` pseudo-element에 `linear-gradient`로 경계선 렌더링
+9. **레이아웃 계층**: `.weekflow-body` → `.weekflow-main` (panel + content-area) → `.weekflow-content-area` (grid + review). 리뷰 패널이 그리드와 동일 너비를 공유하도록 content-area 래퍼 사용
+10. **scrollbar-gutter: stable**: 그리드와 리뷰 패널 모두에 적용하여 스크롤바 유무와 무관하게 칼럼 정렬 유지
+11. **리뷰 리사이즈**: 마우스 드래그 핸들, inline style로 높이 제어. 토글 시 inline style 제거 후 collapsed 클래스 적용 (우선순위 충돌 방지)
+12. **Statistics 뷰**: 별도 ItemView (패널이 아닌 독립 탭). 순수 HTML/CSS 차트 (외부 라이브러리 없음). `StatsCache`로 대규모 범위(연간 등) 성능 최적화
 
 ## 개발 환경
 
@@ -107,3 +133,4 @@ npm run dev          # 개발 모드 (hot reload)
 - Undo 시 `weekData` 메모리 상태와 파일 상태가 동기화되지만, 외부 수정이 끼어들면 undo가 꼬일 수 있음
 - 자정 넘김 분리는 주의 마지막 날(dayIndex=6)에서는 동작하지 않음 (다음 주로 넘어가는 케이스)
 - `clip-path` 적용 시 해당 블록의 `border-radius: 3px`이 무시됨 — 대각선 자체가 시각적 구분을 제공하므로 허용 가능
+- 인박스에서 제거 시 Undo 미지원 (Phase 3 보류 항목)
