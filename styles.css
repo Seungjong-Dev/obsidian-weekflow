@@ -608,14 +608,26 @@
 	background: var(--background-modifier-hover);
 }
 
+/* Review Panel resize handle */
+.weekflow-review-resize-handle {
+	height: 5px;
+	cursor: ns-resize;
+	flex-shrink: 0;
+	background: transparent;
+	border-top: 1px solid var(--background-modifier-border);
+	transition: background 0.15s;
+}
+
+.weekflow-review-resize-handle:hover {
+	background: var(--interactive-accent-hover);
+}
+
 /* Review Panel — aligned with grid day columns */
 .weekflow-review-panel {
-	border-top: 1px solid var(--background-modifier-border);
 	flex-shrink: 0;
 	min-height: 120px;
 	max-height: 200px;
 	overflow: hidden;
-	transition: min-height 0.15s ease, max-height 0.15s ease;
 }
 
 .weekflow-review-panel.collapsed {

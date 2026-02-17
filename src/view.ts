@@ -219,9 +219,17 @@ export class WeekFlowView extends ItemView {
 	}
 
 	private renderReviewPanel(container: HTMLElement) {
+		// Resize handle (between grid and review panel)
+		const handle = container.createDiv({ cls: "weekflow-review-resize-handle" });
+		this.initReviewResize(handle);
+
 		const panel = container.createDiv({ cls: "weekflow-review-panel" });
 		if (!this.plugin.settings.reviewPanelOpen) {
 			panel.addClass("collapsed");
+		} else if (this.plugin.settings.reviewPanelHeight > 0) {
+			panel.style.height = `${this.plugin.settings.reviewPanelHeight}px`;
+			panel.style.minHeight = "0";
+			panel.style.maxHeight = "none";
 		}
 
 		// Content: CSS Grid aligned with timetable columns (60px time label + 7 equal day columns)
@@ -253,6 +261,47 @@ export class WeekFlowView extends ItemView {
 				this.saveReviewImmediate(dateKey, textarea.value);
 			});
 		}
+	}
+
+	private initReviewResize(handle: HTMLElement) {
+		let startY = 0;
+		let startHeight = 0;
+		let panelEl: HTMLElement | null = null;
+
+		const onMouseMove = (e: MouseEvent) => {
+			if (!panelEl) return;
+			const delta = startY - e.clientY;
+			const newHeight = Math.max(60, Math.min(startHeight + delta, 500));
+			panelEl.style.height = `${newHeight}px`;
+			panelEl.style.minHeight = "0";
+			panelEl.style.maxHeight = "none";
+		};
+
+		const onMouseUp = (e: MouseEvent) => {
+			document.removeEventListener("mousemove", onMouseMove);
+			document.removeEventListener("mouseup", onMouseUp);
+			document.body.style.cursor = "";
+			document.body.style.userSelect = "";
+
+			if (panelEl) {
+				const height = panelEl.offsetHeight;
+				this.plugin.settings.reviewPanelHeight = height;
+				this.plugin.saveSettings();
+			}
+		};
+
+		handle.addEventListener("mousedown", (e) => {
+			panelEl = handle.nextElementSibling as HTMLElement | null;
+			if (!panelEl || panelEl.hasClass("collapsed")) return;
+
+			e.preventDefault();
+			startY = e.clientY;
+			startHeight = panelEl.offsetHeight;
+			document.body.style.cursor = "ns-resize";
+			document.body.style.userSelect = "none";
+			document.addEventListener("mousemove", onMouseMove);
+			document.addEventListener("mouseup", onMouseUp);
+		});
 	}
 
 	private debouncedSaveReview(dateKey: string, text: string) {

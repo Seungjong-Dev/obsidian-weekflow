@@ -60,6 +60,7 @@ export interface WeekFlowSettings {
 	// Review
 	reviewHeading: string;
 	reviewPanelOpen: boolean;
+	reviewPanelHeight: number; // px, 0 = auto
 }
 
 export const DEFAULT_SETTINGS: WeekFlowSettings = {
@@ -88,6 +89,7 @@ export const DEFAULT_SETTINGS: WeekFlowSettings = {
 	presets: [],
 	reviewHeading: "## Review",
 	reviewPanelOpen: true,
+	reviewPanelHeight: 160,
 };
 
 export interface ParseWarning {
