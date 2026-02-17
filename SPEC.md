@@ -432,6 +432,8 @@ interface CalendarSource {
 
 ### 5. Statistics Panel
 
+> **⚠️ UX 검토 필요:** 현재 통계는 별도 ItemView 탭으로 구현되어 있으나, WeekFlow 타임테이블 맥락에서 벗어나는 문제가 있다. 같은 뷰 안에서 "Timetable | Statistics" 탭 전환 방식으로 변경하면 주차 맥락을 유지하면서 통계를 확인할 수 있어 더 자연스러울 수 있다. 추후 리팩터링 검토.
+
 타임테이블 또는 별도 탭에서 시간 사용 통계를 시각적으로 확인할 수 있다.
 
 #### 조회 범위
