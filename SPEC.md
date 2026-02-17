@@ -357,6 +357,8 @@ WeekFlow 뷰 사이드에 플래닝 패널을 제공한다. 시간 배정이 필
 | Project Tasks Heading | 프로젝트 내 태스크가 위치할 헤딩 | `## Tasks` | 3 |
 | Presets | 타임 슬롯 프리셋 목록 | (빈 목록) | 3 |
 | Review Heading | 회고 데이터가 위치할 헤딩 | `## Review` | 4 |
+| Review Panel Open | 리뷰 패널 열림/닫힘 상태 유지 | `true` | 4 |
+| Review Panel Height | 리뷰 패널 높이 (px, 드래그 리사이즈) | `160` | 4 |
 | Calendar Sources | 외부 캘린더 ICS URL 목록 | (빈 목록) | 5 |
 | Calendar Cache Duration | 캘린더 캐시 갱신 간격 (분) | `30` | 5 |
 
@@ -377,8 +379,9 @@ Inbox Note Path:  [5. Periodic Notes/YYYY/YYYY-[W]ww     ]
 ### 1. Timetable View (Main)
 
 - Obsidian 커스텀 뷰(Leaf)로 표시되는 메인 타임테이블
-- 상단 툴바: 패널 토글 | ◀ 주차 표시 ▶ | Today | ↻ Refresh | ↩ Undo | ↪ Redo | ↕ Sort | 🕐 Presets | 카테고리 팔레트
-- 본문: Planning Panel(좌측) + 7일 x 시간대 그리드
+- 상단 툴바: 패널 토글 | ◀ 주차 표시 ▶ | Today | ↻ Refresh | ↩ Undo | ↪ Redo | ↕ Sort | 🕐 Presets | 📊 Statistics | ✏️ Review 토글 | 카테고리 팔레트
+- 본문: Planning Panel(좌측) + 7일 x 시간대 그리드 + Daily Review Panel(하단)
+- 날짜 헤더 더블클릭으로 데일리 노트 열기, 블록 우클릭 "Go to daily note" 메뉴
 
 ### 2. Category Palette
 
@@ -688,20 +691,26 @@ const isIPad   = isTablet && document.body.hasClass("is-ios");
 
 **이 Phase가 끝나면:** 인박스와 프로젝트에서 할 일을 끌어와 주간 계획을 세우고, 미완료 항목을 추적/미루기 할 수 있다.
 
-### Phase 4 — 회고 & 통계
+### Phase 4 — 회고 & 통계 ✅
 
 **목표:** Plan → Actual → Review 사이클 완성 및 시간 사용 분석.
 
-- Daily Review Panel (타임테이블 하단, 7일 회고)
-- 설정: Review Heading
-- 회고 직접 편집 → 데일리 노트 반영
-- Statistics Panel: 주간 카테고리별 시간 분배
+- Daily Review Panel (타임테이블 하단, 7일 회고, 날짜 칼럼과 정렬)
+  - 인라인 textarea 편집, 300ms debounce 저장 + blur 즉시 저장
+  - 토글 버튼으로 접기/펼치기, 상태 저장
+  - 드래그 리사이즈 핸들 (min 60px, max 500px, 높이 설정 저장)
+  - `scrollbar-gutter: stable`로 그리드-리뷰 칼럼 정렬
+  - Review 헤딩이 없으면 Timeline 섹션 바로 뒤에 자동 삽입
+- 설정: Review Heading, Review Panel Open, Review Panel Height
+- 회고 직접 편집 → 데일리 노트 반영 (양방향 동기화)
+- Statistics View (별도 ItemView 탭): 주간 카테고리별 시간 분배
 - 프로젝트별 시간 집계
 - Plan vs Actual 요약 (이행률, 미루기 비율, 비계획 실행)
-- 다중 범위 통계 (월간, 분기, 연간, 커스텀)
-- Burning rate 추이 차트
-- 시간 분포 (요일별/월별)
-- 증분 파싱 캐싱 (장기 범위 성능)
+- 다중 범위 통계 (주간, 월간, 분기, 연간)
+- Burning rate 추이 차트 (스택형 바 차트, 순수 HTML/CSS)
+- 시간 분포 (요일별/월별, 가로 막대 차트)
+- 증분 파싱 캐싱 (StatsCache, mtime 기반 캐시 히트)
+- Daily Note Navigation: 날짜 헤더 더블클릭으로 데일리 노트 열기, 블록 우클릭 메뉴 "Go to daily note" (커서 위치 이동)
 
 **이 Phase가 끝나면:** 주간 회고를 작성하고, 시간 사용 패턴을 다양한 범위에서 분석할 수 있다.
 
@@ -717,7 +726,7 @@ const isIPad   = isTablet && document.body.hasClass("is-ios");
   - `WeekFlow: Redo` (Mod+Shift+Z) ✅
   - `WeekFlow: Toggle planning panel` ✅
   - `WeekFlow: Go to this week`
-  - `WeekFlow: Open statistics`
+  - `WeekFlow: Open statistics` ✅
 - 리본 아이콘 (사이드바에서 WeekFlow 열기) ✅
 
 **이 Phase가 끝나면:** 외부 일정을 참고하면서 계획을 세울 수 있고, 커맨드 팔레트로 빠르게 접근할 수 있다.
