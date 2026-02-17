@@ -1,8 +1,9 @@
 import { Plugin } from "obsidian";
-import { DEFAULT_SETTINGS, VIEW_TYPE_WEEKFLOW } from "./types";
+import { DEFAULT_SETTINGS, VIEW_TYPE_WEEKFLOW, VIEW_TYPE_WEEKFLOW_STATS } from "./types";
 import type { WeekFlowSettings } from "./types";
 import { WeekFlowSettingTab } from "./settings";
 import { WeekFlowView } from "./view";
+import { StatsView } from "./stats-view";
 
 export default class WeekFlowPlugin extends Plugin {
 	settings: WeekFlowSettings = DEFAULT_SETTINGS;
@@ -13,6 +14,11 @@ export default class WeekFlowPlugin extends Plugin {
 		this.registerView(
 			VIEW_TYPE_WEEKFLOW,
 			(leaf) => new WeekFlowView(leaf, this)
+		);
+
+		this.registerView(
+			VIEW_TYPE_WEEKFLOW_STATS,
+			(leaf) => new StatsView(leaf, this)
 		);
 
 		this.addRibbonIcon("calendar-clock", "Open WeekFlow", () => {
@@ -62,6 +68,12 @@ export default class WeekFlowPlugin extends Plugin {
 			},
 		});
 
+		this.addCommand({
+			id: "weekflow-open-statistics",
+			name: "Open statistics",
+			callback: () => this.activateStatsView(),
+		});
+
 		this.addSettingTab(new WeekFlowSettingTab(this.app, this));
 	}
 
@@ -75,6 +87,20 @@ export default class WeekFlowPlugin extends Plugin {
 			const newLeaf = workspace.getLeaf("tab");
 			await newLeaf.setViewState({
 				type: VIEW_TYPE_WEEKFLOW,
+				active: true,
+			});
+			leaf = newLeaf;
+		}
+		workspace.revealLeaf(leaf);
+	}
+
+	async activateStatsView() {
+		const { workspace } = this.app;
+		let leaf = workspace.getLeavesOfType(VIEW_TYPE_WEEKFLOW_STATS)[0];
+		if (!leaf) {
+			const newLeaf = workspace.getLeaf("tab");
+			await newLeaf.setViewState({
+				type: VIEW_TYPE_WEEKFLOW_STATS,
 				active: true,
 			});
 			leaf = newLeaf;

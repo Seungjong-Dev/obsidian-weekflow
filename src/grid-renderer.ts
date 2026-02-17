@@ -13,6 +13,8 @@ export interface GridCallbacks {
 	onBlockDropOutside?: (item: TimelineItem, fromDay: number) => void;
 	onBlockComplete?: (dayIndex: number, item: TimelineItem) => void;
 	onBlockUncomplete?: (dayIndex: number, item: TimelineItem) => void;
+	onBlockRightClick?: (dayIndex: number, item: TimelineItem, event: MouseEvent) => void;
+	onHeaderDblClick?: (dayIndex: number) => void;
 }
 
 interface SelectionRange {
@@ -124,6 +126,12 @@ export class GridRenderer {
 			if (date.isSame(window.moment(), "day")) {
 				headerCell.addClass("weekflow-today");
 			}
+
+			// Double-click to open daily note
+			headerCell.style.cursor = "pointer";
+			headerCell.addEventListener("dblclick", () => {
+				this.callbacks.onHeaderDblClick?.(d);
+			});
 		}
 
 		// ── Hour rows with 10-min cells ──
@@ -582,6 +590,14 @@ export class GridRenderer {
 				const dist = Math.sqrt(dx * dx + dy * dy);
 				if (this.dragMode === "none" && dist < DRAG_DISTANCE_PX) {
 					this.callbacks.onBlockClick(dayIndex, item);
+				}
+			});
+
+			block.addEventListener("contextmenu", (e) => {
+				e.preventDefault();
+				e.stopPropagation();
+				if (this.callbacks.onBlockRightClick) {
+					this.callbacks.onBlockRightClick(dayIndex, item, e);
 				}
 			});
 		});

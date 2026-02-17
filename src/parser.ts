@@ -293,6 +293,112 @@ export function serializeTimelineItem(item: TimelineItem): string {
 }
 
 /**
+ * Extract review text from under the given heading (until next same-level heading or EOF).
+ * Returns empty string if heading not found.
+ */
+export function parseReviewContent(content: string, heading: string): string {
+	const lines = content.split("\n");
+	const headingLevel = (heading.match(/^#+/) || [""])[0].length;
+	let startIdx = -1;
+	for (let i = 0; i < lines.length; i++) {
+		if (lines[i].trim() === heading.trim()) {
+			startIdx = i + 1;
+			break;
+		}
+	}
+	if (startIdx === -1) return "";
+
+	let endIdx = lines.length;
+	for (let i = startIdx; i < lines.length; i++) {
+		const match = lines[i].match(/^(#+)\s/);
+		if (match && match[1].length <= headingLevel) {
+			endIdx = i;
+			break;
+		}
+	}
+
+	// Trim leading/trailing blank lines from the section content
+	const sectionLines = lines.slice(startIdx, endIdx);
+	return sectionLines.join("\n").trim();
+}
+
+/**
+ * Find the end line index of a section (the line of the next same-or-higher level heading, or lines.length).
+ * Returns -1 if the heading is not found.
+ */
+function findSectionEnd(lines: string[], heading: string): number {
+	const headingLevel = (heading.match(/^#+/) || [""])[0].length;
+	let startIdx = -1;
+	for (let i = 0; i < lines.length; i++) {
+		if (lines[i].trim() === heading.trim()) {
+			startIdx = i + 1;
+			break;
+		}
+	}
+	if (startIdx === -1) return -1;
+
+	for (let i = startIdx; i < lines.length; i++) {
+		const match = lines[i].match(/^(#+)\s/);
+		if (match && match[1].length <= headingLevel) {
+			return i;
+		}
+	}
+	return lines.length;
+}
+
+/**
+ * Replace or insert the review section in a note's content.
+ * If heading exists, replaces content under it.
+ * If not, inserts right after the Timeline section (if timelineHeading provided and found).
+ * Otherwise appends at end.
+ */
+export function updateReviewSection(
+	content: string,
+	heading: string,
+	reviewText: string,
+	timelineHeading?: string
+): string {
+	const lines = content.split("\n");
+	const headingLevel = (heading.match(/^#+/) || [""])[0].length;
+	let startIdx = -1;
+	for (let i = 0; i < lines.length; i++) {
+		if (lines[i].trim() === heading.trim()) {
+			startIdx = i + 1;
+			break;
+		}
+	}
+
+	if (startIdx === -1) {
+		// Heading not found: try to insert right after Timeline section
+		if (timelineHeading) {
+			const timelineEnd = findSectionEnd(lines, timelineHeading);
+			if (timelineEnd !== -1) {
+				const before = lines.slice(0, timelineEnd);
+				const after = lines.slice(timelineEnd);
+				return [...before, "", heading, reviewText, "", ...after].join("\n");
+			}
+		}
+		// Fallback: append at end
+		const suffix = content.endsWith("\n") ? "" : "\n";
+		return content + suffix + "\n" + heading + "\n" + reviewText + "\n";
+	}
+
+	// Find end of section
+	let endIdx = lines.length;
+	for (let i = startIdx; i < lines.length; i++) {
+		const match = lines[i].match(/^(#+)\s/);
+		if (match && match[1].length <= headingLevel) {
+			endIdx = i;
+			break;
+		}
+	}
+
+	const before = lines.slice(0, startIdx);
+	const after = lines.slice(endIdx);
+	return [...before, reviewText, ...after].join("\n");
+}
+
+/**
  * Replace the timeline section in a note's content with new items.
  * If the heading doesn't exist, appends it at the end.
  * If content is empty (new file), creates heading + items.

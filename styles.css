@@ -74,8 +74,15 @@
 	border-color: var(--interactive-accent);
 }
 
-/* Body layout (panel + grid) */
+/* Body layout (main + review) */
 .weekflow-body {
+	display: flex;
+	flex-direction: column;
+	flex: 1;
+	overflow: hidden;
+}
+
+.weekflow-main {
 	display: flex;
 	flex: 1;
 	overflow: hidden;
@@ -175,6 +182,18 @@
 .weekflow-toolbar-nav button.active {
 	background: var(--interactive-accent);
 	color: var(--text-on-accent);
+}
+
+.weekflow-toolbar-nav button.active svg {
+	color: var(--text-on-accent);
+}
+
+/* Content area (grid + review, shares same width for alignment) */
+.weekflow-content-area {
+	display: flex;
+	flex-direction: column;
+	flex: 1;
+	overflow: hidden;
 }
 
 /* Grid */
@@ -587,4 +606,363 @@
 
 .weekflow-preset-menu-item:hover {
 	background: var(--background-modifier-hover);
+}
+
+/* Review Panel — aligned with grid day columns */
+.weekflow-review-panel {
+	border-top: 1px solid var(--background-modifier-border);
+	flex-shrink: 0;
+	min-height: 120px;
+	max-height: 200px;
+	overflow: hidden;
+	transition: min-height 0.15s ease, max-height 0.15s ease;
+}
+
+.weekflow-review-panel.collapsed {
+	min-height: 0;
+	max-height: 0;
+	border: none;
+}
+
+.weekflow-review-content {
+	display: grid;
+	grid-template-columns: 60px repeat(7, 1fr);
+	height: 100%;
+}
+
+.weekflow-review-spacer {
+	display: flex;
+	align-items: flex-start;
+	justify-content: flex-end;
+	padding: 6px 6px 0 0;
+	border-right: 1px solid var(--background-modifier-border);
+	background: var(--background-primary);
+}
+
+.weekflow-review-spacer-label {
+	font-size: 10px;
+	font-weight: 600;
+	color: var(--text-muted);
+	writing-mode: vertical-rl;
+	text-orientation: mixed;
+	letter-spacing: 1px;
+	text-transform: uppercase;
+}
+
+.weekflow-review-cell {
+	display: flex;
+	flex-direction: column;
+	border-right: 1px solid var(--background-modifier-border);
+	min-width: 0;
+}
+
+.weekflow-review-cell:last-child {
+	border-right: none;
+}
+
+.weekflow-review-cell-today {
+	background: color-mix(in srgb, var(--interactive-accent) 5%, transparent);
+}
+
+.weekflow-review-textarea {
+	flex: 1;
+	border: none;
+	resize: none;
+	padding: 6px 8px;
+	font-size: 12px;
+	font-family: var(--font-interface);
+	background: transparent;
+	color: var(--text-normal);
+	outline: none;
+	line-height: 1.4;
+}
+
+.weekflow-review-textarea:focus {
+	background: var(--background-primary-alt);
+}
+
+/* Statistics View */
+.weekflow-stats-container {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	padding: 16px;
+	font-family: var(--font-interface);
+}
+
+.weekflow-stats-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	margin-bottom: 16px;
+	flex-wrap: wrap;
+	flex-shrink: 0;
+}
+
+.weekflow-stats-nav {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+}
+
+.weekflow-stats-nav button {
+	background: none;
+	border: none;
+	cursor: pointer;
+	padding: 4px 8px;
+	border-radius: 4px;
+	color: var(--text-normal);
+}
+
+.weekflow-stats-nav button:hover {
+	background: var(--background-modifier-hover);
+}
+
+.weekflow-stats-label {
+	font-weight: 600;
+	font-size: 16px;
+	min-width: 140px;
+	text-align: center;
+}
+
+.weekflow-stats-range {
+	display: flex;
+	gap: 2px;
+	background: var(--background-secondary);
+	border-radius: 6px;
+	padding: 2px;
+}
+
+.weekflow-stats-range button {
+	background: none;
+	border: none;
+	cursor: pointer;
+	padding: 4px 12px;
+	border-radius: 4px;
+	font-size: 12px;
+	color: var(--text-muted);
+}
+
+.weekflow-stats-range button:hover {
+	color: var(--text-normal);
+}
+
+.weekflow-stats-range button.active {
+	background: var(--background-primary);
+	color: var(--text-normal);
+	font-weight: 600;
+	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.weekflow-stats-content {
+	flex: 1;
+	overflow-y: auto;
+}
+
+.weekflow-stats-section {
+	margin-bottom: 24px;
+}
+
+.weekflow-stats-section h3 {
+	font-size: 14px;
+	font-weight: 600;
+	margin: 0 0 12px 0;
+	color: var(--text-normal);
+}
+
+.weekflow-stats-empty {
+	font-size: 12px;
+	color: var(--text-muted);
+}
+
+.weekflow-stats-table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 12px;
+}
+
+.weekflow-stats-table th {
+	text-align: left;
+	padding: 6px 8px;
+	border-bottom: 2px solid var(--background-modifier-border);
+	font-weight: 600;
+	color: var(--text-muted);
+	font-size: 11px;
+}
+
+.weekflow-stats-table td {
+	padding: 6px 8px;
+	border-bottom: 1px solid var(--background-modifier-border);
+	color: var(--text-normal);
+}
+
+.weekflow-stats-dot {
+	display: inline-block;
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	margin-right: 6px;
+	vertical-align: middle;
+}
+
+.weekflow-stats-progress-bar {
+	display: inline-block;
+	width: 100px;
+	height: 16px;
+	background: var(--background-modifier-border);
+	border-radius: 8px;
+	overflow: hidden;
+	vertical-align: middle;
+	margin-right: 6px;
+}
+
+.weekflow-stats-progress-fill {
+	height: 100%;
+	border-radius: 8px;
+	transition: width 0.3s ease;
+}
+
+.weekflow-stats-bar-label {
+	font-size: 11px;
+	color: var(--text-muted);
+}
+
+.weekflow-stats-summary-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+	gap: 12px;
+}
+
+.weekflow-stats-card {
+	padding: 16px;
+	background: var(--background-secondary);
+	border-radius: 8px;
+	text-align: center;
+}
+
+.weekflow-stats-card-value {
+	font-size: 28px;
+	font-weight: 700;
+	color: var(--text-normal);
+	line-height: 1.2;
+}
+
+.weekflow-stats-card-label {
+	font-size: 13px;
+	font-weight: 600;
+	color: var(--text-normal);
+	margin-top: 4px;
+}
+
+.weekflow-stats-card-desc {
+	font-size: 11px;
+	color: var(--text-muted);
+	margin-top: 4px;
+}
+
+/* Stacked Bar Chart (Burning Rate / Activity Trend) */
+.weekflow-chart-stacked {
+	display: flex;
+	gap: 0;
+	position: relative;
+}
+
+.weekflow-chart-yaxis {
+	width: 40px;
+	position: relative;
+	flex-shrink: 0;
+}
+
+.weekflow-chart-ylabel {
+	position: absolute;
+	right: 4px;
+	font-size: 10px;
+	color: var(--text-muted);
+	transform: translateY(-50%);
+}
+
+.weekflow-chart-bars {
+	display: flex;
+	flex: 1;
+	align-items: flex-end;
+	gap: 4px;
+	border-bottom: 1px solid var(--background-modifier-border);
+	border-left: 1px solid var(--background-modifier-border);
+	padding: 0 4px;
+}
+
+.weekflow-chart-col {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	min-width: 0;
+}
+
+.weekflow-chart-bar {
+	width: 100%;
+	max-width: 40px;
+	display: flex;
+	flex-direction: column;
+	justify-content: flex-end;
+	border-radius: 3px 3px 0 0;
+	overflow: hidden;
+}
+
+.weekflow-chart-segment {
+	width: 100%;
+	min-height: 0;
+	transition: height 0.3s ease;
+}
+
+.weekflow-chart-xlabel {
+	font-size: 10px;
+	color: var(--text-muted);
+	text-align: center;
+	padding-top: 4px;
+	white-space: nowrap;
+}
+
+/* Horizontal Bar Chart (Time Distribution) */
+.weekflow-chart-hbar {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.weekflow-chart-hbar-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.weekflow-chart-hbar-label {
+	width: 40px;
+	font-size: 11px;
+	color: var(--text-muted);
+	text-align: right;
+	flex-shrink: 0;
+}
+
+.weekflow-chart-hbar-track {
+	flex: 1;
+	height: 20px;
+	background: var(--background-modifier-border);
+	border-radius: 4px;
+	overflow: hidden;
+}
+
+.weekflow-chart-hbar-fill {
+	height: 100%;
+	background: var(--interactive-accent);
+	border-radius: 4px;
+	transition: width 0.3s ease;
+}
+
+.weekflow-chart-hbar-value {
+	width: 50px;
+	font-size: 11px;
+	color: var(--text-muted);
+	flex-shrink: 0;
 }

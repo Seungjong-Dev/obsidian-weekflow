@@ -248,6 +248,22 @@ export class WeekFlowSettingTab extends PluginSettingTab {
 					})
 			);
 
+		// Review section
+		containerEl.createEl("h3", { text: "Review" });
+
+		new Setting(containerEl)
+			.setName("Review heading")
+			.setDesc("Heading under which daily review text is stored")
+			.addText((text) =>
+				text
+					.setPlaceholder("## Review")
+					.setValue(this.plugin.settings.reviewHeading)
+					.onChange(async (value) => {
+						this.plugin.settings.reviewHeading = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
 		// Presets section
 		containerEl.createEl("h3", { text: "Presets" });
 

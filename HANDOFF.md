@@ -1,7 +1,7 @@
 # WeekFlow 작업 핸드오프
 
-> 작성일: 2026-02-11
-> 마지막 커밋: `44141fa` feat: implement Phase 3 remainder — project integration, block sorting, presets
+> 작성일: 2026-02-12
+> 마지막 커밋: `f5b81ef` fix: overlap block UX — hover handles, selection, segment layout
 
 ## 프로젝트 개요
 
@@ -27,6 +27,8 @@ WeekFlow는 Obsidian 플러그인으로, 데일리 노트의 마크다운 체크
 - 자정 넘김 자동 분리 (overnight)
 - Undo/Redo 스택 (Command pattern, 50개 제한, Mod+Z / Mod+Shift+Z)
 - 에러 핸들링 (경고 배너, 시간 겹침 반투명 오버랩)
+- 블록 우클릭 컨텍스트 메뉴 (Obsidian `Menu`): Edit / Mark as Done(or Incomplete) / Delete
+- EditBlockModal 완료 토글 버튼: Plan → "Mark as Done", Actual → "Mark as Incomplete", Deferred → 미표시
 
 보류 항목:
 - ~~대각선 셀 클릭으로 5분 단위 선택~~ — 셀 크기가 작아 비현실적. 향후 Shift+드래그 등 대안 검토.
@@ -56,12 +58,12 @@ src/
 ├── types.ts              # TimelineItem, WeekFlowSettings, PresetSlot/TimeSlotPreset, PanelItem 등 타입
 ├── parser.ts             # 마크다운 ↔ TimelineItem 파싱/직렬화, generateItemId(), extractBlockId(), generateBlockId()
 ├── daily-note.ts         # 데일리 노트 읽기/쓰기, 인박스 I/O, 프로젝트 I/O (getActiveProjects, getProjectTasks, completeProjectTask)
-├── grid-renderer.ts      # CSS Grid 렌더링, 드래그 상태머신, 리사이즈, 고스트 블록, 5분 대각선, 완료 토글
-├── view.ts               # WeekFlowView — 메인 뷰 컨트롤러, 패널/그리드 통합, 정렬, 프리셋, undo
+├── grid-renderer.ts      # CSS Grid 렌더링, 드래그 상태머신, 리사이즈, 고스트 블록, 5분 대각선, 완료 토글, 우클릭 콜백
+├── view.ts               # WeekFlowView — 메인 뷰 컨트롤러, 패널/그리드 통합, 정렬, 프리셋, undo, 컨텍스트 메뉴
 ├── planning-panel.ts     # PlanningPanel — overdue/inbox/project 섹션 렌더링, 접기/펼치기
 ├── main.ts               # 플러그인 엔트리포인트, 커맨드 등록
 ├── block-modal.ts        # 새 블록 생성 모달
-├── edit-block-modal.ts   # 기존 블록 편집/삭제 모달 (Actual 시간 편집 포함)
+├── edit-block-modal.ts   # 기존 블록 편집/삭제/완료토글 모달 (Actual 시간 편집 포함)
 ├── confirm-modal.ts      # Yes/No 확인 다이얼로그 (프로젝트 태스크 완료 동기화 용)
 ├── preset-modal.ts       # CreatePresetModal, ApplyPresetModal, PresetModal
 ├── undo-manager.ts       # UndoableAction + UndoManager (50개 제한)

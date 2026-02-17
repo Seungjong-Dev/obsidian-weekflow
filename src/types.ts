@@ -56,6 +56,10 @@ export interface WeekFlowSettings {
 
 	// Presets
 	presets: TimeSlotPreset[];
+
+	// Review
+	reviewHeading: string;
+	reviewPanelOpen: boolean;
 }
 
 export const DEFAULT_SETTINGS: WeekFlowSettings = {
@@ -82,6 +86,8 @@ export const DEFAULT_SETTINGS: WeekFlowSettings = {
 	projectActiveStatuses: ["🟡 In Progress", "🔴 Urgent"],
 	projectTasksHeading: "## Tasks",
 	presets: [],
+	reviewHeading: "## Review",
+	reviewPanelOpen: true,
 };
 
 export interface ParseWarning {
@@ -95,6 +101,33 @@ export interface ParseResult {
 }
 
 export const VIEW_TYPE_WEEKFLOW = "weekflow-view";
+export const VIEW_TYPE_WEEKFLOW_STATS = "weekflow-stats-view";
+
+export type StatisticsRange = "weekly" | "monthly" | "quarterly" | "yearly";
+
+export interface CategoryStats {
+	tag: string;
+	label: string;
+	color: string;
+	planMinutes: number;
+	actualMinutes: number;
+	achievementRate: number;
+}
+
+export interface ProjectStats {
+	projectName: string;
+	planMinutes: number;
+	actualMinutes: number;
+}
+
+export interface PlanActualSummary {
+	totalPlanItems: number;
+	completedItems: number;
+	deferredItems: number;
+	unplannedActualItems: number;
+	completionRate: number;
+	deferredRate: number;
+}
 
 // Planning Panel types
 

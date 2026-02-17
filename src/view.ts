@@ -1,9 +1,9 @@
-import { ItemView, setIcon, type WorkspaceLeaf, type TAbstractFile, moment } from "obsidian";
+import { ItemView, Menu, setIcon, type WorkspaceLeaf, type TAbstractFile, moment } from "obsidian";
 type Moment = ReturnType<typeof moment>;
 import type WeekFlowPlugin from "./main";
 import { VIEW_TYPE_WEEKFLOW } from "./types";
 import type { PanelItem, ParseWarning, TimelineItem, WeekFlowSettings } from "./types";
-import { getWeekDates, getWeekNotePaths, loadWeekData, saveDailyNoteItems, resolveInboxNotePath, getInboxItems, addToInbox, getActiveProjects, getProjectTasks, appendBlockIdToLine, completeProjectTask } from "./daily-note";
+import { getWeekDates, getWeekNotePaths, loadWeekData, saveDailyNoteItems, resolveDailyNotePath, resolveInboxNotePath, getInboxItems, addToInbox, getActiveProjects, getProjectTasks, appendBlockIdToLine, completeProjectTask, loadWeekReviewData, saveDailyReviewContent } from "./daily-note";
 import type { ProjectInfo } from "./daily-note";
 import { GridRenderer } from "./grid-renderer";
 import { BlockModal } from "./block-modal";
@@ -35,6 +35,10 @@ export class WeekFlowView extends ItemView {
 	private panelSections: PanelSection[] = [];
 	private inboxItems: CheckboxItem[] = [];
 	private projectData: { project: ProjectInfo; tasks: CheckboxItem[] }[] = [];
+
+	// Review panel
+	private reviewData: Map<string, string> = new Map();
+	private reviewDebounceTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
 
 	// Panel drag state
 	private panelDragItem: PanelItem | null = null;
@@ -82,6 +86,10 @@ export class WeekFlowView extends ItemView {
 		if (this.syncDebounceTimer) {
 			clearTimeout(this.syncDebounceTimer);
 		}
+		for (const timer of this.reviewDebounceTimers.values()) {
+			clearTimeout(timer);
+		}
+		this.reviewDebounceTimers.clear();
 	}
 
 	private onFileModify(file: TAbstractFile) {
@@ -112,14 +120,16 @@ export class WeekFlowView extends ItemView {
 			this.weekNotePaths.push(inboxPath);
 		}
 
-		// Load week data and inbox
-		const [result, inbox] = await Promise.all([
+		// Load week data, inbox, and review data
+		const [result, inbox, reviewData] = await Promise.all([
 			loadWeekData(this.app.vault, this.dates, settings),
 			getInboxItems(this.app.vault, settings),
+			loadWeekReviewData(this.app.vault, this.dates, settings),
 		]);
 		this.weekData = result.weekData;
 		this.weekWarnings = result.warnings;
 		this.inboxItems = inbox;
+		this.reviewData = reviewData;
 
 		// Load project data (non-blocking — failure should not prevent rendering)
 		try {
@@ -152,11 +162,14 @@ export class WeekFlowView extends ItemView {
 		// Warning banner
 		this.renderWarnings(container);
 
-		// Body: panel + grid
+		// Body: main (panel + content area)
 		const body = container.createDiv({ cls: "weekflow-body" });
 
+		// Main area (panel + content area)
+		const main = body.createDiv({ cls: "weekflow-main" });
+
 		// Planning panel
-		const panelEl = body.createDiv({ cls: "weekflow-panel" });
+		const panelEl = main.createDiv({ cls: "weekflow-panel" });
 		if (!this.plugin.settings.planningPanelOpen) {
 			panelEl.addClass("collapsed");
 		}
@@ -166,8 +179,11 @@ export class WeekFlowView extends ItemView {
 		this.buildPanelSections();
 		this.planningPanel.render(this.panelSections);
 
+		// Content area (grid + review, shares same width)
+		const contentArea = main.createDiv({ cls: "weekflow-content-area" });
+
 		// Grid wrapper
-		const gridWrapper = body.createDiv({ cls: "weekflow-grid-wrapper" });
+		const gridWrapper = contentArea.createDiv({ cls: "weekflow-grid-wrapper" });
 
 		this.gridRenderer = new GridRenderer(
 			gridWrapper,
@@ -190,9 +206,104 @@ export class WeekFlowView extends ItemView {
 					this.onBlockComplete(dayIndex, item),
 				onBlockUncomplete: (dayIndex, item) =>
 					this.onBlockUncomplete(dayIndex, item),
+				onBlockRightClick: (dayIndex, item, event) =>
+					this.onBlockRightClick(dayIndex, item, event),
+				onHeaderDblClick: (dayIndex) =>
+					this.openDailyNote(dayIndex),
 			}
 		);
 		this.gridRenderer.render();
+
+		// Review panel (inside content area — aligns with grid columns)
+		this.renderReviewPanel(contentArea);
+	}
+
+	private renderReviewPanel(container: HTMLElement) {
+		const panel = container.createDiv({ cls: "weekflow-review-panel" });
+		if (!this.plugin.settings.reviewPanelOpen) {
+			panel.addClass("collapsed");
+		}
+
+		// Content: CSS Grid aligned with timetable columns (60px time label + 7 equal day columns)
+		const content = panel.createDiv({ cls: "weekflow-review-content" });
+
+		// Time label spacer (matches grid's 60px time column)
+		const spacer = content.createDiv({ cls: "weekflow-review-spacer" });
+		spacer.createSpan({ text: "Review", cls: "weekflow-review-spacer-label" });
+
+		for (let i = 0; i < 7; i++) {
+			const date = this.dates[i];
+			const dateKey = date.format("YYYY-MM-DD");
+			const isToday = date.isSame(window.moment(), "day");
+
+			const cell = content.createDiv({ cls: "weekflow-review-cell" });
+			if (isToday) cell.addClass("weekflow-review-cell-today");
+
+			const textarea = cell.createEl("textarea", {
+				cls: "weekflow-review-textarea",
+			});
+			textarea.value = this.reviewData.get(dateKey) || "";
+			textarea.placeholder = "Write review...";
+
+			textarea.addEventListener("input", () => {
+				this.debouncedSaveReview(dateKey, textarea.value);
+			});
+
+			textarea.addEventListener("blur", () => {
+				this.saveReviewImmediate(dateKey, textarea.value);
+			});
+		}
+	}
+
+	private debouncedSaveReview(dateKey: string, text: string) {
+		this.reviewData.set(dateKey, text);
+		const existing = this.reviewDebounceTimers.get(dateKey);
+		if (existing) clearTimeout(existing);
+		const timer = setTimeout(() => {
+			this.reviewDebounceTimers.delete(dateKey);
+			this.saveReviewImmediate(dateKey, text);
+		}, 300);
+		this.reviewDebounceTimers.set(dateKey, timer);
+	}
+
+	private async saveReviewImmediate(dateKey: string, text: string) {
+		// Cancel pending debounce for this key
+		const pending = this.reviewDebounceTimers.get(dateKey);
+		if (pending) {
+			clearTimeout(pending);
+			this.reviewDebounceTimers.delete(dateKey);
+		}
+
+		const dateIndex = this.dates.findIndex(
+			(d) => d.format("YYYY-MM-DD") === dateKey
+		);
+		if (dateIndex === -1) return;
+
+		this.isSelfWriting = true;
+		try {
+			await saveDailyReviewContent(
+				this.app.vault,
+				this.dates[dateIndex],
+				this.plugin.settings,
+				text
+			);
+		} finally {
+			this.isSelfWriting = false;
+		}
+	}
+
+	private toggleReviewPanel() {
+		this.plugin.settings.reviewPanelOpen = !this.plugin.settings.reviewPanelOpen;
+		this.plugin.saveSettings();
+		const panelEl = this.contentEl.querySelector(
+			".weekflow-review-panel"
+		) as HTMLElement | null;
+		if (panelEl) {
+			panelEl.toggleClass(
+				"collapsed",
+				!this.plugin.settings.reviewPanelOpen
+			);
+		}
 	}
 
 	private renderWarnings(container: HTMLElement) {
@@ -223,7 +334,7 @@ export class WeekFlowView extends ItemView {
 
 		// Panel toggle button
 		const panelToggleBtn = nav.createEl("button");
-		setIcon(panelToggleBtn, "layout-sidebar-left");
+		setIcon(panelToggleBtn, "panel-left");
 		panelToggleBtn.ariaLabel = "Toggle planning panel";
 		if (this.plugin.settings.planningPanelOpen) panelToggleBtn.addClass("active");
 		panelToggleBtn.addEventListener("click", () => this.togglePanel());
@@ -272,6 +383,19 @@ export class WeekFlowView extends ItemView {
 		presetBtn.addEventListener("click", (e) =>
 			this.showPresetMenu(e)
 		);
+
+		// Statistics button
+		const statsBtn = nav.createEl("button");
+		setIcon(statsBtn, "chart-bar");
+		statsBtn.ariaLabel = "Open statistics";
+		statsBtn.addEventListener("click", () => this.plugin.activateStatsView());
+
+		// Review toggle button
+		const reviewToggleBtn = nav.createEl("button");
+		setIcon(reviewToggleBtn, "file-text");
+		reviewToggleBtn.ariaLabel = "Toggle review panel";
+		if (this.plugin.settings.reviewPanelOpen) reviewToggleBtn.addClass("active");
+		reviewToggleBtn.addEventListener("click", () => this.toggleReviewPanel());
 
 		// Category palette
 		const palette = toolbar.createDiv({ cls: "weekflow-palette" });
@@ -452,55 +576,49 @@ export class WeekFlowView extends ItemView {
 			this.plugin.settings.categories,
 			async (result) => {
 				if (result.action === "delete") {
-					const items = this.weekData.get(dateKey) || [];
-					const oldItem = { ...item, planTime: { ...item.planTime }, actualTime: item.actualTime ? { ...item.actualTime } : undefined, tags: [...item.tags] };
-					this.weekData.set(dateKey, items.filter(i => i.id !== item.id));
-
-					await this.guardedSave(date, this.weekData.get(dateKey)!);
-
-					const action: UndoableAction = {
-						description: "Delete block",
-						execute: async () => { /* already executed */ },
-						undo: async () => {
-							const items = this.weekData.get(dateKey) || [];
-							items.push(oldItem);
-							this.weekData.set(dateKey, items);
-							await this.guardedSave(date, items);
-						},
-					};
-					this.undoManager.pushExecuted(action);
-				} else {
-					// Edit
-					const items = this.weekData.get(dateKey) || [];
-					const idx = items.findIndex(i => i.id === item.id);
-					if (idx === -1) return;
-
-					const oldItem = { ...items[idx], planTime: { ...items[idx].planTime }, actualTime: items[idx].actualTime ? { ...items[idx].actualTime } : undefined, tags: [...items[idx].tags] };
-
-					items[idx].content = result.content;
-					items[idx].tags = result.tag ? [result.tag] : [];
-					items[idx].planTime = { start: result.startMinutes, end: result.endMinutes };
-					if (result.actualStartMinutes != null && result.actualEndMinutes != null) {
-						items[idx].actualTime = { start: result.actualStartMinutes, end: result.actualEndMinutes };
-					}
-
-					await this.guardedSave(date, items);
-
-					const action: UndoableAction = {
-						description: "Edit block",
-						execute: async () => { /* already executed */ },
-						undo: async () => {
-							const items = this.weekData.get(dateKey) || [];
-							const idx = items.findIndex(i => i.id === oldItem.id);
-							if (idx !== -1) {
-								items[idx] = oldItem;
-								await this.guardedSave(date, items);
-							}
-						},
-					};
-					this.undoManager.pushExecuted(action);
+					await this.deleteBlock(dayIndex, item);
+					return;
 				}
 
+				if (result.action === "complete") {
+					await this.onBlockComplete(dayIndex, item);
+					return;
+				}
+
+				if (result.action === "uncomplete") {
+					await this.onBlockUncomplete(dayIndex, item);
+					return;
+				}
+
+				// Save (edit)
+				const items = this.weekData.get(dateKey) || [];
+				const idx = items.findIndex(i => i.id === item.id);
+				if (idx === -1) return;
+
+				const oldItem = { ...items[idx], planTime: { ...items[idx].planTime }, actualTime: items[idx].actualTime ? { ...items[idx].actualTime } : undefined, tags: [...items[idx].tags] };
+
+				items[idx].content = result.content;
+				items[idx].tags = result.tag ? [result.tag] : [];
+				items[idx].planTime = { start: result.startMinutes, end: result.endMinutes };
+				if (result.actualStartMinutes != null && result.actualEndMinutes != null) {
+					items[idx].actualTime = { start: result.actualStartMinutes, end: result.actualEndMinutes };
+				}
+
+				await this.guardedSave(date, items);
+
+				const action: UndoableAction = {
+					description: "Edit block",
+					execute: async () => { /* already executed */ },
+					undo: async () => {
+						const items = this.weekData.get(dateKey) || [];
+						const idx = items.findIndex(i => i.id === oldItem.id);
+						if (idx !== -1) {
+							items[idx] = oldItem;
+							await this.guardedSave(date, items);
+						}
+					},
+				};
+				this.undoManager.pushExecuted(action);
 				await this.refresh();
 			}
 		).open();
@@ -1151,6 +1269,120 @@ export class WeekFlowView extends ItemView {
 		this.undoManager.pushExecuted(action);
 
 		await this.refresh();
+	}
+
+	// ── Block Delete (extracted for reuse) ──
+
+	private async deleteBlock(dayIndex: number, item: TimelineItem) {
+		const date = this.dates[dayIndex];
+		const dateKey = date.format("YYYY-MM-DD");
+		const items = this.weekData.get(dateKey) || [];
+		const oldItem = { ...item, planTime: { ...item.planTime }, actualTime: item.actualTime ? { ...item.actualTime } : undefined, tags: [...item.tags] };
+		this.weekData.set(dateKey, items.filter(i => i.id !== item.id));
+
+		await this.guardedSave(date, this.weekData.get(dateKey)!);
+
+		const action: UndoableAction = {
+			description: "Delete block",
+			execute: async () => { /* already executed */ },
+			undo: async () => {
+				const items = this.weekData.get(dateKey) || [];
+				items.push(oldItem);
+				this.weekData.set(dateKey, items);
+				await this.guardedSave(date, items);
+			},
+		};
+		this.undoManager.pushExecuted(action);
+		await this.refresh();
+	}
+
+	// ── Block Right-Click Context Menu ──
+
+	private onBlockRightClick(dayIndex: number, item: TimelineItem, event: MouseEvent) {
+		const menu = new Menu();
+
+		menu.addItem((menuItem) => {
+			menuItem
+				.setTitle("Edit")
+				.setIcon("pencil")
+				.onClick(() => {
+					this.onBlockClick(dayIndex, item);
+				});
+		});
+
+		if (item.checkbox === "plan") {
+			menu.addItem((menuItem) => {
+				menuItem
+					.setTitle("Mark as Done")
+					.setIcon("check-circle")
+					.onClick(() => {
+						this.onBlockComplete(dayIndex, item);
+					});
+			});
+		} else if (item.checkbox === "actual") {
+			menu.addItem((menuItem) => {
+				menuItem
+					.setTitle("Mark as Incomplete")
+					.setIcon("circle")
+					.onClick(() => {
+						this.onBlockUncomplete(dayIndex, item);
+					});
+			});
+		}
+
+		menu.addSeparator();
+
+		menu.addItem((menuItem) => {
+			menuItem
+				.setTitle("Go to daily note")
+				.setIcon("file-input")
+				.onClick(() => {
+					this.openDailyNoteAtLine(dayIndex, item.lineNumber);
+				});
+		});
+
+		menu.addItem((menuItem) => {
+			menuItem
+				.setTitle("Delete")
+				.setIcon("trash")
+				.onClick(() => {
+					this.deleteBlock(dayIndex, item);
+				});
+		});
+
+		menu.showAtMouseEvent(event);
+	}
+
+	// ── Navigate to daily note ──
+
+	private async openDailyNote(dayIndex: number) {
+		const date = this.dates[dayIndex];
+		const path = resolveDailyNotePath(this.plugin.settings.dailyNotePath, date);
+		const file = this.app.vault.getAbstractFileByPath(path);
+		if (!file) return;
+		await this.app.workspace.getLeaf("tab").openFile(file as any);
+	}
+
+	private async openDailyNoteAtLine(dayIndex: number, lineNumber?: number) {
+		const date = this.dates[dayIndex];
+		const path = resolveDailyNotePath(this.plugin.settings.dailyNotePath, date);
+		const file = this.app.vault.getAbstractFileByPath(path);
+		if (!file) return;
+
+		const leaf = this.app.workspace.getLeaf("tab");
+		await leaf.openFile(file as any);
+
+		if (lineNumber != null) {
+			const view = leaf.view as any;
+			if (view?.editor) {
+				const editor = view.editor;
+				editor.setCursor({ line: lineNumber, ch: 0 });
+				editor.scrollIntoView(
+					{ from: { line: lineNumber, ch: 0 }, to: { line: lineNumber, ch: 0 } },
+					true
+				);
+			}
+		}
 	}
 
 	// ── Block Complete/Uncomplete ──

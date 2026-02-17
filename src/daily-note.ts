@@ -1,7 +1,7 @@
 import { type App, type Vault, normalizePath, moment, TFile } from "obsidian";
 type Moment = ReturnType<typeof moment>;
 import type { ParseWarning, TimelineItem, WeekFlowSettings } from "./types";
-import { parseTimelineItems, parseCheckboxItems, serializeTimelineItem, updateTimelineSection, extractBlockId } from "./parser";
+import { parseTimelineItems, parseCheckboxItems, serializeTimelineItem, updateTimelineSection, extractBlockId, parseReviewContent, updateReviewSection } from "./parser";
 import type { CheckboxItem } from "./parser";
 
 /**
@@ -172,6 +172,90 @@ export function getWeekNotePaths(
 	settings: WeekFlowSettings
 ): string[] {
 	return dates.map((date) => resolveDailyNotePath(settings.dailyNotePath, date));
+}
+
+// ── Review I/O ──
+
+/**
+ * Read review text from a daily note for a given date.
+ */
+export async function getDailyReviewContent(
+	vault: Vault,
+	date: Moment,
+	settings: WeekFlowSettings
+): Promise<string> {
+	const path = resolveDailyNotePath(settings.dailyNotePath, date);
+	const file = vault.getAbstractFileByPath(path);
+	if (!file || !("extension" in file)) return "";
+
+	const content = await vault.read(file as any);
+	return parseReviewContent(content, settings.reviewHeading);
+}
+
+/**
+ * Save review text to a daily note for a given date.
+ * If file doesn't exist, creates it. If heading doesn't exist, appends it.
+ */
+export async function saveDailyReviewContent(
+	vault: Vault,
+	date: Moment,
+	settings: WeekFlowSettings,
+	reviewText: string
+): Promise<void> {
+	const path = resolveDailyNotePath(settings.dailyNotePath, date);
+	const file = vault.getAbstractFileByPath(path);
+
+	if (file && "extension" in file) {
+		const content = await vault.read(file as any);
+		const updated = updateReviewSection(
+			content,
+			settings.reviewHeading,
+			reviewText,
+			settings.timelineHeading
+		);
+		await vault.modify(file as any, updated);
+	} else {
+		// Create new file — use template if configured
+		let baseContent = "";
+		if (settings.dailyNoteTemplatePath) {
+			baseContent = await readTemplate(vault, settings.dailyNoteTemplatePath);
+		}
+
+		let content: string;
+		if (baseContent && baseContent.includes(settings.reviewHeading.trim())) {
+			content = updateReviewSection(baseContent, settings.reviewHeading, reviewText, settings.timelineHeading);
+		} else if (baseContent) {
+			// Template exists but no review heading — insert after timeline if possible
+			content = updateReviewSection(baseContent, settings.reviewHeading, reviewText, settings.timelineHeading);
+		} else {
+			content = `${settings.reviewHeading}\n${reviewText}\n`;
+		}
+
+		const dir = path.substring(0, path.lastIndexOf("/"));
+		if (dir) {
+			await ensureFolderExists(vault, dir);
+		}
+		await vault.create(path, content);
+	}
+}
+
+/**
+ * Load review data for an entire week.
+ * Returns a Map keyed by date string (YYYY-MM-DD) → review text.
+ */
+export async function loadWeekReviewData(
+	vault: Vault,
+	dates: Moment[],
+	settings: WeekFlowSettings
+): Promise<Map<string, string>> {
+	const reviewData = new Map<string, string>();
+	const promises = dates.map(async (date) => {
+		const text = await getDailyReviewContent(vault, date, settings);
+		const dateKey = date.format("YYYY-MM-DD");
+		reviewData.set(dateKey, text);
+	});
+	await Promise.all(promises);
+	return reviewData;
 }
 
 // ── Inbox I/O ──

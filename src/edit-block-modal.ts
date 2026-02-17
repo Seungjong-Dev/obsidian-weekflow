@@ -3,7 +3,7 @@ import type { Category, TimelineItem } from "./types";
 import { formatTime, parseTime } from "./parser";
 
 export interface EditBlockResult {
-	action: "save" | "delete";
+	action: "save" | "delete" | "complete" | "uncomplete";
 	content: string;
 	tag: string;
 	startMinutes: number;
@@ -200,6 +200,35 @@ export class EditBlockModal extends Modal {
 					this.close();
 				})
 		);
+
+		// Complete / Uncomplete toggle button (not shown for deferred)
+		if (this.item.checkbox === "plan") {
+			actions.addButton((btn) =>
+				btn.setButtonText("Mark as Done").onClick(() => {
+					this.onSubmit({
+						action: "complete",
+						content: "",
+						tag: "",
+						startMinutes: 0,
+						endMinutes: 0,
+					});
+					this.close();
+				})
+			);
+		} else if (this.item.checkbox === "actual") {
+			actions.addButton((btn) =>
+				btn.setButtonText("Mark as Incomplete").onClick(() => {
+					this.onSubmit({
+						action: "uncomplete",
+						content: "",
+						tag: "",
+						startMinutes: 0,
+						endMinutes: 0,
+					});
+					this.close();
+				})
+			);
+		}
 	}
 
 	private submitActualSave(content: string, tag: string, actualStartStr: string, actualEndStr: string) {
