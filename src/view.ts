@@ -221,6 +221,9 @@ export class WeekFlowView extends ItemView {
 	private renderReviewPanel(container: HTMLElement) {
 		// Resize handle (between grid and review panel)
 		const handle = container.createDiv({ cls: "weekflow-review-resize-handle" });
+		if (!this.plugin.settings.reviewPanelOpen) {
+			handle.style.display = "none";
+		}
 		this.initReviewResize(handle);
 
 		const panel = container.createDiv({ cls: "weekflow-review-panel" });
@@ -344,14 +347,44 @@ export class WeekFlowView extends ItemView {
 	private toggleReviewPanel() {
 		this.plugin.settings.reviewPanelOpen = !this.plugin.settings.reviewPanelOpen;
 		this.plugin.saveSettings();
+		const open = this.plugin.settings.reviewPanelOpen;
+
 		const panelEl = this.contentEl.querySelector(
 			".weekflow-review-panel"
 		) as HTMLElement | null;
+		const handleEl = this.contentEl.querySelector(
+			".weekflow-review-resize-handle"
+		) as HTMLElement | null;
+
 		if (panelEl) {
-			panelEl.toggleClass(
-				"collapsed",
-				!this.plugin.settings.reviewPanelOpen
-			);
+			if (open) {
+				panelEl.removeClass("collapsed");
+				const h = this.plugin.settings.reviewPanelHeight;
+				if (h > 0) {
+					panelEl.style.height = `${h}px`;
+					panelEl.style.minHeight = "0";
+					panelEl.style.maxHeight = "none";
+				} else {
+					panelEl.style.removeProperty("height");
+					panelEl.style.removeProperty("min-height");
+					panelEl.style.removeProperty("max-height");
+				}
+			} else {
+				panelEl.style.removeProperty("height");
+				panelEl.style.removeProperty("min-height");
+				panelEl.style.removeProperty("max-height");
+				panelEl.addClass("collapsed");
+			}
+		}
+		if (handleEl) {
+			handleEl.style.display = open ? "" : "none";
+		}
+
+		const toggleBtn = this.contentEl.querySelector(
+			".weekflow-review-toggle-btn"
+		) as HTMLElement | null;
+		if (toggleBtn) {
+			toggleBtn.toggleClass("active", open);
 		}
 	}
 
@@ -441,6 +474,7 @@ export class WeekFlowView extends ItemView {
 
 		// Review toggle button
 		const reviewToggleBtn = nav.createEl("button");
+		reviewToggleBtn.addClass("weekflow-review-toggle-btn");
 		setIcon(reviewToggleBtn, "file-text");
 		reviewToggleBtn.ariaLabel = "Toggle review panel";
 		if (this.plugin.settings.reviewPanelOpen) reviewToggleBtn.addClass("active");
