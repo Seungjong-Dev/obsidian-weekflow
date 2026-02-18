@@ -1223,9 +1223,18 @@ export class WeekFlowView extends ItemView {
 	private togglePanel() {
 		this.plugin.settings.planningPanelOpen = !this.plugin.settings.planningPanelOpen;
 		this.plugin.saveSettings();
+
+		// Side panel (wide/medium mode)
 		const panelEl = this.contentEl.querySelector(".weekflow-panel") as HTMLElement | null;
 		if (panelEl) {
 			panelEl.toggleClass("collapsed", !this.plugin.settings.planningPanelOpen);
+		}
+
+		// Bottom sheet (narrow mode)
+		if (this.bottomSheetEl) {
+			const isExpanded = this.plugin.settings.planningPanelOpen;
+			this.bottomSheetEl.toggleClass("collapsed", !isExpanded);
+			this.bottomSheetEl.toggleClass("expanded", isExpanded);
 		}
 	}
 
