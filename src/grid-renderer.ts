@@ -557,8 +557,10 @@ export class GridRenderer {
 		if (!this.gridEl) return null;
 
 		const gridRect = this.gridEl.getBoundingClientRect();
-		const x = clientX - gridRect.left + this.containerEl.scrollLeft;
-		const y = clientY - gridRect.top + this.containerEl.scrollTop;
+		// getBoundingClientRect() already reflects container scroll position,
+		// so no need to add containerEl.scrollLeft/Top (would double-count)
+		const x = clientX - gridRect.left;
+		const y = clientY - gridRect.top;
 
 		// Column layout: 60px time label + visibleDays*6 equal slots
 		const timeLabelWidth = 60;
