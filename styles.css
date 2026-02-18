@@ -1258,9 +1258,15 @@
 	position: relative;
 }
 
-/* Narrow mode: pad grid bottom so collapsed bottom sheet (40px) doesn't cover last rows */
+/* Narrow mode: pad grid bottom so collapsed bottom sheet (40px handle) doesn't cover last rows */
 .weekflow-layout-narrow .weekflow-grid-wrapper {
 	padding-bottom: 48px;
+}
+
+/* Mobile narrow: bottom sheet is offset by 48px, so grid needs more padding */
+.is-mobile.weekflow-layout-narrow .weekflow-grid-wrapper,
+.is-mobile .weekflow-layout-narrow .weekflow-grid-wrapper {
+	padding-bottom: 96px;
 }
 
 /* Mobile: pad bottom for Obsidian's floating navigation bar */
@@ -1270,6 +1276,11 @@
 
 .is-mobile .weekflow-grid-wrapper {
 	padding-bottom: 48px;
+}
+
+/* Mobile: offset bottom sheet above Obsidian's floating navigation bar */
+.is-mobile .weekflow-bottom-sheet {
+	bottom: 48px;
 }
 
 /* ── Narrow mode: hide side panel toggle since we use bottom sheet ── */
