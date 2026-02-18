@@ -210,6 +210,12 @@ export class GridRenderer {
 		this.calendarEvents = events;
 	}
 
+	renderCalendarOverlayOnly(): void {
+		if (!this.gridEl) return;
+		this.gridEl.querySelectorAll(".weekflow-calendar-event").forEach((el) => el.remove());
+		this.renderCalendarOverlay();
+	}
+
 	destroy(): void {
 		if (this.boundMouseMove) {
 			document.removeEventListener("mousemove", this.boundMouseMove);

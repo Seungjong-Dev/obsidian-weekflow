@@ -124,30 +124,16 @@ export class WeekFlowView extends ItemView {
 			this.weekNotePaths.push(inboxPath);
 		}
 
-		// Load week data, inbox, review data, and calendar events
-		const weekStart = this.dates[0].toDate();
-		const weekEnd = new Date(this.dates[6].toDate());
-		weekEnd.setDate(weekEnd.getDate() + 1); // end of last day
-
-		const [result, inbox, reviewData, calendarResult] = await Promise.all([
+		// Load week data, inbox, and review data (local — fast)
+		const [result, inbox, reviewData] = await Promise.all([
 			loadWeekData(this.app.vault, this.dates, settings),
 			getInboxItems(this.app.vault, settings),
 			loadWeekReviewData(this.app.vault, this.dates, settings),
-			getCalendarEventsForWeek(
-				settings.calendarSources, weekStart, weekEnd, settings.calendarCacheDuration
-			).catch(() => ({ events: [] as CalendarEvent[], errors: ["Calendar fetch failed"] })),
 		]);
 		this.weekData = result.weekData;
 		this.weekWarnings = result.warnings;
 		this.inboxItems = inbox;
 		this.reviewData = reviewData;
-		this.calendarEvents = calendarResult.events;
-
-		if (calendarResult.errors.length > 0) {
-			for (const err of calendarResult.errors) {
-				new Notice(`WeekFlow Calendar: ${err}`);
-			}
-		}
 
 		// Load project data (non-blocking — failure should not prevent rendering)
 		try {
@@ -167,6 +153,41 @@ export class WeekFlowView extends ItemView {
 		}
 
 		this.renderView();
+
+		// Load calendar events async — don't block view rendering on network I/O
+		this.loadCalendarEventsAsync(settings);
+	}
+
+	private async loadCalendarEventsAsync(settings: WeekFlowSettings) {
+		if (settings.calendarSources.length === 0) {
+			this.calendarEvents = [];
+			return;
+		}
+
+		const weekStart = this.dates[0].toDate();
+		const weekEnd = new Date(this.dates[6].toDate());
+		weekEnd.setDate(weekEnd.getDate() + 1);
+
+		try {
+			const calendarResult = await getCalendarEventsForWeek(
+				settings.calendarSources, weekStart, weekEnd, settings.calendarCacheDuration
+			);
+			this.calendarEvents = calendarResult.events;
+
+			if (calendarResult.errors.length > 0) {
+				for (const err of calendarResult.errors) {
+					new Notice(`WeekFlow Calendar: ${err}`);
+				}
+			}
+		} catch {
+			this.calendarEvents = [];
+		}
+
+		// Update the grid overlay without full re-render
+		if (this.gridRenderer) {
+			this.gridRenderer.setCalendarEvents(this.calendarEvents);
+			this.gridRenderer.renderCalendarOverlayOnly();
+		}
 	}
 
 	private renderView() {
