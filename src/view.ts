@@ -50,6 +50,7 @@ export class WeekFlowView extends ItemView {
 	private currentLayoutTier: LayoutTier = "wide";
 	private currentVisibleDays = 7;
 	private currentDayOffset = 0;
+	private pendingDayOffset: number | null = null;
 
 	// Bottom sheet (narrow mode)
 	private bottomSheetEl: HTMLElement | null = null;
@@ -186,7 +187,12 @@ export class WeekFlowView extends ItemView {
 		this.weekNotePaths = getWeekNotePaths(this.dates, settings);
 
 		// Recalculate dayOffset for current visible days (week might have changed)
-		this.currentDayOffset = this.calculateDayOffset(this.currentVisibleDays);
+		if (this.pendingDayOffset !== null) {
+			this.currentDayOffset = this.pendingDayOffset;
+			this.pendingDayOffset = null;
+		} else {
+			this.currentDayOffset = this.calculateDayOffset(this.currentVisibleDays);
+		}
 
 		// Add inbox note path to watched files
 		const inboxPath = resolveInboxNotePath(settings.inboxNotePath);
@@ -757,6 +763,8 @@ export class WeekFlowView extends ItemView {
 				this.renderView();
 			} else {
 				// Already at edge → cross week boundary
+				// Going backward: land on last page; forward: land on first page
+				this.pendingDayOffset = delta < 0 ? maxOffset : 0;
 				this.navigateWeek(delta);
 			}
 		}
