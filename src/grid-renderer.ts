@@ -371,7 +371,7 @@ export class GridRenderer {
 			const absDx = Math.abs(dx);
 			const absDy = Math.abs(dy);
 
-			if (absDx > 80 && absDx > absDy * 2 && dt < 300) {
+			if (absDx > 50 && absDx > absDy * 2 && dt < 300) {
 				this.clearSelection();
 				if (dx < 0 && this.callbacks.onSwipeLeft) this.callbacks.onSwipeLeft();
 				else if (dx > 0 && this.callbacks.onSwipeRight) this.callbacks.onSwipeRight();
@@ -396,8 +396,8 @@ export class GridRenderer {
 		const absDx = Math.abs(dx);
 		const absDy = Math.abs(dy);
 
-		// Swipe detection (existing criteria: >80px, |dx|>|dy|*2, <300ms)
-		if (absDx > 80 && absDx > absDy * 2 && dt < 300) {
+		// Swipe detection (>50px, |dx|>|dy|*2, <300ms)
+		if (absDx > 50 && absDx > absDy * 2 && dt < 300) {
 			this.clearSelection();
 			if (dx < 0 && this.callbacks.onSwipeLeft) this.callbacks.onSwipeLeft();
 			else if (dx > 0 && this.callbacks.onSwipeRight) this.callbacks.onSwipeRight();
@@ -442,8 +442,8 @@ export class GridRenderer {
 		const absDx = Math.abs(dx);
 		const absDy = Math.abs(dy);
 
-		// Swipe criteria: >80px horizontal, horizontal > vertical*2, <300ms
-		if (absDx > 80 && absDx > absDy * 2 && dt < 300) {
+		// Swipe criteria: >50px horizontal, horizontal > vertical*2, <300ms
+		if (absDx > 50 && absDx > absDy * 2 && dt < 300) {
 			if (dx < 0 && this.callbacks.onSwipeLeft) {
 				this.callbacks.onSwipeLeft();
 			} else if (dx > 0 && this.callbacks.onSwipeRight) {

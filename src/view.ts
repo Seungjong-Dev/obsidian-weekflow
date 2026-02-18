@@ -596,7 +596,16 @@ export class WeekFlowView extends ItemView {
 		if (this.plugin.settings.planningPanelOpen) panelToggleBtn.addClass("active");
 		panelToggleBtn.addEventListener("click", () => this.togglePanel());
 
+		// Determine if today is visible and which direction it is
+		const today = window.moment().startOf("day");
+		const visStart = this.dates[this.currentDayOffset];
+		const visEnd = this.dates[this.currentDayOffset + this.currentVisibleDays - 1];
+		const todayVisible = today.isBetween(visStart, visEnd, "day", "[]");
+		const todayBefore = today.isBefore(visStart, "day"); // today is to the left (prev)
+		const todayAfter = today.isAfter(visEnd, "day"); // today is to the right (next)
+
 		const prevBtn = nav.createEl("button", { text: "\u25C0" });
+		if (todayBefore) prevBtn.addClass("weekflow-nav-today-hint");
 		if (this.currentVisibleDays < 7) {
 			prevBtn.addEventListener("click", () => this.onSwipe("right"));
 		} else {
@@ -614,6 +623,7 @@ export class WeekFlowView extends ItemView {
 		}
 
 		const nextBtn = nav.createEl("button", { text: "\u25B6" });
+		if (todayAfter) nextBtn.addClass("weekflow-nav-today-hint");
 		if (this.currentVisibleDays < 7) {
 			nextBtn.addEventListener("click", () => this.onSwipe("left"));
 		} else {
@@ -621,6 +631,7 @@ export class WeekFlowView extends ItemView {
 		}
 
 		const todayBtn = nav.createEl("button", { text: "Today" });
+		if (!todayVisible) todayBtn.addClass("weekflow-nav-today-hint");
 		todayBtn.addEventListener("click", () => {
 			this.currentDate = window.moment();
 			this.refresh();

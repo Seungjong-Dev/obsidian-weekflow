@@ -75,6 +75,22 @@
 	white-space: nowrap;
 }
 
+/* Today direction hint — dot indicator on nav arrows */
+.weekflow-nav-today-hint {
+	position: relative;
+}
+.weekflow-nav-today-hint::after {
+	content: "";
+	position: absolute;
+	bottom: 2px;
+	left: 50%;
+	transform: translateX(-50%);
+	width: 4px;
+	height: 4px;
+	border-radius: 50%;
+	background-color: var(--text-accent);
+}
+
 /* Category Palette — Row 2, horizontally scrollable */
 .weekflow-palette {
 	display: flex;
