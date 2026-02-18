@@ -3,7 +3,7 @@ type Moment = ReturnType<typeof moment>;
 import type WeekFlowPlugin from "./main";
 import { VIEW_TYPE_WEEKFLOW } from "./types";
 import type { CalendarEvent, PanelItem, ParseWarning, TimelineItem, WeekFlowSettings } from "./types";
-import { getCalendarEventsForWeek } from "./calendar";
+import { getCalendarEventsForWeek, clearCalendarCache } from "./calendar";
 import { getWeekDates, getWeekNotePaths, loadWeekData, saveDailyNoteItems, resolveDailyNotePath, resolveInboxNotePath, getInboxItems, addToInbox, getActiveProjects, getProjectTasks, appendBlockIdToLine, completeProjectTask, loadWeekReviewData, saveDailyReviewContent } from "./daily-note";
 import type { ProjectInfo } from "./daily-note";
 import { GridRenderer } from "./grid-renderer";
@@ -479,7 +479,10 @@ export class WeekFlowView extends ItemView {
 
 		const refreshBtn = nav.createEl("button", { text: "\u21BB" });
 		refreshBtn.ariaLabel = "Refresh";
-		refreshBtn.addEventListener("click", () => this.refresh());
+		refreshBtn.addEventListener("click", () => {
+			clearCalendarCache();
+			this.refresh();
+		});
 
 		// Undo/Redo buttons
 		const undoBtn = nav.createEl("button", { text: "\u21A9" });
