@@ -1,7 +1,7 @@
 # WeekFlow 작업 핸드오프
 
 > 작성일: 2026-02-18
-> 마지막 커밋: `7a19ff7` feat: editable time in block creation modal + allow blocks over calendar events
+> 마지막 커밋: `f42e9bb` fix: refresh button now clears calendar cache before refetching
 
 ## 프로젝트 개요
 
@@ -72,6 +72,7 @@ WeekFlow는 Obsidian 플러그인으로, 데일리 노트의 마크다운 체크
   - `Promise.allSettled()`로 소스별 독립 처리 (한 소스 실패가 전체를 막지 않음)
   - All-day 이벤트 스킵, 주간 범위 클리핑
   - 비동기 로딩: 뷰 렌더 후 백그라운드 fetch → `renderCalendarOverlayOnly()`로 오버레이만 패치 (뷰 먹통 방지)
+  - 새로고침(↻) 버튼 클릭 시 `clearCalendarCache()` 호출하여 캐시 강제 초기화 후 refetch (자동 갱신에서는 캐시 유지)
 - **렌더링**: 빗금 패턴(`repeating-linear-gradient`) + 점선 테두리, z-index 2 (타임라인 블록 아래), `pointer-events: none` (셀 클릭/드래그 통과), 네이티브 `title` 툴팁
 - **설정 UI**: Calendar Sources 섹션 (name/URL/color/enabled/delete per source, cache duration slider 0~120분)
 - **"Go to this week" 커맨드**: `checkCallback`으로 WeekFlowView 활성 시에만 동작
