@@ -15,6 +15,7 @@ import { generateItemId, serializeCheckboxItem, extractBlockId, generateBlockId,
 import { UndoManager, type UndoableAction } from "./undo-manager";
 import { PlanningPanel, type PanelSection } from "./planning-panel";
 import type { CheckboxItem } from "./parser";
+import { getLayoutTier, getVisibleDays, isTouchDevice, type LayoutTier } from "./device";
 
 export class WeekFlowView extends ItemView {
 	plugin: WeekFlowPlugin;
@@ -44,10 +45,19 @@ export class WeekFlowView extends ItemView {
 	private reviewData: Map<string, string> = new Map();
 	private reviewDebounceTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
 
+	// Responsive layout
+	private resizeObserver: ResizeObserver | null = null;
+	private currentLayoutTier: LayoutTier = "wide";
+	private currentVisibleDays = 7;
+	private currentDayOffset = 0;
+
+	// Bottom sheet (narrow mode)
+	private bottomSheetEl: HTMLElement | null = null;
+
 	// Panel drag state
 	private panelDragItem: PanelItem | null = null;
-	private boundPanelDragMove: ((e: MouseEvent) => void) | null = null;
-	private boundPanelDragUp: ((e: MouseEvent) => void) | null = null;
+	private boundPanelDragMove: ((e: PointerEvent) => void) | null = null;
+	private boundPanelDragUp: ((e: PointerEvent) => void) | null = null;
 
 	constructor(leaf: WorkspaceLeaf, plugin: WeekFlowPlugin) {
 		super(leaf);
@@ -83,10 +93,31 @@ export class WeekFlowView extends ItemView {
 			})
 		);
 
+		// Set initial layout tier from container width
+		const initialWidth = this.contentEl.clientWidth;
+		if (initialWidth > 0) {
+			this.currentLayoutTier = getLayoutTier(initialWidth);
+			this.currentVisibleDays = getVisibleDays(this.currentLayoutTier);
+		}
+
 		await this.refresh();
+
+		// ResizeObserver for responsive layout changes
+		this.resizeObserver = new ResizeObserver((entries) => {
+			const width = entries[0].contentRect.width;
+			const newTier = getLayoutTier(width);
+			if (newTier !== this.currentLayoutTier) {
+				this.onLayoutTierChanged(newTier);
+			}
+		});
+		this.resizeObserver.observe(this.contentEl);
 	}
 
 	async onClose() {
+		if (this.resizeObserver) {
+			this.resizeObserver.disconnect();
+			this.resizeObserver = null;
+		}
 		if (this.syncDebounceTimer) {
 			clearTimeout(this.syncDebounceTimer);
 		}
@@ -113,10 +144,44 @@ export class WeekFlowView extends ItemView {
 		}, 300);
 	}
 
+	private onLayoutTierChanged(tier: LayoutTier): void {
+		const newDays = getVisibleDays(tier);
+		this.currentVisibleDays = newDays;
+		this.currentDayOffset = this.calculateDayOffset(newDays);
+		this.currentLayoutTier = tier;
+
+		// Toggle layout CSS classes
+		this.contentEl.removeClass("weekflow-layout-wide", "weekflow-layout-medium", "weekflow-layout-narrow");
+		this.contentEl.addClass(`weekflow-layout-${tier}`);
+
+		this.renderView();
+	}
+
+	private calculateDayOffset(visibleDays: number): number {
+		if (visibleDays >= 7) return 0;
+
+		// Find today's index within the week
+		const today = window.moment().startOf("day");
+		let todayIndex = this.dates.findIndex((d) => d.isSame(today, "day"));
+		if (todayIndex === -1) todayIndex = 0;
+
+		if (visibleDays === 1) {
+			return todayIndex;
+		}
+
+		// 3-day view: center today, clamped to week bounds [0, 4]
+		const maxOffset = 7 - visibleDays;
+		const idealOffset = todayIndex - Math.floor(visibleDays / 2);
+		return Math.max(0, Math.min(idealOffset, maxOffset));
+	}
+
 	async refresh() {
 		const settings = this.plugin.settings;
 		this.dates = getWeekDates(this.currentDate, settings.weekStartDay);
 		this.weekNotePaths = getWeekNotePaths(this.dates, settings);
+
+		// Recalculate dayOffset for current visible days (week might have changed)
+		this.currentDayOffset = this.calculateDayOffset(this.currentVisibleDays);
 
 		// Add inbox note path to watched files
 		const inboxPath = resolveInboxNotePath(settings.inboxNotePath);
@@ -195,6 +260,10 @@ export class WeekFlowView extends ItemView {
 		container.empty();
 		container.addClass("weekflow-container");
 
+		// Apply layout tier class
+		container.removeClass("weekflow-layout-wide", "weekflow-layout-medium", "weekflow-layout-narrow");
+		container.addClass(`weekflow-layout-${this.currentLayoutTier}`);
+
 		// Toolbar
 		this.renderToolbar(container);
 
@@ -207,16 +276,24 @@ export class WeekFlowView extends ItemView {
 		// Main area (panel + content area)
 		const main = body.createDiv({ cls: "weekflow-main" });
 
-		// Planning panel
-		const panelEl = main.createDiv({ cls: "weekflow-panel" });
-		if (!this.plugin.settings.planningPanelOpen) {
-			panelEl.addClass("collapsed");
-		}
-		this.planningPanel = new PlanningPanel(panelEl, {
-			onItemDragStart: (item, e) => this.onPanelDragStart(item, e),
-		});
+		// Planning panel — side panel for wide/medium, bottom sheet for narrow
 		this.buildPanelSections();
-		this.planningPanel.render(this.panelSections);
+		if (this.currentLayoutTier !== "narrow") {
+			const panelEl = main.createDiv({ cls: "weekflow-panel" });
+			if (!this.plugin.settings.planningPanelOpen) {
+				panelEl.addClass("collapsed");
+			}
+			if (this.currentLayoutTier === "medium") {
+				// Default collapsed in medium mode
+				if (!this.plugin.settings.planningPanelOpen) {
+					panelEl.addClass("collapsed");
+				}
+			}
+			this.planningPanel = new PlanningPanel(panelEl, {
+				onItemDragStart: (item, e) => this.onPanelDragStart(item, e),
+			});
+			this.planningPanel.render(this.panelSections);
+		}
 
 		// Content area (grid + review, shares same width)
 		const contentArea = main.createDiv({ cls: "weekflow-content-area" });
@@ -249,13 +326,21 @@ export class WeekFlowView extends ItemView {
 					this.onBlockRightClick(dayIndex, item, event),
 				onHeaderDblClick: (dayIndex) =>
 					this.openDailyNote(dayIndex),
+				onSwipeLeft: () => this.onSwipe("left"),
+				onSwipeRight: () => this.onSwipe("right"),
 			}
 		);
+		this.gridRenderer.setVisibleRange(this.currentVisibleDays, this.currentDayOffset);
 		this.gridRenderer.setCalendarEvents(this.calendarEvents);
 		this.gridRenderer.render();
 
 		// Review panel (inside content area — aligns with grid columns)
 		this.renderReviewPanel(contentArea);
+
+		// Bottom sheet (narrow mode only)
+		if (this.currentLayoutTier === "narrow") {
+			this.renderBottomSheet(body);
+		}
 	}
 
 	private renderReviewPanel(container: HTMLElement) {
@@ -275,15 +360,16 @@ export class WeekFlowView extends ItemView {
 			panel.style.maxHeight = "none";
 		}
 
-		// Content: CSS Grid aligned with timetable columns (60px time label + 7 equal day columns)
+		// Content: CSS Grid aligned with timetable columns (60px time label + N equal day columns)
 		const content = panel.createDiv({ cls: "weekflow-review-content" });
+		content.style.gridTemplateColumns = `60px repeat(${this.currentVisibleDays}, 1fr)`;
 
 		// Time label spacer (matches grid's 60px time column)
 		const spacer = content.createDiv({ cls: "weekflow-review-spacer" });
 		spacer.createSpan({ text: "Review", cls: "weekflow-review-spacer-label" });
 
-		for (let i = 0; i < 7; i++) {
-			const date = this.dates[i];
+		for (let i = 0; i < this.currentVisibleDays; i++) {
+			const date = this.dates[this.currentDayOffset + i];
 			const dateKey = date.format("YYYY-MM-DD");
 			const isToday = date.isSame(window.moment(), "day");
 
@@ -311,7 +397,7 @@ export class WeekFlowView extends ItemView {
 		let startHeight = 0;
 		let panelEl: HTMLElement | null = null;
 
-		const onMouseMove = (e: MouseEvent) => {
+		const onPointerMove = (e: PointerEvent) => {
 			if (!panelEl) return;
 			const delta = startY - e.clientY;
 			const newHeight = Math.max(60, Math.min(startHeight + delta, 500));
@@ -320,9 +406,9 @@ export class WeekFlowView extends ItemView {
 			panelEl.style.maxHeight = "none";
 		};
 
-		const onMouseUp = (e: MouseEvent) => {
-			document.removeEventListener("mousemove", onMouseMove);
-			document.removeEventListener("mouseup", onMouseUp);
+		const onPointerUp = () => {
+			document.removeEventListener("pointermove", onPointerMove);
+			document.removeEventListener("pointerup", onPointerUp);
 			document.body.style.cursor = "";
 			document.body.style.userSelect = "";
 
@@ -333,17 +419,18 @@ export class WeekFlowView extends ItemView {
 			}
 		};
 
-		handle.addEventListener("mousedown", (e) => {
+		handle.addEventListener("pointerdown", (e) => {
 			panelEl = handle.nextElementSibling as HTMLElement | null;
 			if (!panelEl || panelEl.hasClass("collapsed")) return;
 
 			e.preventDefault();
+			handle.setPointerCapture(e.pointerId);
 			startY = e.clientY;
 			startHeight = panelEl.offsetHeight;
 			document.body.style.cursor = "ns-resize";
 			document.body.style.userSelect = "none";
-			document.addEventListener("mousemove", onMouseMove);
-			document.addEventListener("mouseup", onMouseUp);
+			document.addEventListener("pointermove", onPointerMove);
+			document.addEventListener("pointerup", onPointerUp);
 		});
 	}
 
@@ -426,6 +513,47 @@ export class WeekFlowView extends ItemView {
 		if (toggleBtn) {
 			toggleBtn.toggleClass("active", open);
 		}
+	}
+
+	// ── Bottom Sheet (Narrow mode Planning Panel) ──
+
+	private renderBottomSheet(container: HTMLElement): void {
+		const sheet = container.createDiv({ cls: "weekflow-bottom-sheet collapsed" });
+		this.bottomSheetEl = sheet;
+
+		// Handle bar (swipe up/down to expand/collapse)
+		const handleBar = sheet.createDiv({ cls: "weekflow-bottom-sheet-handle" });
+		handleBar.createDiv({ cls: "weekflow-bottom-sheet-bar" });
+
+		let sheetStartY = 0;
+		let isExpanded = false;
+
+		handleBar.addEventListener("pointerdown", (e) => {
+			e.preventDefault();
+			handleBar.setPointerCapture(e.pointerId);
+			sheetStartY = e.clientY;
+		});
+
+		handleBar.addEventListener("pointerup", (e) => {
+			const dy = sheetStartY - e.clientY;
+			if (Math.abs(dy) > 40) {
+				isExpanded = dy > 0;
+				sheet.toggleClass("collapsed", !isExpanded);
+				sheet.toggleClass("expanded", isExpanded);
+			} else {
+				// Tap: toggle
+				isExpanded = !isExpanded;
+				sheet.toggleClass("collapsed", !isExpanded);
+				sheet.toggleClass("expanded", isExpanded);
+			}
+		});
+
+		// Content (reuses PlanningPanel)
+		const contentEl = sheet.createDiv({ cls: "weekflow-bottom-sheet-content" });
+		this.planningPanel = new PlanningPanel(contentEl, {
+			onItemDragStart: (item, e) => this.onPanelDragStart(item, e),
+		});
+		this.planningPanel.render(this.panelSections);
 	}
 
 	private renderWarnings(container: HTMLElement) {
@@ -558,6 +686,28 @@ export class WeekFlowView extends ItemView {
 			.clone()
 			.add(delta * 7, "days");
 		await this.refresh();
+	}
+
+	private onSwipe(direction: "left" | "right"): void {
+		// On wide+desktop, swipe is disabled (would conflict with mouse drag)
+		if (this.currentLayoutTier === "wide" && !isTouchDevice()) return;
+
+		const delta = direction === "left" ? 1 : -1;
+
+		if (this.currentVisibleDays >= 7) {
+			// Wide: swipe changes week
+			this.navigateWeek(delta);
+		} else {
+			// Medium/Narrow: shift dayOffset within the week
+			const newOffset = this.currentDayOffset + delta * this.currentVisibleDays;
+			if (newOffset >= 0 && newOffset + this.currentVisibleDays <= 7) {
+				this.currentDayOffset = newOffset;
+				this.renderView();
+			} else {
+				// Cross week boundary
+				this.navigateWeek(delta);
+			}
+		}
 	}
 
 	// ── Save helper with self-writing guard ──
@@ -1133,16 +1283,16 @@ export class WeekFlowView extends ItemView {
 
 	// ── Panel Drag → Grid ──
 
-	private onPanelDragStart(item: PanelItem, e: MouseEvent): void {
+	private onPanelDragStart(item: PanelItem, e: PointerEvent): void {
 		this.panelDragItem = item;
 
-		this.boundPanelDragMove = (ev: MouseEvent) => this.onPanelDragMove(ev);
-		this.boundPanelDragUp = (ev: MouseEvent) => this.onPanelDragEnd(ev);
-		document.addEventListener("mousemove", this.boundPanelDragMove);
-		document.addEventListener("mouseup", this.boundPanelDragUp);
+		this.boundPanelDragMove = (ev: PointerEvent) => this.onPanelDragMove(ev);
+		this.boundPanelDragUp = (ev: PointerEvent) => this.onPanelDragEnd(ev);
+		document.addEventListener("pointermove", this.boundPanelDragMove);
+		document.addEventListener("pointerup", this.boundPanelDragUp);
 	}
 
-	private onPanelDragMove(e: MouseEvent): void {
+	private onPanelDragMove(e: PointerEvent): void {
 		if (!this.panelDragItem || !this.gridRenderer) return;
 
 		const cell = this.gridRenderer.getGridCellFromPoint(e.clientX, e.clientY);
@@ -1164,7 +1314,7 @@ export class WeekFlowView extends ItemView {
 		}
 	}
 
-	private async onPanelDragEnd(e: MouseEvent): Promise<void> {
+	private async onPanelDragEnd(e: PointerEvent): Promise<void> {
 		this.cleanupPanelDrag();
 
 		if (!this.panelDragItem || !this.gridRenderer) {
@@ -1318,11 +1468,11 @@ export class WeekFlowView extends ItemView {
 
 	private cleanupPanelDrag(): void {
 		if (this.boundPanelDragMove) {
-			document.removeEventListener("mousemove", this.boundPanelDragMove);
+			document.removeEventListener("pointermove", this.boundPanelDragMove);
 			this.boundPanelDragMove = null;
 		}
 		if (this.boundPanelDragUp) {
-			document.removeEventListener("mouseup", this.boundPanelDragUp);
+			document.removeEventListener("pointerup", this.boundPanelDragUp);
 			this.boundPanelDragUp = null;
 		}
 	}
@@ -1433,7 +1583,7 @@ export class WeekFlowView extends ItemView {
 
 	// ── Block Right-Click Context Menu ──
 
-	private onBlockRightClick(dayIndex: number, item: TimelineItem, event: MouseEvent) {
+	private onBlockRightClick(dayIndex: number, item: TimelineItem, event: PointerEvent) {
 		const menu = new Menu();
 
 		menu.addItem((menuItem) => {
@@ -1672,7 +1822,7 @@ export class WeekFlowView extends ItemView {
 
 	// ── Preset Menu ──
 
-	private showPresetMenu(e: MouseEvent) {
+	private showPresetMenu(e: MouseEvent | PointerEvent) {
 		const menu = document.createElement("div");
 		menu.className = "weekflow-preset-menu";
 		menu.style.position = "fixed";
@@ -1717,13 +1867,13 @@ export class WeekFlowView extends ItemView {
 		}
 
 		document.body.appendChild(menu);
-		const closeMenu = (ev: MouseEvent) => {
+		const closeMenu = (ev: PointerEvent) => {
 			if (!menu.contains(ev.target as Node)) {
 				menu.remove();
-				document.removeEventListener("mousedown", closeMenu);
+				document.removeEventListener("pointerdown", closeMenu);
 			}
 		};
-		setTimeout(() => document.addEventListener("mousedown", closeMenu), 0);
+		setTimeout(() => document.addEventListener("pointerdown", closeMenu), 0);
 	}
 
 	private createPresetFromToday() {

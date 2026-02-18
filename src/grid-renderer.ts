@@ -2,6 +2,7 @@ import { moment } from "obsidian";
 type Moment = ReturnType<typeof moment>;
 import type { CalendarEvent, Category, TimelineItem, WeekFlowSettings } from "./types";
 import { formatTime } from "./parser";
+import { isTouchDevice, hapticFeedback } from "./device";
 
 export interface GridCallbacks {
 	onCellDragStart: (dayIndex: number, minutes: number) => void;
@@ -13,8 +14,10 @@ export interface GridCallbacks {
 	onBlockDropOutside?: (item: TimelineItem, fromDay: number) => void;
 	onBlockComplete?: (dayIndex: number, item: TimelineItem) => void;
 	onBlockUncomplete?: (dayIndex: number, item: TimelineItem) => void;
-	onBlockRightClick?: (dayIndex: number, item: TimelineItem, event: MouseEvent) => void;
+	onBlockRightClick?: (dayIndex: number, item: TimelineItem, event: PointerEvent) => void;
 	onHeaderDblClick?: (dayIndex: number) => void;
+	onSwipeLeft?: () => void;
+	onSwipeRight?: () => void;
 }
 
 interface SelectionRange {
@@ -45,6 +48,7 @@ interface ResizeState {
 
 // Thresholds for distinguishing click vs drag
 const DRAG_DELAY_MS = 150;
+const TOUCH_DRAG_DELAY_MS = 300;
 const DRAG_DISTANCE_PX = 5;
 
 export class GridRenderer {
@@ -79,8 +83,21 @@ export class GridRenderer {
 	private calendarEvents: CalendarEvent[] = [];
 
 	// Bound handlers for cleanup
-	private boundMouseMove: ((e: MouseEvent) => void) | null = null;
-	private boundMouseUp: ((e: MouseEvent) => void) | null = null;
+	private boundPointerMove: ((e: PointerEvent) => void) | null = null;
+	private boundPointerUp: ((e: PointerEvent) => void) | null = null;
+
+	// Longpress state (touch drag)
+	private longpressActive = false;
+	private longpressEl: HTMLElement | null = null;
+
+	// Swipe detection state
+	private swipeStartX = 0;
+	private swipeStartY = 0;
+	private swipeStartTime = 0;
+
+	// Responsive layout
+	private visibleDays = 7;
+	private dayOffset = 0;
 
 	constructor(
 		containerEl: HTMLElement,
@@ -96,14 +113,20 @@ export class GridRenderer {
 		this.callbacks = callbacks;
 	}
 
+	setVisibleRange(visibleDays: number, dayOffset: number): void {
+		this.visibleDays = visibleDays;
+		this.dayOffset = dayOffset;
+	}
+
 	render(): void {
 		this.containerEl.empty();
 
 		this.gridEl = this.containerEl.createDiv({ cls: "weekflow-grid" });
 		const totalHours = this.settings.dayEndHour - this.settings.dayStartHour;
 
+		const cols = this.visibleDays * 6;
 		this.gridEl.style.gridTemplateColumns =
-			`60px repeat(${7 * 6}, 1fr)`;
+			`60px repeat(${cols}, 1fr)`;
 		this.gridEl.style.gridTemplateRows =
 			`auto repeat(${totalHours}, minmax(40px, 1fr))`;
 
@@ -114,8 +137,9 @@ export class GridRenderer {
 		corner.style.gridColumn = "1";
 		corner.style.gridRow = "1";
 
-		for (let d = 0; d < 7; d++) {
-			const colStart = d * 6 + 2;
+		for (let i = 0; i < this.visibleDays; i++) {
+			const d = this.dayOffset + i; // actual day index in dates[]
+			const colStart = i * 6 + 2;
 			const date = this.dates[d];
 			const headerCell = this.gridEl.createDiv({
 				cls: "weekflow-header-cell",
@@ -132,8 +156,9 @@ export class GridRenderer {
 
 			// Double-click to open daily note
 			headerCell.style.cursor = "pointer";
+			const dayIdx = d;
 			headerCell.addEventListener("dblclick", () => {
-				this.callbacks.onHeaderDblClick?.(d);
+				this.callbacks.onHeaderDblClick?.(dayIdx);
 			});
 		}
 
@@ -148,8 +173,9 @@ export class GridRenderer {
 			timeLabel.style.gridColumn = "1";
 			timeLabel.style.gridRow = `${row}`;
 
-			for (let d = 0; d < 7; d++) {
-				const dayColStart = d * 6 + 2;
+			for (let i = 0; i < this.visibleDays; i++) {
+				const d = this.dayOffset + i;
+				const dayColStart = i * 6 + 2;
 
 				for (let slot = 0; slot < 6; slot++) {
 					const minutes = h * 60 + slot * 10;
@@ -164,11 +190,16 @@ export class GridRenderer {
 					cell.dataset.day = String(d);
 					cell.dataset.minutes = String(minutes);
 
-					// Cell mousedown → start cell selection (only if no block drag in progress)
-					cell.addEventListener("mousedown", (e) => {
+					// Cell pointerdown → start cell selection (only if no block drag in progress)
+					cell.addEventListener("pointerdown", (e) => {
 						if (this.dragMode !== "none") return;
 						e.preventDefault();
 						this.deselectOverlapBlock();
+
+						// Record swipe start
+						this.swipeStartX = e.clientX;
+						this.swipeStartY = e.clientY;
+						this.swipeStartTime = Date.now();
 
 						this.dragMode = "cell-select";
 						this.dragAnchorMinutes = minutes;
@@ -181,7 +212,7 @@ export class GridRenderer {
 						this.callbacks.onCellDragStart(d, minutes);
 					});
 
-					cell.addEventListener("mouseenter", () => {
+					cell.addEventListener("pointerenter", () => {
 						if (this.dragMode !== "cell-select" || !this.selectionRange) return;
 						if (this.selectionRange.dayIndex !== d) return;
 
@@ -196,11 +227,11 @@ export class GridRenderer {
 			}
 		}
 
-		// Global mouse handlers
-		this.boundMouseMove = (e: MouseEvent) => this.onGlobalMouseMove(e);
-		this.boundMouseUp = (e: MouseEvent) => this.onGlobalMouseUp(e);
-		document.addEventListener("mousemove", this.boundMouseMove);
-		document.addEventListener("mouseup", this.boundMouseUp);
+		// Global pointer handlers
+		this.boundPointerMove = (e: PointerEvent) => this.onGlobalPointerMove(e);
+		this.boundPointerUp = (e: PointerEvent) => this.onGlobalPointerUp(e);
+		document.addEventListener("pointermove", this.boundPointerMove);
+		document.addEventListener("pointerup", this.boundPointerUp);
 
 		this.renderBlocks();
 		this.renderCalendarOverlay();
@@ -217,17 +248,17 @@ export class GridRenderer {
 	}
 
 	destroy(): void {
-		if (this.boundMouseMove) {
-			document.removeEventListener("mousemove", this.boundMouseMove);
+		if (this.boundPointerMove) {
+			document.removeEventListener("pointermove", this.boundPointerMove);
 		}
-		if (this.boundMouseUp) {
-			document.removeEventListener("mouseup", this.boundMouseUp);
+		if (this.boundPointerUp) {
+			document.removeEventListener("pointerup", this.boundPointerUp);
 		}
 	}
 
-	// ── Global Mouse Handlers ──
+	// ── Global Pointer Handlers ──
 
-	private onGlobalMouseMove(e: MouseEvent) {
+	private onGlobalPointerMove(e: PointerEvent) {
 		if (this.dragMode === "block-drag" && this.blockDragState) {
 			this.onBlockDragMove(e);
 		} else if (this.dragMode === "resize" && this.resizeState) {
@@ -235,8 +266,17 @@ export class GridRenderer {
 		}
 	}
 
-	private onGlobalMouseUp(e: MouseEvent) {
+	private onGlobalPointerUp(e: PointerEvent) {
+		// Clear longpress visual feedback
+		if (this.longpressActive && this.longpressEl) {
+			this.longpressEl.removeClass("weekflow-longpress-active");
+			this.longpressActive = false;
+			this.longpressEl = null;
+		}
+
 		if (this.dragMode === "cell-select") {
+			// Check for swipe gesture
+			this.checkSwipe(e);
 			this.dragMode = "none";
 			this.callbacks.onCellDragEnd();
 		} else if (this.dragMode === "block-drag") {
@@ -249,6 +289,25 @@ export class GridRenderer {
 		if (this.blockDragTimer) {
 			clearTimeout(this.blockDragTimer);
 			this.blockDragTimer = null;
+		}
+	}
+
+	// ── Swipe Detection ──
+
+	private checkSwipe(e: PointerEvent): void {
+		const dx = e.clientX - this.swipeStartX;
+		const dy = e.clientY - this.swipeStartY;
+		const dt = Date.now() - this.swipeStartTime;
+		const absDx = Math.abs(dx);
+		const absDy = Math.abs(dy);
+
+		// Swipe criteria: >80px horizontal, horizontal > vertical*2, <300ms
+		if (absDx > 80 && absDx > absDy * 2 && dt < 300) {
+			if (dx < 0 && this.callbacks.onSwipeLeft) {
+				this.callbacks.onSwipeLeft();
+			} else if (dx > 0 && this.callbacks.onSwipeRight) {
+				this.callbacks.onSwipeRight();
+			}
 		}
 	}
 
@@ -309,7 +368,7 @@ export class GridRenderer {
 
 		const startOffset = clampedStart - dayStartMin;
 		const endOffset = clampedEnd - dayStartMin;
-		const dayColStart = dayIndex * 6 + 2;
+		const dayColStart = (dayIndex - this.dayOffset) * 6 + 2;
 		const segments = this.getHourSegments(startOffset, endOffset);
 
 		const widestIdx = segments.reduce((best, seg, idx) => {
@@ -347,18 +406,19 @@ export class GridRenderer {
 		const x = clientX - gridRect.left + this.containerEl.scrollLeft;
 		const y = clientY - gridRect.top + this.containerEl.scrollTop;
 
-		// Column layout: 60px time label + 42 equal slots
+		// Column layout: 60px time label + visibleDays*6 equal slots
 		const timeLabelWidth = 60;
 		if (x < timeLabelWidth) return null;
 
+		const totalSlots = this.visibleDays * 6;
 		const slotsWidth = gridRect.width - timeLabelWidth;
 		if (slotsWidth <= 0) return null;
 
-		const slotWidth = slotsWidth / (7 * 6);
+		const slotWidth = slotsWidth / totalSlots;
 		const slotIndex = Math.floor((x - timeLabelWidth) / slotWidth);
-		if (slotIndex < 0 || slotIndex >= 42) return null;
+		if (slotIndex < 0 || slotIndex >= totalSlots) return null;
 
-		const dayIndex = Math.floor(slotIndex / 6);
+		const dayIndex = this.dayOffset + Math.floor(slotIndex / 6);
 		const slotInDay = slotIndex % 6;
 
 		// Row layout: header row (auto height) + hour rows
@@ -391,7 +451,8 @@ export class GridRenderer {
 
 		this.computeOverlapGroups();
 
-		for (let d = 0; d < 7; d++) {
+		for (let i = 0; i < this.visibleDays; i++) {
+			const d = this.dayOffset + i;
 			const dateKey = this.dates[d].format("YYYY-MM-DD");
 			const items = this.weekData.get(dateKey) || [];
 
@@ -446,7 +507,8 @@ export class GridRenderer {
 
 		if (startOffset < 0 || endOffset > (dayEndMin - dayStartMin)) return;
 
-		const dayColStart = dayIndex * 6 + 2;
+		const visibleIndex = dayIndex - this.dayOffset;
+		const dayColStart = visibleIndex * 6 + 2;
 		const segments = this.getHourSegments(startOffset, endOffset);
 		if (segments.length === 0) return;
 
@@ -482,8 +544,8 @@ export class GridRenderer {
 					this.overlapGroupMap.get(item.id) === selectedGroup) {
 					block.addClass("weekflow-block-dimmed");
 				}
-				block.addEventListener("mouseenter", () => this.showGroupHandles(groupIdx));
-				block.addEventListener("mouseleave", () => this.scheduleHideGroupHandles(groupIdx));
+				block.addEventListener("pointerenter", () => this.showGroupHandles(groupIdx));
+				block.addEventListener("pointerleave", () => this.scheduleHideGroupHandles(groupIdx));
 			}
 
 			// Style based on checkbox state
@@ -537,14 +599,14 @@ export class GridRenderer {
 					toggleBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="14" height="14"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>`;
 					toggleBtn.ariaLabel = "Mark as done";
 					const completeCb = this.callbacks.onBlockComplete;
-					toggleBtn.addEventListener("mousedown", (e) => { e.stopPropagation(); e.preventDefault(); });
+					toggleBtn.addEventListener("pointerdown", (e) => { e.stopPropagation(); e.preventDefault(); });
 					toggleBtn.addEventListener("click", (e) => { e.stopPropagation(); completeCb(dayIndex, item); });
 				} else if (item.checkbox === "actual" && this.callbacks.onBlockUncomplete) {
 					const toggleBtn = block.createDiv({ cls: "weekflow-block-toggle" });
 					toggleBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="14" height="14"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M5 8l2 2 4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 					toggleBtn.ariaLabel = "Mark as incomplete";
 					const uncompleteCb = this.callbacks.onBlockUncomplete;
-					toggleBtn.addEventListener("mousedown", (e) => { e.stopPropagation(); e.preventDefault(); });
+					toggleBtn.addEventListener("pointerdown", (e) => { e.stopPropagation(); e.preventDefault(); });
 					toggleBtn.addEventListener("click", (e) => { e.stopPropagation(); uncompleteCb(dayIndex, item); });
 				}
 			}
@@ -553,9 +615,10 @@ export class GridRenderer {
 			// Left handle on first segment (drag start time)
 			if (i === 0) {
 				const leftHandle = block.createDiv({ cls: "weekflow-resize-handle weekflow-resize-left" });
-				leftHandle.addEventListener("mousedown", (e) => {
+				leftHandle.addEventListener("pointerdown", (e) => {
 					e.preventDefault();
 					e.stopPropagation();
+					leftHandle.setPointerCapture(e.pointerId);
 					this.startResize(item, dayIndex, "left", e);
 				});
 			}
@@ -563,15 +626,16 @@ export class GridRenderer {
 			// Right handle on last segment (drag end time)
 			if (i === segments.length - 1) {
 				const rightHandle = block.createDiv({ cls: "weekflow-resize-handle weekflow-resize-right" });
-				rightHandle.addEventListener("mousedown", (e) => {
+				rightHandle.addEventListener("pointerdown", (e) => {
 					e.preventDefault();
 					e.stopPropagation();
+					rightHandle.setPointerCapture(e.pointerId);
 					this.startResize(item, dayIndex, "right", e);
 				});
 			}
 
-			// ── Block mousedown: click vs drag detection ──
-			block.addEventListener("mousedown", (e) => {
+			// ── Block pointerdown: click vs drag detection ──
+			block.addEventListener("pointerdown", (e) => {
 				e.preventDefault();
 				e.stopPropagation();
 
@@ -581,6 +645,9 @@ export class GridRenderer {
 				const cell = this.getCellFromPoint(e.clientX, e.clientY);
 				const dragTime = item.checkbox === "actual" && item.actualTime ? item.actualTime : item.planTime;
 				const offsetMinutes = cell ? (cell.minutes - dragTime.start) : 0;
+
+				const delay = isTouchDevice() ? TOUCH_DRAG_DELAY_MS : DRAG_DELAY_MS;
+				const targetBlock = block;
 
 				// Start a timer for drag threshold
 				this.blockDragTimer = setTimeout(() => {
@@ -593,8 +660,17 @@ export class GridRenderer {
 						lastDay: -1,
 						lastStart: -1,
 					};
+
+					// Longpress visual feedback for touch
+					if (isTouchDevice()) {
+						this.longpressActive = true;
+						this.longpressEl = targetBlock;
+						targetBlock.addClass("weekflow-longpress-active");
+						hapticFeedback();
+					}
+
 					this.updateGhostPosition(e);
-				}, DRAG_DELAY_MS);
+				}, delay);
 			});
 
 			block.addEventListener("click", (e) => {
@@ -611,7 +687,7 @@ export class GridRenderer {
 				e.preventDefault();
 				e.stopPropagation();
 				if (this.callbacks.onBlockRightClick) {
-					this.callbacks.onBlockRightClick(dayIndex, item, e);
+					this.callbacks.onBlockRightClick(dayIndex, item, e as unknown as PointerEvent);
 				}
 			});
 		});
@@ -627,7 +703,7 @@ export class GridRenderer {
 
 	// ── Block Drag ──
 
-	private updateGhostPosition(e: MouseEvent) {
+	private updateGhostPosition(e: PointerEvent | MouseEvent) {
 		if (!this.blockDragState || !this.gridEl) return;
 
 		const cell = this.getCellFromPoint(e.clientX, e.clientY);
@@ -652,7 +728,7 @@ export class GridRenderer {
 		const startOffset = snappedStart - dayStartMin;
 		const endOffset = snappedEnd - dayStartMin;
 
-		const dayColStart = cell.dayIndex * 6 + 2;
+		const dayColStart = (cell.dayIndex - this.dayOffset) * 6 + 2;
 		const segments = this.getHourSegments(startOffset, endOffset);
 		if (segments.length === 0) return;
 
@@ -694,7 +770,7 @@ export class GridRenderer {
 		});
 	}
 
-	private onBlockDragMove(e: MouseEvent) {
+	private onBlockDragMove(e: PointerEvent) {
 		// Check if we've moved enough to confirm drag
 		const dx = e.clientX - this.blockDragStartX;
 		const dy = e.clientY - this.blockDragStartY;
@@ -703,7 +779,7 @@ export class GridRenderer {
 		this.updateGhostPosition(e);
 	}
 
-	private onBlockDragFinish(e: MouseEvent) {
+	private onBlockDragFinish(e: PointerEvent) {
 		this.dragMode = "none";
 		this.removeGhost();
 
@@ -744,7 +820,7 @@ export class GridRenderer {
 
 	// ── Resize ──
 
-	private startResize(item: TimelineItem, dayIndex: number, edge: "left" | "right", e: MouseEvent) {
+	private startResize(item: TimelineItem, dayIndex: number, edge: "left" | "right", e: PointerEvent) {
 		this.dragMode = "resize";
 		const time = item.checkbox === "actual" && item.actualTime ? item.actualTime : item.planTime;
 		this.resizeState = {
@@ -758,7 +834,7 @@ export class GridRenderer {
 		};
 	}
 
-	private onResizeDragMove(e: MouseEvent) {
+	private onResizeDragMove(e: PointerEvent) {
 		if (!this.resizeState || !this.gridEl) return;
 
 		const cell = this.getCellFromPoint(e.clientX, e.clientY);
@@ -793,7 +869,7 @@ export class GridRenderer {
 
 		// Render all ghost segments
 		const color = this.getCategoryColor(this.resizeState.item.tags);
-		const dayColStart = this.resizeState.dayIndex * 6 + 2;
+		const dayColStart = (this.resizeState.dayIndex - this.dayOffset) * 6 + 2;
 		const startOffset = newStart - dayStartMin;
 		const endOffset = newEnd - dayStartMin;
 		const segments = this.getHourSegments(startOffset, endOffset);
@@ -821,7 +897,7 @@ export class GridRenderer {
 		this.resizeGhostEls = [];
 	}
 
-	private onResizeDragFinish(e: MouseEvent) {
+	private onResizeDragFinish(e: PointerEvent) {
 		this.dragMode = "none";
 		this.removeResizeGhost();
 
@@ -850,7 +926,7 @@ export class GridRenderer {
 
 		if (startOffset < 0 || endOffset > (dayEndMin - dayStartMin)) return;
 
-		const dayColStart = dayIndex * 6 + 2;
+		const dayColStart = (dayIndex - this.dayOffset) * 6 + 2;
 		const color = this.getCategoryColor(item.tags);
 		const segments = this.getHourSegments(startOffset, endOffset);
 		const has5minStart = startOffset % 10 !== 0;
@@ -897,7 +973,8 @@ export class GridRenderer {
 		const getTime = (item: TimelineItem) =>
 			item.checkbox === "actual" && item.actualTime ? item.actualTime : item.planTime;
 
-		for (let d = 0; d < 7; d++) {
+		for (let i = 0; i < this.visibleDays; i++) {
+			const d = this.dayOffset + i;
 			const dateKey = this.dates[d].format("YYYY-MM-DD");
 			const items = this.weekData.get(dateKey) || [];
 
@@ -975,7 +1052,7 @@ export class GridRenderer {
 		const startOffset = minStart - dayStartMin;
 		const startHour = Math.floor(startOffset / 60);
 		const row = startHour + 2;
-		const dayColStart = dayIndex * 6 + 2;
+		const dayColStart = (dayIndex - this.dayOffset) * 6 + 2;
 
 		const groupIdx = this.overlapGroupMap.get(group[0].id)!;
 
@@ -986,8 +1063,8 @@ export class GridRenderer {
 
 		this.handleBarElements.set(groupIdx, handleBar);
 
-		handleBar.addEventListener("mouseenter", () => this.showGroupHandles(groupIdx));
-		handleBar.addEventListener("mouseleave", () => this.scheduleHideGroupHandles(groupIdx));
+		handleBar.addEventListener("pointerenter", () => this.showGroupHandles(groupIdx));
+		handleBar.addEventListener("pointerleave", () => this.scheduleHideGroupHandles(groupIdx));
 
 		const sorted = [...group].sort((a, b) => getTime(a).start - getTime(b).start);
 
@@ -1002,7 +1079,7 @@ export class GridRenderer {
 				handle.addClass("weekflow-overlap-handle-active");
 			}
 
-			handle.addEventListener("mousedown", (e) => {
+			handle.addEventListener("pointerdown", (e) => {
 				e.stopPropagation();
 				e.preventDefault();
 			});
@@ -1084,7 +1161,8 @@ export class GridRenderer {
 		const dayStartMin = this.settings.dayStartHour * 60;
 		const dayEndMin = this.settings.dayEndHour * 60;
 
-		for (let d = 0; d < 7; d++) {
+		for (let i = 0; i < this.visibleDays; i++) {
+			const d = this.dayOffset + i;
 			const dayDate = this.dates[d];
 			const dayStart = new Date(dayDate.year(), dayDate.month(), dayDate.date(), 0, 0, 0);
 			const dayEnd = new Date(dayDate.year(), dayDate.month(), dayDate.date(), 23, 59, 59);
@@ -1108,7 +1186,7 @@ export class GridRenderer {
 
 				const startOffset = clampedStart - dayStartMin;
 				const endOffset = clampedEnd - dayStartMin;
-				const dayColStart = d * 6 + 2;
+				const dayColStart = i * 6 + 2;
 				const segments = this.getHourSegments(startOffset, endOffset);
 				if (segments.length === 0) continue;
 

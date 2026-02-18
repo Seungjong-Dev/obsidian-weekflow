@@ -157,6 +157,12 @@ export interface PlanActualSummary {
 
 // Planning Panel types
 
+// Grid swipe callbacks (for responsive navigation)
+export interface SwipeCallbacks {
+	onSwipeLeft?: () => void;
+	onSwipeRight?: () => void;
+}
+
 export type PanelItemSource =
 	| { type: "overdue"; dateKey: string; planTime: TimeRange; originalId: string }
 	| { type: "inbox"; notePath: string; lineNumber: number }

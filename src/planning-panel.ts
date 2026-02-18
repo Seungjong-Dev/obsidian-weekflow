@@ -12,7 +12,7 @@ export interface PanelSection {
 }
 
 export interface PlanningPanelCallbacks {
-	onItemDragStart(item: PanelItem, e: MouseEvent): void;
+	onItemDragStart(item: PanelItem, e: PointerEvent): void;
 }
 
 export class PlanningPanel {
@@ -80,8 +80,8 @@ export class PlanningPanel {
 					tagEl.setText(`#${item.tags[0]}`);
 				}
 
-				// Drag via mousedown
-				itemEl.addEventListener("mousedown", (e) => {
+				// Drag via pointerdown
+				itemEl.addEventListener("pointerdown", (e) => {
 					if (e.button !== 0) return;
 					e.preventDefault();
 					this.callbacks.onItemDragStart(item, e);

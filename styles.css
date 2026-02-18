@@ -34,7 +34,7 @@
 }
 
 .weekflow-toolbar-nav button:hover {
-	background: var(--background-modifier-hover);
+	background: none;
 }
 
 .weekflow-week-label {
@@ -122,7 +122,7 @@
 }
 
 .weekflow-panel-header:hover {
-	background: var(--background-modifier-hover);
+	background: none;
 }
 
 .weekflow-panel-chevron {
@@ -162,7 +162,7 @@
 }
 
 .weekflow-panel-item:hover {
-	background: var(--background-modifier-hover);
+	background: none;
 }
 
 .weekflow-panel-item-tag {
@@ -270,7 +270,7 @@
 }
 
 .weekflow-cell:hover {
-	background: var(--background-modifier-hover);
+	background: none;
 }
 
 /* Left edge of each day group */
@@ -297,7 +297,6 @@
 }
 
 .weekflow-block:hover {
-	box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
 	z-index: 6;
 }
 
@@ -453,11 +452,11 @@
 }
 
 .weekflow-block:hover .weekflow-block-toggle {
-	opacity: 1;
+	/* hover handled in @media (pointer: fine) */
 }
 
 .weekflow-block-toggle:hover {
-	background: var(--background-modifier-hover);
+	/* hover handled in @media (pointer: fine) */
 }
 
 /* Read-only time display in edit modal */
@@ -486,8 +485,7 @@
 }
 
 .weekflow-resize-handle:hover {
-	background: var(--interactive-accent-hover);
-	opacity: 0.4;
+	/* hover handled in @media (pointer: fine) */
 }
 
 /* Widen handles to cover the full diagonal area on 5-min edges */
@@ -550,7 +548,7 @@
 }
 
 .weekflow-overlap-handle:hover {
-	transform: scale(1.3);
+	/* hover handled in @media (pointer: fine) */
 }
 
 /* Active handle — ring indicator */
@@ -606,7 +604,7 @@
 }
 
 .weekflow-preset-menu-item:hover {
-	background: var(--background-modifier-hover);
+	/* hover handled in @media (pointer: fine) */
 }
 
 /* Review Panel resize handle */
@@ -620,7 +618,7 @@
 }
 
 .weekflow-review-resize-handle:hover {
-	background: var(--interactive-accent-hover);
+	/* hover handled in @media (pointer: fine) */
 }
 
 /* Review Panel — aligned with grid day columns */
@@ -640,6 +638,7 @@
 
 .weekflow-review-content {
 	display: grid;
+	/* grid-template-columns set dynamically via JS based on visibleDays */
 	grid-template-columns: 60px repeat(7, 1fr);
 	height: 100%;
 }
@@ -756,7 +755,7 @@
 }
 
 .weekflow-stats-nav button:hover {
-	background: var(--background-modifier-hover);
+	/* hover handled in @media (pointer: fine) */
 }
 
 .weekflow-stats-label {
@@ -785,7 +784,7 @@
 }
 
 .weekflow-stats-range button:hover {
-	color: var(--text-normal);
+	/* hover handled in @media (pointer: fine) */
 }
 
 .weekflow-stats-range button.active {
@@ -1005,4 +1004,224 @@
 	font-size: 11px;
 	color: var(--text-muted);
 	flex-shrink: 0;
+}
+
+/* ═══════════════════════════════════════════════
+   RESPONSIVE UI + TOUCH OPTIMIZATION (Phase 6)
+   ═══════════════════════════════════════════════ */
+
+/* ── touch-action: disable browser gestures on interactive elements ── */
+.weekflow-cell {
+	touch-action: none;
+}
+
+.weekflow-block {
+	touch-action: none;
+}
+
+.weekflow-resize-handle {
+	touch-action: none;
+}
+
+.weekflow-panel-item {
+	touch-action: none;
+}
+
+.weekflow-review-resize-handle {
+	touch-action: none;
+}
+
+.weekflow-bottom-sheet-handle {
+	touch-action: none;
+}
+
+/* ── @media (pointer: fine) — mouse/trackpad hover effects ── */
+@media (pointer: fine) {
+	.weekflow-toolbar-nav button:hover {
+		background: var(--background-modifier-hover);
+	}
+
+	.weekflow-cell:hover {
+		background: var(--background-modifier-hover);
+	}
+
+	.weekflow-block:hover {
+		box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+	}
+
+	.weekflow-block:hover .weekflow-block-toggle {
+		opacity: 1;
+	}
+
+	.weekflow-block-toggle:hover {
+		background: var(--background-modifier-hover);
+	}
+
+	.weekflow-resize-handle:hover {
+		background: var(--interactive-accent-hover);
+		opacity: 0.4;
+	}
+
+	.weekflow-panel-header:hover {
+		background: var(--background-modifier-hover);
+	}
+
+	.weekflow-panel-item:hover {
+		background: var(--background-modifier-hover);
+	}
+
+	.weekflow-overlap-handle:hover {
+		transform: scale(1.3);
+	}
+
+	.weekflow-review-resize-handle:hover {
+		background: var(--interactive-accent-hover);
+	}
+
+	.weekflow-stats-nav button:hover {
+		background: var(--background-modifier-hover);
+	}
+
+	.weekflow-stats-range button:hover {
+		color: var(--text-normal);
+	}
+
+	.weekflow-preset-menu-item:hover {
+		background: var(--background-modifier-hover);
+	}
+}
+
+/* ── @media (pointer: coarse) — touch device always-visible controls ── */
+@media (pointer: coarse) {
+	.weekflow-block .weekflow-block-toggle {
+		display: flex;
+		opacity: 0.5;
+	}
+
+	.weekflow-resize-handle {
+		opacity: 0.3;
+		width: 16px;
+	}
+
+	.weekflow-resize-left {
+		left: -5px;
+	}
+
+	.weekflow-resize-right {
+		right: -5px;
+	}
+}
+
+/* ── Longpress visual feedback (touch drag) ── */
+.weekflow-longpress-active {
+	transform: scale(1.05);
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+	transition: transform 0.15s ease;
+	z-index: 20;
+}
+
+/* ── Obsidian Mobile (.is-mobile) touch target sizing ── */
+.is-mobile .weekflow-block-toggle {
+	width: 28px;
+	height: 28px;
+}
+
+.is-mobile .weekflow-panel-item {
+	padding: 10px 12px;
+	min-height: 44px;
+	display: flex;
+	align-items: center;
+}
+
+.is-mobile .weekflow-toolbar-nav button {
+	min-width: 44px;
+	min-height: 44px;
+}
+
+.is-mobile .weekflow-overlap-handle {
+	width: 16px;
+	height: 16px;
+}
+
+/* ── Bottom Sheet (Narrow mode Planning Panel) ── */
+.weekflow-bottom-sheet {
+	position: absolute;
+	bottom: 0;
+	left: 0;
+	right: 0;
+	background: var(--background-primary);
+	border-top: 1px solid var(--background-modifier-border);
+	border-radius: 12px 12px 0 0;
+	transition: transform 0.25s ease;
+	z-index: 20;
+	max-height: 60vh;
+	overflow: hidden;
+	display: flex;
+	flex-direction: column;
+}
+
+.weekflow-bottom-sheet.collapsed {
+	transform: translateY(calc(100% - 40px));
+}
+
+.weekflow-bottom-sheet.expanded {
+	transform: translateY(0);
+}
+
+.weekflow-bottom-sheet-handle {
+	display: flex;
+	justify-content: center;
+	padding: 8px;
+	cursor: grab;
+	flex-shrink: 0;
+}
+
+.weekflow-bottom-sheet-bar {
+	width: 40px;
+	height: 4px;
+	border-radius: 2px;
+	background: var(--text-muted);
+}
+
+.weekflow-bottom-sheet-content {
+	flex: 1;
+	overflow-y: auto;
+	padding-bottom: 20px;
+}
+
+/* ── Narrow mode body needs relative positioning for bottom sheet ── */
+.weekflow-layout-narrow .weekflow-body {
+	position: relative;
+}
+
+/* ── Narrow mode: hide side panel toggle since we use bottom sheet ── */
+.weekflow-layout-narrow .weekflow-panel {
+	display: none;
+}
+
+/* ── Medium mode: narrower panel by default ── */
+.weekflow-layout-medium .weekflow-panel {
+	width: 220px;
+	min-width: 220px;
+}
+
+/* ── Statistics responsive layout ── */
+@media (max-width: 600px) {
+	.weekflow-stats-header {
+		flex-direction: column;
+		align-items: stretch;
+		gap: 8px;
+	}
+
+	.weekflow-stats-summary-grid {
+		grid-template-columns: 1fr;
+	}
+
+	.weekflow-chart-stacked {
+		flex-direction: column;
+	}
+
+	.weekflow-stats-container {
+		padding: 8px;
+	}
 }
