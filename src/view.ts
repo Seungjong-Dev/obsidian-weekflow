@@ -169,10 +169,15 @@ export class WeekFlowView extends ItemView {
 			return todayIndex;
 		}
 
-		// 3-day view: center today, clamped to week bounds [0, 4]
-		const maxOffset = 7 - visibleDays;
-		const idealOffset = todayIndex - Math.floor(visibleDays / 2);
-		return Math.max(0, Math.min(idealOffset, maxOffset));
+		// 3-day view: fixed pages [0, 2, 4] with 1-day overlap
+		// Pick the earliest page that contains today (shows more past context)
+		const pages = [0, 2, 4];
+		for (const offset of pages) {
+			if (todayIndex >= offset && todayIndex < offset + visibleDays) {
+				return offset;
+			}
+		}
+		return 0;
 	}
 
 	async refresh() {
@@ -730,9 +735,11 @@ export class WeekFlowView extends ItemView {
 			// Wide: swipe changes week
 			this.navigateWeek(delta);
 		} else {
-			// Medium/Narrow: shift dayOffset within the week
+			// Medium (3-day): step by 2 for fixed pages [0,2,4]
+			// Narrow (1-day): step by 1
+			const step = this.currentVisibleDays >= 3 ? 2 : 1;
 			const maxOffset = 7 - this.currentVisibleDays;
-			const newOffset = this.currentDayOffset + delta * this.currentVisibleDays;
+			const newOffset = this.currentDayOffset + delta * step;
 			const clamped = Math.max(0, Math.min(newOffset, maxOffset));
 			if (clamped !== this.currentDayOffset) {
 				this.currentDayOffset = clamped;
