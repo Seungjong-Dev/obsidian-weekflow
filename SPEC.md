@@ -65,7 +65,7 @@ Plan (계획)  ──▶  Actual (실행)  ──▶  Review (회고)
 
 1. **클릭:** 단일 셀 선택/토글
 2. **드래그:** 연속된 셀 범위 선택 (같은 날 내에서 수직 드래그)
-3. 셀 선택 후 내용과 카테고리를 지정하여 블록 생성 (날짜에 따라 Plan/Actual 자동 결정)
+3. 셀 선택 후 블록 생성 모달에서 시간/내용/카테고리를 지정하여 블록 생성 (시간은 드래그 범위로 초기화되며 모달에서 수정 가능, 날짜에 따라 Plan/Actual 자동 결정)
 
 ### 통합 뷰 (Unified View)
 
@@ -394,10 +394,10 @@ Inbox Note Path:  [5. Periodic Notes/YYYY/YYYY-[W]ww     ]
 외부 캘린더 일정을 타임테이블 위에 오버레이로 표시한다. 플래닝 시 참고용이며, WeekFlow에서 캘린더를 수정하지 않는다 (단방향).
 
 - **데이터 소스:** ICS URL 구독 (Google Calendar, Outlook 등에서 제공하는 iCal URL)
-- **표시 방식:** WeekFlow 블록과 구분되는 반투명/빗금 스타일로 오버레이
-- **동작:** 타임테이블 렌더링 시 해당 주의 캘린더 이벤트를 ICS에서 읽어 표시
-- **캐싱:** 매번 fetch하지 않고 설정의 Calendar Cache Duration 간격으로 캐싱
-- **복수 캘린더:** 여러 ICS URL을 등록하고 각각 색상/표시 여부를 설정 가능
+- **표시 방식:** WeekFlow 블록과 구분되는 반투명/빗금 스타일로 오버레이. `pointer-events: none`으로 캘린더 이벤트 위에서도 셀 클릭/드래그가 통과되어 블록 생성이 가능하다.
+- **동작:** 뷰 렌더 후 비동기로 ICS를 fetch하여 오버레이만 패치 (뷰 블로킹 없음)
+- **캐싱:** 매번 fetch하지 않고 설정의 Calendar Cache Duration 간격으로 캐싱. fetch 실패 시 만료된 캐시라도 반환 (오프라인 대응).
+- **복수 캘린더:** 여러 ICS URL을 등록하고 각각 색상/표시 여부를 설정 가능. `Promise.allSettled()`로 소스별 독립 처리.
 
 #### 설정
 
@@ -643,7 +643,7 @@ const isIPad   = isTablet && document.body.hasClass("is-ios");
 - 설정: Daily Note Path, Timeline Heading, Day Start/End Hour, Week Start Day, Categories
 - 타임라인 파서: 지정된 헤딩 아래 `- [ ]` / `- [x]` / `- [>]` 리스트 읽기/쓰기
 - 타임테이블 뷰 (`ItemView`): 7일 × 시간대 그리드 렌더링
-- 셀 클릭/드래그로 새 블록 생성 (내용, 카테고리 입력 모달)
+- 셀 클릭/드래그로 새 블록 생성 (시간/내용/카테고리 입력 모달, 드래그 범위로 시간 초기화 후 모달에서 수정 가능)
 - 통합 뷰: Plan(outline)과 Actual(fill)을 동시 표시. 과거 날짜는 자동으로 Actual, 오늘/미래는 Plan으로 생성
 - 카테고리 팔레트 (태그 → 색상 매핑)
 - 주 네비게이션 (이전/다음 주)
