@@ -651,7 +651,7 @@ Narrow 모드에서 사이드 패널 대신 하단 시트로 표시:
 
 ### 모바일 전용 고려사항
 
-- **스크롤 충돌 방지:** 그리드는 `touch-action: pan-y`로 세로 스크롤 허용, 터치 셀 선택은 탭-탭 방식으로 드래그와 분리. 블록/핸들은 `touch-action: none`으로 드래그 전용.
+- **스크롤 충돌 방지:** 그리드와 블록 모두 `touch-action: pan-y`로 세로 스크롤 허용, 터치 셀 선택은 탭-탭 방식으로 드래그와 분리. 블록 터치 시 `preventDefault()` 미호출로 스크롤 유지, 롱프레스 시 `setPointerCapture()`로 드래그 전환. 리사이즈 핸들은 `touch-action: none`.
 - **햅틱 피드백:** 롱프레스 드래그 시작 시 `navigator.vibrate(10)` 호출.
 - **오프라인 동작:** 데이터가 로컬 마크다운 파일이므로 오프라인에서도 완전히 동작. 캘린더 오버레이만 캐시 기반으로 제한적 표시.
 - **Split View / Stage Manager (iPad):** `ResizeObserver`로 실제 뷰 영역 크기를 감시하여 레이아웃을 동적으로 적응. 디바이스 타입이 아닌 실제 가용 너비를 기준으로 컬럼 수를 결정하므로, Stage Manager에서 창 크기를 자유롭게 변경해도 자연스럽게 대응.
@@ -773,7 +773,9 @@ Narrow 모드에서 사이드 패널 대신 하단 시트로 표시:
 - 툴바 2줄 구조: Row 1 (nav + tools + `⋯` 오버플로 메뉴), Row 2 (카테고리 팔레트, 가로 스크롤). ◀/▶ 버튼이 뷰 모드별 역할 변경
 - `@media (pointer: fine)`: hover 효과를 마우스 전용으로 격리
 - `@media (pointer: coarse)`: 항상 표시 토글/리사이즈 핸들, 터치 타겟 보장
-- `.weekflow-grid`에 `touch-action: pan-y` (세로 스크롤 허용), 블록/핸들은 `touch-action: none`
+- `.weekflow-grid`와 `.weekflow-block`에 `touch-action: pan-y` (세로 스크롤 허용), 리사이즈 핸들은 `touch-action: none`
+- 모바일 하단 네비 바 대응: `.is-mobile .weekflow-container`에 `env(safe-area-inset-bottom)`, `.is-mobile .weekflow-grid-wrapper`에 `padding-bottom: 48px`
+- 모바일 바텀 시트 오프셋: `.is-mobile .weekflow-bottom-sheet { bottom: 48px }` (네비 바 위로 배치), narrow+mobile 그리드 패딩 96px
 - `pointercancel` 시 `dragMode` 리셋 (Apple Pencil 리프트/팜 리젝션 대응)
 - `getCellFromPoint()`: `getBoundingClientRect()`가 스크롤 반영하므로 `scrollLeft/Top` 미가산
 - 같은 주 내 페이지 이동: `updatePage()`로 그리드+툴바+리뷰만 업데이트 (전체 재렌더 안 함)

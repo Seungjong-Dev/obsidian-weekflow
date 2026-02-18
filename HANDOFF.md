@@ -1,7 +1,7 @@
 # WeekFlow 작업 핸드오프
 
 > 작성일: 2026-02-18
-> 마지막 커밋: `f845e3e` chore: reduce default categories to Work and Personal
+> 마지막 커밋: `414b654` fix: offset bottom sheet above mobile navigation bar
 
 ## 프로젝트 개요
 
@@ -100,7 +100,8 @@ WeekFlow는 Obsidian 플러그인으로, 데일리 노트의 마크다운 체크
   - ◀/▶ 컨텍스트 인식: 7일 뷰에서는 주 이동, sub-7일 뷰에서는 일/페이지 이동
   - 오버플로우 메뉴: `ResizeObserver`로 넘치는 버튼 감지 → Obsidian `Menu`에 수집
   - Sort 버튼 제거, 모든 도구 버튼 `setIcon()` 사용
-- **CSS 터치 최적화**: `@media (pointer: fine)` hover 격리, `@media (pointer: coarse)` 상시 표시 토글/핸들, `.weekflow-grid { touch-action: pan-y; }` (세로 스크롤 허용, 셀은 상속), `.weekflow-block`/`.weekflow-resize-handle`은 `touch-action: none` 유지, 터치 타겟 36px (툴바)
+- **CSS 터치 최적화**: `@media (pointer: fine)` hover 격리, `@media (pointer: coarse)` 상시 표시 토글/핸들, `.weekflow-grid`/`.weekflow-block` `touch-action: pan-y` (블록 위에서도 스크롤 허용, 롱프레스 시 `setPointerCapture`로 드래그 전환), `.weekflow-resize-handle`은 `touch-action: none` 유지, 터치 타겟 36px (툴바)
+- **모바일 하단 바 대응**: `.is-mobile` 컨테이너에 `env(safe-area-inset-bottom)`, 그리드 `padding-bottom: 48px`, 바텀 시트 `bottom: 48px` 오프셋 (Obsidian 네비 바 위로 배치), narrow+mobile 그리드 패딩 96px
 - **Apple Pencil 대응**: `pointercancel` 시 `dragMode` 리셋 (호버 고스트 선택 방지), `getCellFromPoint()` 스크롤 이중 가산 수정
 - **페이지 이동 최적화**: 같은 주 내 이동은 `updatePage()` (그리드+툴바+리뷰만 갱신), 프로젝트 데이터는 `loadProjectDataAsync()`로 비동기 로드, `renderView()` 전 `GridRenderer.destroy()` 호출 (리스너 누수 방지)
 - **카테고리 팔레트 → 모달 연동**: `selectedCategory`를 `BlockModal`에 `defaultTag`로 전달, 미선택 시 첫 번째 카테고리 자동 선택
