@@ -82,9 +82,19 @@ export class GridRenderer {
 	// Calendar events overlay
 	private calendarEvents: CalendarEvent[] = [];
 
+	// Touch tap-tap state (touch only, replaces drag for cell selection)
+	private touchTapState: {
+		dayIndex: number;
+		minutes: number;
+		startX: number;
+		startY: number;
+		startTime: number;
+	} | null = null;
+
 	// Bound handlers for cleanup
 	private boundPointerMove: ((e: PointerEvent) => void) | null = null;
 	private boundPointerUp: ((e: PointerEvent) => void) | null = null;
+	private boundPointerCancel: ((e: PointerEvent) => void) | null = null;
 
 	// Longpress state (touch drag)
 	private longpressActive = false;
@@ -193,23 +203,34 @@ export class GridRenderer {
 					// Cell pointerdown → start cell selection (only if no block drag in progress)
 					cell.addEventListener("pointerdown", (e) => {
 						if (this.dragMode !== "none") return;
-						e.preventDefault();
-						this.deselectOverlapBlock();
 
-						// Record swipe start
-						this.swipeStartX = e.clientX;
-						this.swipeStartY = e.clientY;
-						this.swipeStartTime = Date.now();
-
-						this.dragMode = "cell-select";
-						this.dragAnchorMinutes = minutes;
-						this.selectionRange = {
-							dayIndex: d,
-							startMinutes: minutes,
-							endMinutes: minutes + 10,
-						};
-						this.updateSelectionHighlight();
-						this.callbacks.onCellDragStart(d, minutes);
+						if (e.pointerType === "touch") {
+							// Touch: tap-tap mode — no preventDefault() (allow scroll)
+							this.deselectOverlapBlock();
+							this.touchTapState = {
+								dayIndex: d,
+								minutes,
+								startX: e.clientX,
+								startY: e.clientY,
+								startTime: Date.now(),
+							};
+						} else {
+							// Mouse: existing drag selection
+							e.preventDefault();
+							this.deselectOverlapBlock();
+							this.swipeStartX = e.clientX;
+							this.swipeStartY = e.clientY;
+							this.swipeStartTime = Date.now();
+							this.dragMode = "cell-select";
+							this.dragAnchorMinutes = minutes;
+							this.selectionRange = {
+								dayIndex: d,
+								startMinutes: minutes,
+								endMinutes: minutes + 10,
+							};
+							this.updateSelectionHighlight();
+							this.callbacks.onCellDragStart(d, minutes);
+						}
 					});
 
 					cell.addEventListener("pointerenter", () => {
@@ -230,8 +251,10 @@ export class GridRenderer {
 		// Global pointer handlers
 		this.boundPointerMove = (e: PointerEvent) => this.onGlobalPointerMove(e);
 		this.boundPointerUp = (e: PointerEvent) => this.onGlobalPointerUp(e);
+		this.boundPointerCancel = (e: PointerEvent) => this.onGlobalPointerCancel(e);
 		document.addEventListener("pointermove", this.boundPointerMove);
 		document.addEventListener("pointerup", this.boundPointerUp);
+		document.addEventListener("pointercancel", this.boundPointerCancel);
 
 		this.renderBlocks();
 		this.renderCalendarOverlay();
@@ -253,6 +276,9 @@ export class GridRenderer {
 		}
 		if (this.boundPointerUp) {
 			document.removeEventListener("pointerup", this.boundPointerUp);
+		}
+		if (this.boundPointerCancel) {
+			document.removeEventListener("pointercancel", this.boundPointerCancel);
 		}
 	}
 
@@ -299,6 +325,68 @@ export class GridRenderer {
 		if (this.blockDragTimer) {
 			clearTimeout(this.blockDragTimer);
 			this.blockDragTimer = null;
+		}
+
+		// Touch tap-tap handling
+		if (this.touchTapState) {
+			this.handleTouchPointerUp(e);
+		}
+	}
+
+	private onGlobalPointerCancel(_e: PointerEvent) {
+		this.touchTapState = null;
+		if (this.longpressActive && this.longpressEl) {
+			this.longpressEl.removeClass("weekflow-longpress-active");
+			this.longpressActive = false;
+			this.longpressEl = null;
+		}
+	}
+
+	private handleTouchPointerUp(e: PointerEvent) {
+		if (!this.touchTapState) return;
+		const state = this.touchTapState;
+		this.touchTapState = null;
+
+		const dx = e.clientX - state.startX;
+		const dy = e.clientY - state.startY;
+		const dt = Date.now() - state.startTime;
+		const absDx = Math.abs(dx);
+		const absDy = Math.abs(dy);
+
+		// Swipe detection (existing criteria: >80px, |dx|>|dy|*2, <300ms)
+		if (absDx > 80 && absDx > absDy * 2 && dt < 300) {
+			this.clearSelection();
+			if (dx < 0 && this.callbacks.onSwipeLeft) this.callbacks.onSwipeLeft();
+			else if (dx > 0 && this.callbacks.onSwipeRight) this.callbacks.onSwipeRight();
+			return;
+		}
+
+		// If finger moved too much, it was a scroll — not a tap
+		if (absDx > 10 || absDy > 10) return;
+
+		// Treat as tap
+		this.handleCellTap(state.dayIndex, state.minutes);
+	}
+
+	private handleCellTap(dayIndex: number, minutes: number) {
+		if (this.selectionRange && this.selectionRange.dayIndex === dayIndex) {
+			// Second tap (same day): extend range → open modal
+			const lo = Math.min(this.dragAnchorMinutes, minutes);
+			const hi = Math.max(this.dragAnchorMinutes, minutes) + 10;
+			this.selectionRange.startMinutes = lo;
+			this.selectionRange.endMinutes = hi;
+			this.updateSelectionHighlight();
+			this.callbacks.onCellDragEnd();
+		} else {
+			// First tap (or different day): set anchor
+			this.clearSelection();
+			this.dragAnchorMinutes = minutes;
+			this.selectionRange = {
+				dayIndex,
+				startMinutes: minutes,
+				endMinutes: minutes + 10,
+			};
+			this.updateSelectionHighlight();
 		}
 	}
 

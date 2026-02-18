@@ -1012,11 +1012,7 @@
 
 /* ── touch-action: disable browser gestures on interactive elements ── */
 .weekflow-grid {
-	touch-action: none;
-}
-
-.weekflow-cell {
-	touch-action: none;
+	touch-action: pan-y;
 }
 
 .weekflow-block {
