@@ -716,18 +716,18 @@ const isIPad   = isTablet && document.body.hasClass("is-ios");
 
 **이 Phase가 끝나면:** 주간 회고를 작성하고, 시간 사용 패턴을 다양한 범위에서 분석할 수 있다.
 
-### Phase 5 — 외부 연동 & 커맨드
+### Phase 5 — 외부 연동 & 커맨드 ✅
 
 **목표:** 외부 캘린더 통합, 커맨드 팔레트 지원, 편의 기능.
 
-- Calendar Overlay: ICS URL 구독, 캐싱, 반투명 오버레이 렌더링
-- 설정: Calendar Sources, Calendar Cache Duration
+- Calendar Overlay: ICS URL 구독 (`ical.js` 라이브러리), `requestUrl`로 CORS 우회 페칭, 인메모리 캐시 (stale cache fallback), 반복 이벤트 확장 (`Event.iterator()`), `Promise.allSettled()`로 소스별 병렬 처리, 빗금+점선 오버레이 렌더링 (z-index 2, 타임라인 블록 아래), all-day 이벤트 스킵
+- 설정: Calendar Sources (name, URL, color, enabled, delete), Calendar Cache Duration (슬라이더 0~120분)
 - Obsidian 커맨드 등록 (Phase 1~3에서 이미 구현된 것 포함):
   - `WeekFlow: Open weekly view` ✅
   - `WeekFlow: Undo` (Mod+Z) ✅
   - `WeekFlow: Redo` (Mod+Shift+Z) ✅
   - `WeekFlow: Toggle planning panel` ✅
-  - `WeekFlow: Go to this week`
+  - `WeekFlow: Go to this week` ✅
   - `WeekFlow: Open statistics` ✅
 - 리본 아이콘 (사이드바에서 WeekFlow 열기) ✅
 
