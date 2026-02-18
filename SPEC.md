@@ -396,7 +396,7 @@ Inbox Note Path:  [5. Periodic Notes/YYYY/YYYY-[W]ww     ]
 - **데이터 소스:** ICS URL 구독 (Google Calendar, Outlook 등에서 제공하는 iCal URL)
 - **표시 방식:** WeekFlow 블록과 구분되는 반투명/빗금 스타일로 오버레이. `pointer-events: none`으로 캘린더 이벤트 위에서도 셀 클릭/드래그가 통과되어 블록 생성이 가능하다.
 - **동작:** 뷰 렌더 후 비동기로 ICS를 fetch하여 오버레이만 패치 (뷰 블로킹 없음)
-- **캐싱:** 매번 fetch하지 않고 설정의 Calendar Cache Duration 간격으로 캐싱. fetch 실패 시 만료된 캐시라도 반환 (오프라인 대응).
+- **캐싱:** 매번 fetch하지 않고 설정의 Calendar Cache Duration 간격으로 캐싱. fetch 실패 시 만료된 캐시라도 반환 (오프라인 대응). 새로고침(↻) 버튼 클릭 시 캐시를 강제 초기화하여 최신 데이터를 refetch.
 - **복수 캘린더:** 여러 ICS URL을 등록하고 각각 색상/표시 여부를 설정 가능. `Promise.allSettled()`로 소스별 독립 처리.
 
 #### 설정
