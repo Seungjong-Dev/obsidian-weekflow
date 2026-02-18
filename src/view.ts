@@ -579,10 +579,12 @@ export class WeekFlowView extends ItemView {
 	private renderToolbar(container: HTMLElement) {
 		const toolbar = container.createDiv({ cls: "weekflow-toolbar" });
 
-		// Navigation
-		const nav = toolbar.createDiv({ cls: "weekflow-toolbar-nav" });
+		// ── Row 1: Navigation + Tools ──
+		const row1 = toolbar.createDiv({ cls: "weekflow-toolbar-row" });
 
-		// Panel toggle button
+		// Left: Navigation
+		const nav = row1.createDiv({ cls: "weekflow-toolbar-nav" });
+
 		const panelToggleBtn = nav.createEl("button");
 		setIcon(panelToggleBtn, "panel-left");
 		panelToggleBtn.ariaLabel = "Toggle planning panel";
@@ -590,30 +592,27 @@ export class WeekFlowView extends ItemView {
 		panelToggleBtn.addEventListener("click", () => this.togglePanel());
 
 		const prevBtn = nav.createEl("button", { text: "\u25C0" });
-		prevBtn.addEventListener("click", () => this.navigateWeek(-1));
+		if (this.currentVisibleDays < 7) {
+			prevBtn.addEventListener("click", () => this.onSwipe("right"));
+		} else {
+			prevBtn.addEventListener("click", () => this.navigateWeek(-1));
+		}
 
 		const weekLabel = nav.createSpan({ cls: "weekflow-week-label" });
-		const weekNum = this.dates[0].format("[W]ww, YYYY");
-		weekLabel.setText(weekNum);
-
-		const nextBtn = nav.createEl("button", { text: "\u25B6" });
-		nextBtn.addEventListener("click", () => this.navigateWeek(1));
-
-		// Day navigation buttons (visible only in 3-day / 1-day view)
 		if (this.currentVisibleDays < 7) {
-			const dayNav = nav.createDiv({ cls: "weekflow-toolbar-nav weekflow-day-nav" });
-			const prevDayBtn = dayNav.createEl("button", { text: "\u25C2" });
-			prevDayBtn.ariaLabel = "Previous days";
-			prevDayBtn.addEventListener("click", () => this.onSwipe("right"));
-
-			const dayLabel = dayNav.createSpan({ cls: "weekflow-day-label" });
+			const weekNum = this.dates[0].format("[W]ww");
 			const startDate = this.dates[this.currentDayOffset];
 			const endDate = this.dates[this.currentDayOffset + this.currentVisibleDays - 1];
-			dayLabel.setText(`${startDate.format("MM/DD")}-${endDate.format("MM/DD")}`);
+			weekLabel.setText(`${weekNum} \u00B7 ${startDate.format("MM/DD")}\u2013${endDate.format("MM/DD")}`);
+		} else {
+			weekLabel.setText(this.dates[0].format("[W]ww, YYYY"));
+		}
 
-			const nextDayBtn = dayNav.createEl("button", { text: "\u25B8" });
-			nextDayBtn.ariaLabel = "Next days";
-			nextDayBtn.addEventListener("click", () => this.onSwipe("left"));
+		const nextBtn = nav.createEl("button", { text: "\u25B6" });
+		if (this.currentVisibleDays < 7) {
+			nextBtn.addEventListener("click", () => this.onSwipe("left"));
+		} else {
+			nextBtn.addEventListener("click", () => this.navigateWeek(1));
 		}
 
 		const todayBtn = nav.createEl("button", { text: "Today" });
@@ -622,53 +621,66 @@ export class WeekFlowView extends ItemView {
 			this.refresh();
 		});
 
-		const refreshBtn = nav.createEl("button", { text: "\u21BB" });
-		refreshBtn.ariaLabel = "Refresh";
-		refreshBtn.addEventListener("click", () => {
-			clearCalendarCache();
-			this.refresh();
+		// Right: Tools (visible buttons + overflow menu)
+		const tools = row1.createDiv({ cls: "weekflow-toolbar-tools" });
+
+		// Define tool items for both inline buttons and overflow menu
+		const toolItems: { icon: string; label: string; action: (e?: MouseEvent | PointerEvent) => void; active?: boolean; disabled?: boolean }[] = [
+			{ icon: "rotate-ccw", label: "Refresh", action: () => { clearCalendarCache(); this.refresh(); } },
+			{ icon: "undo-2", label: "Undo", action: () => this.undo(), disabled: !this.undoManager.canUndo() },
+			{ icon: "redo-2", label: "Redo", action: () => this.redo(), disabled: !this.undoManager.canRedo() },
+			{ icon: "clock", label: "Presets", action: (e) => { if (e) this.showPresetMenu(e); } },
+			{ icon: "chart-bar", label: "Statistics", action: () => this.plugin.activateStatsView() },
+			{ icon: "file-text", label: "Review panel", action: () => this.toggleReviewPanel(), active: this.plugin.settings.reviewPanelOpen },
+		];
+
+		const toolBtns: HTMLElement[] = [];
+		for (const item of toolItems) {
+			const btn = tools.createEl("button");
+			btn.addClass("weekflow-tool-btn");
+			setIcon(btn, item.icon);
+			btn.ariaLabel = item.label;
+			if (item.active) btn.addClass("active");
+			if (item.disabled) btn.addClass("weekflow-btn-disabled");
+			btn.addEventListener("click", (e) => item.action(e));
+			toolBtns.push(btn);
+		}
+
+		// Overflow "..." button — sibling of tools (outside overflow container)
+		const overflowBtn = row1.createEl("button", { cls: "weekflow-overflow-btn" });
+		setIcon(overflowBtn, "more-horizontal");
+		overflowBtn.ariaLabel = "More tools";
+		overflowBtn.style.display = "none";
+		overflowBtn.addEventListener("click", (e) => {
+			const menu = new Menu();
+			for (let i = 0; i < toolBtns.length; i++) {
+				if (this.isElementOverflowing(toolBtns[i], tools)) {
+					const item = toolItems[i];
+					menu.addItem((mi) => {
+						mi.setTitle(item.label);
+						mi.setIcon(item.icon);
+						if (item.disabled) mi.setDisabled(true);
+						mi.onClick(() => item.action(e));
+					});
+				}
+			}
+			menu.showAtMouseEvent(e);
 		});
 
-		// Undo/Redo buttons
-		const undoBtn = nav.createEl("button", { text: "\u21A9" });
-		undoBtn.ariaLabel = "Undo";
-		if (!this.undoManager.canUndo()) undoBtn.addClass("weekflow-btn-disabled");
-		undoBtn.addEventListener("click", () => this.undo());
+		// Observe tool overflow
+		const toolsObserver = new ResizeObserver(() => {
+			let anyHidden = false;
+			for (const btn of toolBtns) {
+				if (this.isElementOverflowing(btn, tools)) {
+					anyHidden = true;
+					break;
+				}
+			}
+			overflowBtn.style.display = anyHidden ? "" : "none";
+		});
+		toolsObserver.observe(tools);
 
-		const redoBtn = nav.createEl("button", { text: "\u21AA" });
-		redoBtn.ariaLabel = "Redo";
-		if (!this.undoManager.canRedo()) redoBtn.addClass("weekflow-btn-disabled");
-		redoBtn.addEventListener("click", () => this.redo());
-
-		// Sort button
-		const sortBtn = nav.createEl("button");
-		setIcon(sortBtn, "arrow-up-narrow-wide");
-		sortBtn.ariaLabel = "Compact plan blocks";
-		sortBtn.addEventListener("click", () => this.sortBlocksCompact());
-
-		// Preset dropdown
-		const presetBtn = nav.createEl("button");
-		setIcon(presetBtn, "clock");
-		presetBtn.ariaLabel = "Presets";
-		presetBtn.addEventListener("click", (e) =>
-			this.showPresetMenu(e)
-		);
-
-		// Statistics button
-		const statsBtn = nav.createEl("button");
-		setIcon(statsBtn, "chart-bar");
-		statsBtn.ariaLabel = "Open statistics";
-		statsBtn.addEventListener("click", () => this.plugin.activateStatsView());
-
-		// Review toggle button
-		const reviewToggleBtn = nav.createEl("button");
-		reviewToggleBtn.addClass("weekflow-review-toggle-btn");
-		setIcon(reviewToggleBtn, "file-text");
-		reviewToggleBtn.ariaLabel = "Toggle review panel";
-		if (this.plugin.settings.reviewPanelOpen) reviewToggleBtn.addClass("active");
-		reviewToggleBtn.addEventListener("click", () => this.toggleReviewPanel());
-
-		// Category palette
+		// ── Row 2: Category palette (horizontally scrollable) ──
 		const palette = toolbar.createDiv({ cls: "weekflow-palette" });
 		for (const cat of this.plugin.settings.categories) {
 			const btn = palette.createEl("button", {
@@ -1202,6 +1214,10 @@ export class WeekFlowView extends ItemView {
 
 	togglePlanningPanel() {
 		this.togglePanel();
+	}
+
+	private isElementOverflowing(el: HTMLElement, container: HTMLElement): boolean {
+		return el.offsetLeft + el.offsetWidth > container.clientWidth;
 	}
 
 	private togglePanel() {

@@ -10,52 +10,85 @@
 /* Toolbar */
 .weekflow-toolbar {
 	display: flex;
-	align-items: center;
-	gap: 8px;
-	padding: 8px 12px;
+	flex-direction: column;
+	gap: 0;
+	padding: 0;
 	border-bottom: 1px solid var(--background-modifier-border);
 	flex-shrink: 0;
-	flex-wrap: wrap;
+}
+
+/* Row 1: nav + tools */
+.weekflow-toolbar-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 4px 8px;
+	gap: 4px;
 }
 
 .weekflow-toolbar-nav {
 	display: flex;
 	align-items: center;
-	gap: 4px;
+	gap: 2px;
+	flex-shrink: 0;
 }
 
-.weekflow-toolbar-nav button {
+.weekflow-toolbar-tools {
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	flex-shrink: 1;
+	overflow: hidden;
+	position: relative;
+}
+
+.weekflow-toolbar-nav button,
+.weekflow-toolbar-tools button {
 	background: none;
 	border: none;
 	cursor: pointer;
-	padding: 4px 8px;
+	padding: 4px 6px;
 	border-radius: 4px;
 	color: var(--text-normal);
+	flex-shrink: 0;
 }
 
-.weekflow-toolbar-nav button:hover {
+.weekflow-toolbar-nav button:hover,
+.weekflow-toolbar-tools button:hover {
 	background: none;
+}
+
+.weekflow-overflow-btn {
+	background: none;
+	border: none;
+	cursor: pointer;
+	padding: 4px 6px;
+	border-radius: 4px;
+	color: var(--text-normal);
+	flex-shrink: 0;
 }
 
 .weekflow-week-label {
 	font-weight: 600;
-	font-size: 14px;
-	min-width: 120px;
+	font-size: 13px;
 	text-align: center;
+	white-space: nowrap;
 }
 
-.weekflow-day-label {
-	font-size: 12px;
-	color: var(--text-muted);
-	min-width: 80px;
-	text-align: center;
-}
-
-/* Category Palette */
+/* Category Palette — Row 2, horizontally scrollable */
 .weekflow-palette {
 	display: flex;
 	gap: 4px;
-	padding: 4px 0;
+	padding: 4px 8px;
+	overflow-x: auto;
+	overflow-y: hidden;
+	flex-shrink: 0;
+	border-top: 1px solid var(--background-modifier-border);
+	scrollbar-width: none; /* Firefox */
+}
+
+.weekflow-palette::-webkit-scrollbar {
+	display: none; /* Chrome/Safari */
 }
 
 .weekflow-palette-btn {
@@ -67,6 +100,8 @@
 	border: 2px solid transparent;
 	cursor: pointer;
 	font-size: 11px;
+	flex-shrink: 0;
+	white-space: nowrap;
 	background: var(--background-secondary);
 	color: var(--text-normal);
 }
@@ -186,12 +221,14 @@
 }
 
 /* Panel toggle button active state */
-.weekflow-toolbar-nav button.active {
+.weekflow-toolbar-nav button.active,
+.weekflow-toolbar-tools button.active {
 	background: var(--interactive-accent);
 	color: var(--text-on-accent);
 }
 
-.weekflow-toolbar-nav button.active svg {
+.weekflow-toolbar-nav button.active svg,
+.weekflow-toolbar-tools button.active svg {
 	color: var(--text-on-accent);
 }
 
@@ -1044,7 +1081,9 @@
 
 /* ── @media (pointer: fine) — mouse/trackpad hover effects ── */
 @media (pointer: fine) {
-	.weekflow-toolbar-nav button:hover {
+	.weekflow-toolbar-nav button:hover,
+	.weekflow-toolbar-tools button:hover,
+	.weekflow-overflow-btn:hover {
 		background: var(--background-modifier-hover);
 	}
 
@@ -1140,9 +1179,10 @@
 	align-items: center;
 }
 
-.is-mobile .weekflow-toolbar-nav button {
-	min-width: 44px;
-	min-height: 44px;
+.is-mobile .weekflow-toolbar-nav button,
+.is-mobile .weekflow-toolbar-tools button {
+	min-width: 36px;
+	min-height: 36px;
 }
 
 .is-mobile .weekflow-overlap-handle {
