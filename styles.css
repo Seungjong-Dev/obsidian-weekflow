@@ -701,8 +701,7 @@
 	border: 1.5px dashed;
 	border-radius: 2px;
 	opacity: 0.6;
-	pointer-events: auto;
-	cursor: default;
+	pointer-events: none;
 	overflow: hidden;
 	background-image: repeating-linear-gradient(
 		-45deg,

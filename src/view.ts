@@ -625,10 +625,14 @@ export class WeekFlowView extends ItemView {
 			this.plugin.settings.categories,
 			async (result) => {
 				const checkbox = effectiveMode === "actual" ? "actual" : "plan";
+				const finalPlanTime = {
+					start: result.startMinutes,
+					end: result.endMinutes,
+				};
 				const newItem: TimelineItem = {
 					id: generateItemId(),
 					checkbox: checkbox,
-					planTime,
+					planTime: finalPlanTime,
 					content: result.content,
 					tags: result.tag ? [result.tag] : [],
 					rawSuffix: "",
