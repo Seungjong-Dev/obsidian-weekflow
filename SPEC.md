@@ -267,7 +267,7 @@ WeekFlow 뷰 사이드에 플래닝 패널을 제공한다. 시간 배정이 필
 │  ☐ 02/03 09:00-11:00 API 설계 #work      │
 │  ☐ 02/04 14:00-16:00 문서 작성 #work      │
 │                                           │
-│ 📋 인박스 (설정된 노트)                    │
+│ 📋 인박스 (설정된 소스)                     │
 │  ☐ 코드 리뷰                             │
 │                                           │
 │ 📁 중기부 RnD 사업 지원서 작성 지원         │
@@ -282,7 +282,7 @@ WeekFlow 뷰 사이드에 플래닝 패널을 제공한다. 시간 배정이 필
 **패널 구성 (위에서 아래 순서):**
 
 1. **⚠️ 미완료 (Overdue):** 오늘 이전 날짜의 데일리 노트에서 `- [ ]` 상태로 남아있는 타임라인 항목. 날짜와 원래 계획 시간을 함께 표시. 탐색 범위는 현재 보고 있는 주의 시작일부터 오늘 전날까지.
-2. **📋 인박스:** 설정에 지정된 인박스 노트의 지정된 헤딩 아래 미완료 태스크. 노트 파일명은 moment.js 패턴을 지원하여 주간/월간 등 다양한 주기로 사용 가능.
+2. **📋 인박스:** 설정에 등록된 인박스 소스(노트 또는 폴더)에서 미완료 체크박스(`- [ ]`)를 수집. 소스가 폴더이면 하위 `.md` 파일 전체를 스캔. 헤딩 구분 없이 노트 내 모든 미완료 체크박스를 대상으로 한다. 소스는 정적 경로이며 개수 제한 없음.
 3. **📁 프로젝트별 태스크:** 설정에 지정된 조건에 맞는 활성 프로젝트의 태스크 헤딩에서 미완료 태스크.
 
 **동작:**
@@ -293,8 +293,8 @@ WeekFlow 뷰 사이드에 플래닝 패널을 제공한다. 시간 배정이 필
   2. 새 날짜의 데일리 노트에 `- [ ]`로 타임라인 항목 생성
 - 원본 날짜가 **오늘 또는 미래**인 경우에는 단순 이동 (원본 삭제 → 새 날짜에 생성)
 - 타임테이블에서 Planning Panel로 되돌리면 **인박스로 반환:**
-  - 원본이 과거 날짜 → `- [>]` deferred 처리 후 인박스 노트의 지정된 헤딩에 태스크 추가
-  - 원본이 오늘/미래 → 원본 삭제 후 인박스 노트의 지정된 헤딩에 태스크 추가
+  - 원본이 과거 날짜 → `- [>]` deferred 처리 후 인박스 소스(첫 번째 소스)에 태스크 추가
+  - 원본이 오늘/미래 → 원본 삭제 후 인박스 소스(첫 번째 소스)에 태스크 추가
 
 ```markdown
 <!-- 과거 날짜에서 옮기는 경우: deferred 기록이 남음 -->
@@ -346,8 +346,7 @@ WeekFlow 뷰 사이드에 플래닝 패널을 제공한다. 시간 배정이 필
 | Day End Hour | 테이블 종료 시간 | `24` (00:00) | 1 |
 | Week Start Day | 주 시작 요일 | `Monday` | 1 |
 | Categories | 카테고리 목록 관리 | 기본 2개 (Work, Personal) | 1 |
-| Inbox Note Path | 인박스 노트 경로 패턴 (moment.js) | `YYYY-[W]ww` | 3 |
-| Inbox Heading | 인박스 태스크가 위치할 헤딩 | `### To Do` | 3 |
+| Inbox Sources | 인박스 소스 목록 (노트 또는 폴더 경로, 정적) | `["Inbox.md"]` | 3 |
 | Default Block Duration | 패널에서 드래그 시 기본 블록 길이 (분) | `60` | 3 |
 | Planning Panel Open | 패널 열림/닫힘 상태 유지 | `true` | 3 |
 | Project Tag | 프로젝트 노트를 식별하는 태그 | `type/project` | 3 |
@@ -369,8 +368,10 @@ WeekFlow 뷰 사이드에 플래닝 패널을 제공한다. 시간 배정이 필
 Daily Note Path:  [5. Periodic Notes/YYYY/MM/YYYY-MM-DD  ]
   📄 Preview: 5. Periodic Notes/2026/02/2026-02-06.md
 
-Inbox Note Path:  [5. Periodic Notes/YYYY/YYYY-[W]ww     ]
-  📄 Preview: 5. Periodic Notes/2026/2026-W06.md
+Inbox Sources:
+  [Inbox.md                              ] [Note] [✕]
+  [Projects/Active                       ] [Folder] [✕]
+                                           [+ Add Source]
 ```
 
 ## UI Components
@@ -701,11 +702,11 @@ Narrow 모드에서 사이드 패널 대신 하단 시트로 표시:
 **목표:** 할 일을 모아보고, 시간에 배치하고, 미완료 항목을 관리하는 플래닝 사이클.
 
 - Planning Panel (사이드바, 토글 가능)
-- 인박스 연동: 설정된 인박스 노트에서 미완료 태스크 읽기
-- 설정: Inbox Note Path, Inbox Heading, Default Block Duration
+- 인박스 연동: 등록된 인박스 소스(노트/폴더)에서 미완료 체크박스 수집 (헤딩 무관, 노트 전체 스캔)
+- 설정: Inbox Sources (정적 경로 목록, 노트 또는 폴더), Default Block Duration
 - 미완료(Overdue) 항목 수집 및 표시
 - Deferred 처리: 과거 날짜 이동 시 `- [>]`, 오늘/미래는 단순 이동
-- 인박스로 되돌리기 기능
+- 인박스로 되돌리기 기능 (첫 번째 소스에 기록)
 - 프로젝트 태스크 연동: `metadataCache`로 활성 프로젝트 탐색, 미완료 태스크 패널 표시
 - 설정: Project Tag, Project Status Field, Project Active Statuses, Project Tasks Heading
 - 드래그로 타임라인에 배치 시 텍스트 복사 + `[[프로젝트#^block-id]]` 링크 (block ID 자동 부여)

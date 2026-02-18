@@ -183,6 +183,61 @@ npm run dev          # 개발 모드 (hot reload)
 
 현재 상태: 빌드 통과 (clean).
 
+## 다음 작업: Inbox 소스 리디자인
+
+### 배경 (문제)
+
+현재 inbox는 `inboxNotePath` 설정에 moment.js 동적 경로를 지원한다 (기본값: `YYYY-[W]ww`).
+동적 경로를 사용하면 주가 바뀔 때 이전 inbox 파일의 미완료 항목이 UI에서 사라져,
+inbox가 "미처리 대기열"이 아니라 "다시 볼 수 없는 무덤"이 되는 문제가 있다.
+
+### 결정사항
+
+- moment.js 동적 경로 지원을 **제거**하고, 정적 소스 목록으로 교체
+- 단일 `inboxNotePath` + `inboxHeading` → **`inboxSources: {path: string}[]`** 배열로 변경
+- 각 소스는 **노트 경로** 또는 **폴더 경로** — 폴더면 하위 `.md` 파일 전체 스캔
+- 헤딩 필터 **없음** — 노트 내 모든 미완료 체크박스(`- [ ]`)를 수집
+- 소스 개수 제한 없음
+
+### 변경 범위
+
+#### 1. `src/types.ts`
+- `WeekFlowSettings`에서 `inboxNotePath: string` + `inboxHeading: string` 제거
+- `inboxSources: string[]` 추가 (각 항목은 노트 또는 폴더 경로)
+- `DEFAULT_SETTINGS`에서 기본값 설정 (예: `["Inbox.md"]`)
+- `defaultBlockDuration`은 유지
+
+#### 2. `src/daily-note.ts`
+- `resolveInboxNotePath()` 제거 (moment 의존 제거)
+- `getInboxItems()` 변경: 소스 배열 순회, 각 소스가 파일이면 직접 읽기, 폴더면 하위 파일 순회
+- `addToInbox()` 변경: 첫 번째 소스(또는 원본 소스)에 쓰기
+- `parseCheckboxItems()` 변경: 헤딩 파라미터 제거, 노트 전체에서 미완료 체크박스 수집
+
+#### 3. `src/parser.ts`
+- `parseCheckboxItems(content, heading)` → 헤딩 없이 전체 파싱하는 모드 추가
+- 또는 별도 함수 `parseAllCheckboxItems(content)` 신규 작성
+
+#### 4. `src/settings.ts`
+- 기존 Inbox Note Path / Inbox Heading 설정 제거
+- Inbox Sources 리스트 UI: 경로 입력 + 추가/삭제 버튼
+- Note/Folder 자동 판별 (vault에서 확인)
+
+#### 5. `src/view.ts`
+- `resolveInboxNotePath()` 호출부 → 새 소스 목록 기반으로 교체
+- `weekNotePaths`에 inbox 소스 전체 등록 (파일 변경 감지용)
+- `collectInboxPanelItems()`에서 소스 정보(어느 파일에서 왔는지) 보존
+- `removeFromInbox()` — 원본 파일 경로 + 라인 번호로 제거
+- `onBlockReturnToInbox()` — 쓰기 대상 결정 (첫 번째 소스 또는 원본 소스)
+
+#### 6. `src/planning-panel.ts`
+- 패널 아이템에 소스 파일 경로 표시 (선택적, 소스가 여러 개일 때 구분용)
+
+### 미결정 사항
+
+- **inbox로 되돌릴 때 쓰기 대상**: 첫 번째 소스에 쓸지, 원래 소스를 기억해서 돌려줄지
+- **폴더 스캔 깊이**: 재귀 스캔(하위 폴더 포함) vs 1단계만
+- **마이그레이션**: 기존 `inboxNotePath`/`inboxHeading` 설정을 `inboxSources`로 자동 변환할지
+
 ## 알려진 이슈 / 개선 여지
 
 - ~~`getCellFromPoint()` 수학 계산에서 스크롤 위치 반영이 정확한지 실사용 검증 필요~~ — 해결: `getBoundingClientRect()`가 스크롤을 이미 반영하므로 `scrollLeft/Top` 이중 가산 제거
