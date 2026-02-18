@@ -792,7 +792,12 @@ export class GridRenderer {
 
 			// ── Block pointerdown: click vs drag detection ──
 			block.addEventListener("pointerdown", (e) => {
-				e.preventDefault();
+				if (e.pointerType !== "touch") {
+					// Mouse/pen: prevent default immediately (no scroll conflict)
+					e.preventDefault();
+				}
+				// Touch: do NOT preventDefault — allow browser scroll (pan-y).
+				// Longpress timer will capture the pointer if user holds still.
 				e.stopPropagation();
 
 				this.blockDragStartX = e.clientX;
@@ -804,6 +809,7 @@ export class GridRenderer {
 
 				const delay = isTouchDevice() ? TOUCH_DRAG_DELAY_MS : DRAG_DELAY_MS;
 				const targetBlock = block;
+				const pointerId = e.pointerId;
 
 				// Start a timer for drag threshold
 				this.blockDragTimer = setTimeout(() => {
@@ -816,6 +822,9 @@ export class GridRenderer {
 						lastDay: -1,
 						lastStart: -1,
 					};
+
+					// Capture pointer to override touch-action and prevent scroll
+					try { targetBlock.setPointerCapture(pointerId); } catch { /* pointer may be gone */ }
 
 					// Longpress visual feedback for touch
 					if (isTouchDevice()) {

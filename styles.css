@@ -1077,7 +1077,7 @@
 }
 
 .weekflow-block {
-	touch-action: none;
+	touch-action: pan-y;
 }
 
 .weekflow-resize-handle {
@@ -1256,6 +1256,20 @@
 /* ── Narrow mode body needs relative positioning for bottom sheet ── */
 .weekflow-layout-narrow .weekflow-body {
 	position: relative;
+}
+
+/* Narrow mode: pad grid bottom so collapsed bottom sheet (40px) doesn't cover last rows */
+.weekflow-layout-narrow .weekflow-grid-wrapper {
+	padding-bottom: 48px;
+}
+
+/* Mobile: pad bottom for Obsidian's floating navigation bar */
+.is-mobile .weekflow-container {
+	padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.is-mobile .weekflow-grid-wrapper {
+	padding-bottom: 48px;
 }
 
 /* ── Narrow mode: hide side panel toggle since we use bottom sheet ── */
