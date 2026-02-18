@@ -211,7 +211,16 @@ export class WeekFlowView extends ItemView {
 		this.inboxItems = inbox;
 		this.reviewData = reviewData;
 
-		// Load project data (non-blocking — failure should not prevent rendering)
+		this.renderView();
+
+		// Load project data async — don't block view rendering on file I/O
+		this.loadProjectDataAsync(settings);
+
+		// Load calendar events async — don't block view rendering on network I/O
+		this.loadCalendarEventsAsync(settings);
+	}
+
+	private async loadProjectDataAsync(settings: WeekFlowSettings) {
 		try {
 			const projects = getActiveProjects(this.app, settings);
 			const projectTaskResults = await Promise.all(
@@ -228,10 +237,11 @@ export class WeekFlowView extends ItemView {
 			this.projectData = [];
 		}
 
-		this.renderView();
-
-		// Load calendar events async — don't block view rendering on network I/O
-		this.loadCalendarEventsAsync(settings);
+		// Patch planning panel with project sections
+		if (this.planningPanel) {
+			this.buildPanelSections();
+			this.planningPanel.render(this.panelSections);
+		}
 	}
 
 	private async loadCalendarEventsAsync(settings: WeekFlowSettings) {
@@ -267,6 +277,11 @@ export class WeekFlowView extends ItemView {
 	}
 
 	private renderView() {
+		// Clean up old grid renderer listeners before rebuilding
+		if (this.gridRenderer) {
+			this.gridRenderer.destroy();
+		}
+
 		const container = this.contentEl;
 		container.empty();
 		container.addClass("weekflow-container");
@@ -727,6 +742,83 @@ export class WeekFlowView extends ItemView {
 
 	}
 
+	/** Update toolbar navigation labels and today hints without full rebuild */
+	private updateToolbarNav(): void {
+		const nav = this.contentEl.querySelector(".weekflow-toolbar-nav");
+		if (!nav) return;
+
+		// Update week label
+		const weekLabel = nav.querySelector(".weekflow-week-label") as HTMLElement | null;
+		if (weekLabel) {
+			if (this.currentVisibleDays < 7) {
+				const weekNum = this.dates[0].format("[W]ww");
+				const startDate = this.dates[this.currentDayOffset];
+				const endDate = this.dates[this.currentDayOffset + this.currentVisibleDays - 1];
+				weekLabel.setText(`${weekNum} \u00B7 ${startDate.format("MM/DD")}\u2013${endDate.format("MM/DD")}`);
+			} else {
+				weekLabel.setText(this.dates[0].format("[W]ww, YYYY"));
+			}
+		}
+
+		// Update today hints on ◀/▶ and Today buttons
+		const today = window.moment().startOf("day");
+		const visStart = this.dates[this.currentDayOffset];
+		const visEnd = this.dates[this.currentDayOffset + this.currentVisibleDays - 1];
+		const todayVisible = today.isBetween(visStart, visEnd, "day", "[]");
+		const todayBefore = today.isBefore(visStart, "day");
+		const todayAfter = today.isAfter(visEnd, "day");
+
+		const buttons = nav.querySelectorAll("button");
+		// buttons order: panelToggle, prev(◀), next(▶), Today
+		if (buttons.length >= 4) {
+			buttons[1].removeClass("weekflow-nav-today-hint");
+			buttons[2].removeClass("weekflow-nav-today-hint");
+			buttons[3].removeClass("weekflow-nav-today-hint");
+			if (todayBefore) buttons[1].addClass("weekflow-nav-today-hint");
+			if (todayAfter) buttons[2].addClass("weekflow-nav-today-hint");
+			if (!todayVisible) buttons[3].addClass("weekflow-nav-today-hint");
+		}
+	}
+
+	/** Update review panel columns for new dayOffset without full rebuild */
+	private updateReviewPanel(): void {
+		const panel = this.contentEl.querySelector(".weekflow-review-panel");
+		if (!panel || panel.hasClass("collapsed")) return;
+
+		const content = panel.querySelector(".weekflow-review-content") as HTMLElement | null;
+		if (!content) return;
+
+		// Rebuild review content for new offset
+		content.empty();
+		content.style.gridTemplateColumns = `60px repeat(${this.currentVisibleDays}, 1fr)`;
+
+		const spacer = content.createDiv({ cls: "weekflow-review-spacer" });
+		spacer.createSpan({ text: "Review", cls: "weekflow-review-spacer-label" });
+
+		for (let i = 0; i < this.currentVisibleDays; i++) {
+			const date = this.dates[this.currentDayOffset + i];
+			const dateKey = date.format("YYYY-MM-DD");
+			const isToday = date.isSame(window.moment(), "day");
+
+			const cell = content.createDiv({ cls: "weekflow-review-cell" });
+			if (isToday) cell.addClass("weekflow-review-cell-today");
+
+			const textarea = cell.createEl("textarea", {
+				cls: "weekflow-review-textarea",
+			});
+			textarea.value = this.reviewData.get(dateKey) || "";
+			textarea.placeholder = "Write review...";
+
+			textarea.addEventListener("input", () => {
+				this.debouncedSaveReview(dateKey, textarea.value);
+			});
+
+			textarea.addEventListener("blur", () => {
+				this.saveReviewImmediate(dateKey, textarea.value);
+			});
+		}
+	}
+
 	goToThisWeek(): void {
 		this.currentDate = window.moment();
 		this.refresh();
@@ -760,7 +852,7 @@ export class WeekFlowView extends ItemView {
 			const clamped = Math.max(0, Math.min(newOffset, maxOffset));
 			if (clamped !== this.currentDayOffset) {
 				this.currentDayOffset = clamped;
-				this.renderView();
+				this.updatePage();
 			} else {
 				// Already at edge → cross week boundary
 				// Going backward: land on last page; forward: land on first page
@@ -768,6 +860,19 @@ export class WeekFlowView extends ItemView {
 				this.navigateWeek(delta);
 			}
 		}
+	}
+
+	/** Lightweight page update — re-renders grid + toolbar + review without reloading data */
+	private updatePage(): void {
+		if (this.gridRenderer) {
+			this.gridRenderer.destroy();
+			this.gridRenderer.setVisibleRange(this.currentVisibleDays, this.currentDayOffset);
+			this.gridRenderer.render();
+		}
+		// Update toolbar (week label, today hints)
+		this.updateToolbarNav();
+		// Update review panel columns
+		this.updateReviewPanel();
 	}
 
 	// ── Save helper with self-writing guard ──
