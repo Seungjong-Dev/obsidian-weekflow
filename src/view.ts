@@ -1010,7 +1010,8 @@ export class WeekFlowView extends ItemView {
 
 				this.gridRenderer?.clearSelection();
 				await this.refresh();
-			}
+			},
+			this.selectedCategory
 		).open();
 	}
 

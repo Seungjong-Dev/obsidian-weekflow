@@ -15,19 +15,22 @@ export class BlockModal extends Modal {
 	private planTime: TimeRange;
 	private mode: "plan" | "actual";
 	private categories: Category[];
+	private defaultTag: string;
 
 	constructor(
 		app: App,
 		planTime: TimeRange,
 		mode: "plan" | "actual",
 		categories: Category[],
-		onSubmit: (result: BlockModalResult) => void
+		onSubmit: (result: BlockModalResult) => void,
+		defaultTag?: string
 	) {
 		super(app);
 		this.planTime = planTime;
 		this.mode = mode;
 		this.categories = categories;
 		this.onSubmit = onSubmit;
+		this.defaultTag = defaultTag || (categories.length > 0 ? categories[0].tag : "");
 	}
 
 	onOpen() {
@@ -93,7 +96,7 @@ export class BlockModal extends Modal {
 			});
 
 		// Category selection
-		let selectedTag = this.categories.length > 0 ? this.categories[0].tag : "";
+		let selectedTag = this.defaultTag;
 		const catContainer = contentEl.createDiv({ cls: "weekflow-modal-categories" });
 		catContainer.style.display = "flex";
 		catContainer.style.gap = "6px";
@@ -101,7 +104,7 @@ export class BlockModal extends Modal {
 		catContainer.style.marginBottom = "16px";
 
 		const catButtons: HTMLElement[] = [];
-		this.categories.forEach((cat, i) => {
+		this.categories.forEach((cat) => {
 			const btn = catContainer.createEl("button", {
 				cls: "weekflow-palette-btn",
 			});
@@ -109,7 +112,7 @@ export class BlockModal extends Modal {
 			dot.style.backgroundColor = cat.color;
 			btn.createSpan({ text: cat.label || cat.tag });
 
-			if (i === 0) btn.addClass("active");
+			if (cat.tag === this.defaultTag) btn.addClass("active");
 
 			btn.addEventListener("click", () => {
 				catButtons.forEach((b) => b.removeClass("active"));

@@ -338,7 +338,8 @@
 	border-left: 1px solid var(--background-modifier-border);
 }
 
-.weekflow-cell.weekflow-cell-selected {
+.weekflow-cell.weekflow-cell-selected,
+.weekflow-cell.weekflow-cell-selected:hover {
 	background: var(--interactive-accent-hover);
 	opacity: 0.3;
 }
