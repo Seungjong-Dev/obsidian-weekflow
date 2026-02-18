@@ -719,6 +719,9 @@ export class WeekFlowView extends ItemView {
 
 		// ── Row 2: Category palette (horizontally scrollable) ──
 		const palette = toolbar.createDiv({ cls: "weekflow-palette" });
+		if (!this.selectedCategory && this.plugin.settings.categories.length > 0) {
+			this.selectedCategory = this.plugin.settings.categories[0].tag;
+		}
 		for (const cat of this.plugin.settings.categories) {
 			const btn = palette.createEl("button", {
 				cls: "weekflow-palette-btn",
