@@ -67,9 +67,10 @@ export class EditBlockModal extends Modal {
 			const actStartInput = actTimeContainer.createEl("input", {
 				type: "time",
 				value: actualStartValue,
+				attr: { step: "300" },
 			});
 			actStartInput.style.padding = "4px";
-			actStartInput.addEventListener("change", () => {
+			actStartInput.addEventListener("input", () => {
 				actualStartValue = actStartInput.value;
 			});
 
@@ -78,9 +79,10 @@ export class EditBlockModal extends Modal {
 			const actEndInput = actTimeContainer.createEl("input", {
 				type: "time",
 				value: actualEndValue,
+				attr: { step: "300" },
 			});
 			actEndInput.style.padding = "4px";
-			actEndInput.addEventListener("change", () => {
+			actEndInput.addEventListener("input", () => {
 				actualEndValue = actEndInput.value;
 			});
 		} else {
@@ -96,9 +98,10 @@ export class EditBlockModal extends Modal {
 			const startInput = timeContainer.createEl("input", {
 				type: "time",
 				value: startValue,
+				attr: { step: "300" },
 			});
 			startInput.style.padding = "4px";
-			startInput.addEventListener("change", () => {
+			startInput.addEventListener("input", () => {
 				startValue = startInput.value;
 			});
 
@@ -107,9 +110,10 @@ export class EditBlockModal extends Modal {
 			const endInput = timeContainer.createEl("input", {
 				type: "time",
 				value: endValue,
+				attr: { step: "300" },
 			});
 			endInput.style.padding = "4px";
-			endInput.addEventListener("change", () => {
+			endInput.addEventListener("input", () => {
 				endValue = endInput.value;
 			});
 		}
