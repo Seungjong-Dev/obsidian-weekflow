@@ -378,6 +378,19 @@ export class GridRenderer {
 			}
 		}
 
+		// Reset drag state — prevents stale cell-select/block-drag/resize from
+		// persisting after pointercancel (e.g. Apple Pencil lift, palm rejection)
+		if (this.dragMode !== "none") {
+			this.dragMode = "none";
+			this.clearSelection();
+		}
+
+		// Clear pending block drag timer
+		if (this.blockDragTimer) {
+			clearTimeout(this.blockDragTimer);
+			this.blockDragTimer = null;
+		}
+
 		if (this.longpressActive && this.longpressEl) {
 			this.longpressEl.removeClass("weekflow-longpress-active");
 			this.longpressActive = false;
