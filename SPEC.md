@@ -570,6 +570,7 @@ function hapticFeedback(): void;
 - 리사이즈 핸들에 `setPointerCapture()`를 적용하여 요소 밖으로 드래그해도 이벤트 유지
 - 터치 디바이스에서 블록 드래그는 롱프레스(300ms) 후 시작, `weekflow-longpress-active` 클래스로 scale+shadow 시각 피드백 + 햅틱 진동
 - 데스크톱 블록 드래그는 150ms 딜레이 후 시작 (기존과 동일)
+- 셀 선택 드래그는 `onGlobalPointerMove`에서 `cell-select` 모드를 처리하여 터치 드래그 시에도 다중 셀 선택이 동작 (`pointerenter`는 터치에서 드래그 중 발생하지 않으므로 `getCellFromPoint()`로 위치 계산)
 
 ### 스와이프 네비게이션
 
@@ -610,7 +611,7 @@ Narrow 모드에서 사이드 패널 대신 하단 시트로 표시:
 
 #### touch-action: none
 
-드래그 가능한 모든 요소(`.weekflow-cell`, `.weekflow-block`, `.weekflow-resize-handle`, `.weekflow-panel-item`, `.weekflow-review-resize-handle`, `.weekflow-bottom-sheet-handle`)에 `touch-action: none` 적용하여 브라우저 기본 제스처(스크롤, 줌) 방지.
+그리드 컨테이너(`.weekflow-grid`)와 드래그 가능한 모든 요소(`.weekflow-cell`, `.weekflow-block`, `.weekflow-resize-handle`, `.weekflow-panel-item`, `.weekflow-review-resize-handle`, `.weekflow-bottom-sheet-handle`)에 `touch-action: none` 적용하여 브라우저 기본 제스처(스크롤, 줌) 방지. 그리드 컨테이너에도 적용하여 셀 사이 갭에서 Obsidian 사이드바 스와이프가 동작하지 않도록 차단.
 
 #### 터치 타겟 44px (`.is-mobile`)
 
