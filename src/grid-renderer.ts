@@ -259,7 +259,17 @@ export class GridRenderer {
 	// ── Global Pointer Handlers ──
 
 	private onGlobalPointerMove(e: PointerEvent) {
-		if (this.dragMode === "block-drag" && this.blockDragState) {
+		if (this.dragMode === "cell-select" && this.selectionRange) {
+			const cell = this.getCellFromPoint(e.clientX, e.clientY);
+			if (cell && cell.dayIndex === this.selectionRange.dayIndex) {
+				const lo = Math.min(this.dragAnchorMinutes, cell.minutes);
+				const hi = Math.max(this.dragAnchorMinutes, cell.minutes) + 10;
+				this.selectionRange.startMinutes = lo;
+				this.selectionRange.endMinutes = hi;
+				this.updateSelectionHighlight();
+				this.callbacks.onCellDragMove(cell.dayIndex, cell.minutes);
+			}
+		} else if (this.dragMode === "block-drag" && this.blockDragState) {
 			this.onBlockDragMove(e);
 		} else if (this.dragMode === "resize" && this.resizeState) {
 			this.onResizeDragMove(e);
