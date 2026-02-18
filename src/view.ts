@@ -326,8 +326,8 @@ export class WeekFlowView extends ItemView {
 					this.onBlockRightClick(dayIndex, item, event),
 				onHeaderDblClick: (dayIndex) =>
 					this.openDailyNote(dayIndex),
-				onSwipeLeft: () => this.onSwipe("left"),
-				onSwipeRight: () => this.onSwipe("right"),
+				onSwipeLeft: () => this.onSwipeGesture("left"),
+				onSwipeRight: () => this.onSwipeGesture("right"),
 			}
 		);
 		this.gridRenderer.setVisibleRange(this.currentVisibleDays, this.currentDayOffset);
@@ -599,6 +599,23 @@ export class WeekFlowView extends ItemView {
 		const nextBtn = nav.createEl("button", { text: "\u25B6" });
 		nextBtn.addEventListener("click", () => this.navigateWeek(1));
 
+		// Day navigation buttons (visible only in 3-day / 1-day view)
+		if (this.currentVisibleDays < 7) {
+			const dayNav = nav.createDiv({ cls: "weekflow-toolbar-nav weekflow-day-nav" });
+			const prevDayBtn = dayNav.createEl("button", { text: "\u25C2" });
+			prevDayBtn.ariaLabel = "Previous days";
+			prevDayBtn.addEventListener("click", () => this.onSwipe("right"));
+
+			const dayLabel = dayNav.createSpan({ cls: "weekflow-day-label" });
+			const startDate = this.dates[this.currentDayOffset];
+			const endDate = this.dates[this.currentDayOffset + this.currentVisibleDays - 1];
+			dayLabel.setText(`${startDate.format("MM/DD")}-${endDate.format("MM/DD")}`);
+
+			const nextDayBtn = dayNav.createEl("button", { text: "\u25B8" });
+			nextDayBtn.ariaLabel = "Next days";
+			nextDayBtn.addEventListener("click", () => this.onSwipe("left"));
+		}
+
 		const todayBtn = nav.createEl("button", { text: "Today" });
 		todayBtn.addEventListener("click", () => {
 			this.currentDate = window.moment();
@@ -688,10 +705,13 @@ export class WeekFlowView extends ItemView {
 		await this.refresh();
 	}
 
-	private onSwipe(direction: "left" | "right"): void {
-		// On wide+desktop, swipe is disabled (would conflict with mouse drag)
+	private onSwipeGesture(direction: "left" | "right"): void {
+		// On wide+desktop, gesture swipe is disabled (would conflict with mouse drag)
 		if (this.currentLayoutTier === "wide" && !isTouchDevice()) return;
+		this.onSwipe(direction);
+	}
 
+	private onSwipe(direction: "left" | "right"): void {
 		const delta = direction === "left" ? 1 : -1;
 
 		if (this.currentVisibleDays >= 7) {
@@ -699,12 +719,14 @@ export class WeekFlowView extends ItemView {
 			this.navigateWeek(delta);
 		} else {
 			// Medium/Narrow: shift dayOffset within the week
+			const maxOffset = 7 - this.currentVisibleDays;
 			const newOffset = this.currentDayOffset + delta * this.currentVisibleDays;
-			if (newOffset >= 0 && newOffset + this.currentVisibleDays <= 7) {
-				this.currentDayOffset = newOffset;
+			const clamped = Math.max(0, Math.min(newOffset, maxOffset));
+			if (clamped !== this.currentDayOffset) {
+				this.currentDayOffset = clamped;
 				this.renderView();
 			} else {
-				// Cross week boundary
+				// Already at edge → cross week boundary
 				this.navigateWeek(delta);
 			}
 		}

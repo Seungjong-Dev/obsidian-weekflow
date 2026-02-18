@@ -96,6 +96,11 @@ export class GridRenderer {
 	private boundPointerUp: ((e: PointerEvent) => void) | null = null;
 	private boundPointerCancel: ((e: PointerEvent) => void) | null = null;
 
+	// Touch swipe lock: prevent Obsidian sidebar from opening during horizontal swipe
+	private touchStartX = 0;
+	private touchStartY = 0;
+	private touchSwipeLocked = false;
+
 	// Longpress state (touch drag)
 	private longpressActive = false;
 	private longpressEl: HTMLElement | null = null;
@@ -248,6 +253,26 @@ export class GridRenderer {
 			}
 		}
 
+		// Block Obsidian sidebar swipe: stop horizontal touch propagation on the grid
+		this.gridEl.addEventListener("touchstart", (e) => {
+			if (e.touches.length !== 1) return;
+			this.touchStartX = e.touches[0].clientX;
+			this.touchStartY = e.touches[0].clientY;
+			this.touchSwipeLocked = false;
+		}, { passive: true });
+
+		this.gridEl.addEventListener("touchmove", (e) => {
+			if (e.touches.length !== 1) return;
+			const dx = e.touches[0].clientX - this.touchStartX;
+			const dy = e.touches[0].clientY - this.touchStartY;
+			if (!this.touchSwipeLocked && Math.abs(dx) > 15 && Math.abs(dx) > Math.abs(dy)) {
+				this.touchSwipeLocked = true;
+			}
+			if (this.touchSwipeLocked) {
+				e.stopPropagation();
+			}
+		}, { passive: true });
+
 		// Global pointer handlers
 		this.boundPointerMove = (e: PointerEvent) => this.onGlobalPointerMove(e);
 		this.boundPointerUp = (e: PointerEvent) => this.onGlobalPointerUp(e);
@@ -333,8 +358,26 @@ export class GridRenderer {
 		}
 	}
 
-	private onGlobalPointerCancel(_e: PointerEvent) {
-		this.touchTapState = null;
+	private onGlobalPointerCancel(e: PointerEvent) {
+		// Check for swipe before discarding touch state
+		// (browser fires pointercancel during pan-y scroll, but horizontal swipe data is still valid)
+		if (this.touchTapState) {
+			const state = this.touchTapState;
+			this.touchTapState = null;
+
+			const dx = e.clientX - state.startX;
+			const dy = e.clientY - state.startY;
+			const dt = Date.now() - state.startTime;
+			const absDx = Math.abs(dx);
+			const absDy = Math.abs(dy);
+
+			if (absDx > 80 && absDx > absDy * 2 && dt < 300) {
+				this.clearSelection();
+				if (dx < 0 && this.callbacks.onSwipeLeft) this.callbacks.onSwipeLeft();
+				else if (dx > 0 && this.callbacks.onSwipeRight) this.callbacks.onSwipeRight();
+			}
+		}
+
 		if (this.longpressActive && this.longpressEl) {
 			this.longpressEl.removeClass("weekflow-longpress-active");
 			this.longpressActive = false;
