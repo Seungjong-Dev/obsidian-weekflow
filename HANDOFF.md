@@ -1,7 +1,7 @@
 # WeekFlow 작업 핸드오프
 
 > 작성일: 2026-02-18
-> 마지막 커밋: `52aabfe` fix: cross-week boundary lands on correct page in 3-day view
+> 마지막 커밋: `f845e3e` chore: reduce default categories to Work and Personal
 
 ## 프로젝트 개요
 
@@ -101,6 +101,10 @@ WeekFlow는 Obsidian 플러그인으로, 데일리 노트의 마크다운 체크
   - 오버플로우 메뉴: `ResizeObserver`로 넘치는 버튼 감지 → Obsidian `Menu`에 수집
   - Sort 버튼 제거, 모든 도구 버튼 `setIcon()` 사용
 - **CSS 터치 최적화**: `@media (pointer: fine)` hover 격리, `@media (pointer: coarse)` 상시 표시 토글/핸들, `.weekflow-grid { touch-action: pan-y; }` (세로 스크롤 허용, 셀은 상속), `.weekflow-block`/`.weekflow-resize-handle`은 `touch-action: none` 유지, 터치 타겟 36px (툴바)
+- **Apple Pencil 대응**: `pointercancel` 시 `dragMode` 리셋 (호버 고스트 선택 방지), `getCellFromPoint()` 스크롤 이중 가산 수정
+- **페이지 이동 최적화**: 같은 주 내 이동은 `updatePage()` (그리드+툴바+리뷰만 갱신), 프로젝트 데이터는 `loadProjectDataAsync()`로 비동기 로드, `renderView()` 전 `GridRenderer.destroy()` 호출 (리스너 누수 방지)
+- **카테고리 팔레트 → 모달 연동**: `selectedCategory`를 `BlockModal`에 `defaultTag`로 전달, 미선택 시 첫 번째 카테고리 자동 선택
+- **기본 카테고리**: Work, Personal 2개 (기존 5개에서 축소)
 - Review Panel 칼럼 수 visibleDays 연동
 - Statistics 뷰 좁은 화면 세로 배치
 
@@ -180,7 +184,7 @@ npm run dev          # 개발 모드 (hot reload)
 
 ## 알려진 이슈 / 개선 여지
 
-- `getCellFromPoint()` 수학 계산에서 스크롤 위치 반영이 정확한지 실사용 검증 필요
+- ~~`getCellFromPoint()` 수학 계산에서 스크롤 위치 반영이 정확한지 실사용 검증 필요~~ — 해결: `getBoundingClientRect()`가 스크롤을 이미 반영하므로 `scrollLeft/Top` 이중 가산 제거
 - 블록 드래그 시 150ms(데스크톱)/300ms(터치) 딜레이 + 5px 이동 임계값으로 클릭/드래그 구분 — 체감 조정 가능
 - Undo 시 `weekData` 메모리 상태와 파일 상태가 동기화되지만, 외부 수정이 끼어들면 undo가 꼬일 수 있음
 - 자정 넘김 분리는 주의 마지막 날(dayIndex=6)에서는 동작하지 않음 (다음 주로 넘어가는 케이스)

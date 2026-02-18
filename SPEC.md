@@ -345,7 +345,7 @@ WeekFlow 뷰 사이드에 플래닝 패널을 제공한다. 시간 배정이 필
 | Day Start Hour | 테이블 시작 시간 | `6` (06:00) | 1 |
 | Day End Hour | 테이블 종료 시간 | `24` (00:00) | 1 |
 | Week Start Day | 주 시작 요일 | `Monday` | 1 |
-| Categories | 카테고리 목록 관리 | 기본 5개 | 1 |
+| Categories | 카테고리 목록 관리 | 기본 2개 (Work, Personal) | 1 |
 | Inbox Note Path | 인박스 노트 경로 패턴 (moment.js) | `YYYY-[W]ww` | 3 |
 | Inbox Heading | 인박스 태스크가 위치할 헤딩 | `### To Do` | 3 |
 | Default Block Duration | 패널에서 드래그 시 기본 블록 길이 (분) | `60` | 3 |
@@ -389,8 +389,8 @@ Inbox Note Path:  [5. Periodic Notes/YYYY/YYYY-[W]ww     ]
 ### 2. Category Palette
 
 - 타임테이블 옆 또는 상단에 카테고리 팔레트 표시
-- 현재 선택된 카테고리를 하이라이트
-- 클릭으로 카테고리 전환
+- 현재 선택된 카테고리를 하이라이트 (미선택 시 첫 번째 카테고리 자동 선택)
+- 클릭으로 카테고리 전환 → 블록 생성 모달에 선택된 카테고리가 기본값으로 반영
 
 ### 3. Calendar Overlay (읽기 전용)
 
@@ -774,6 +774,11 @@ Narrow 모드에서 사이드 패널 대신 하단 시트로 표시:
 - `@media (pointer: fine)`: hover 효과를 마우스 전용으로 격리
 - `@media (pointer: coarse)`: 항상 표시 토글/리사이즈 핸들, 터치 타겟 보장
 - `.weekflow-grid`에 `touch-action: pan-y` (세로 스크롤 허용), 블록/핸들은 `touch-action: none`
+- `pointercancel` 시 `dragMode` 리셋 (Apple Pencil 리프트/팜 리젝션 대응)
+- `getCellFromPoint()`: `getBoundingClientRect()`가 스크롤 반영하므로 `scrollLeft/Top` 미가산
+- 같은 주 내 페이지 이동: `updatePage()`로 그리드+툴바+리뷰만 업데이트 (전체 재렌더 안 함)
+- 프로젝트 데이터 비동기 로딩: `loadProjectDataAsync()`로 뷰 렌더 후 백그라운드 로드 → 패널만 패치
+- `renderView()` 전 기존 `GridRenderer.destroy()` 호출 (글로벌 리스너 누수 방지)
 - Review Panel 칼럼 수 visibleDays 연동
 - Statistics 뷰 좁은 화면 세로 배치 (`@media max-width: 600px`)
 
