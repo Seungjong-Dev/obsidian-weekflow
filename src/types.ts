@@ -34,6 +34,24 @@ export interface TimeSlotPreset {
 	slots: PresetSlot[];
 }
 
+export interface CalendarSource {
+	id: string;
+	name: string;
+	url: string;
+	color: string;
+	enabled: boolean;
+}
+
+export interface CalendarEvent {
+	uid: string;
+	summary: string;
+	start: Date;
+	end: Date;
+	allDay: boolean;
+	sourceId: string;
+	color: string;
+}
+
 export interface WeekFlowSettings {
 	dailyNotePath: string;
 	dailyNoteTemplatePath: string;
@@ -61,6 +79,10 @@ export interface WeekFlowSettings {
 	reviewHeading: string;
 	reviewPanelOpen: boolean;
 	reviewPanelHeight: number; // px, 0 = auto
+
+	// Calendar
+	calendarSources: CalendarSource[];
+	calendarCacheDuration: number; // minutes
 }
 
 export const DEFAULT_SETTINGS: WeekFlowSettings = {
@@ -90,6 +112,8 @@ export const DEFAULT_SETTINGS: WeekFlowSettings = {
 	reviewHeading: "## Review",
 	reviewPanelOpen: true,
 	reviewPanelHeight: 160,
+	calendarSources: [],
+	calendarCacheDuration: 30,
 };
 
 export interface ParseWarning {

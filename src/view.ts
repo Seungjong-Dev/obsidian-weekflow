@@ -1,8 +1,9 @@
-import { ItemView, Menu, setIcon, type WorkspaceLeaf, type TAbstractFile, moment } from "obsidian";
+import { ItemView, Menu, Notice, setIcon, type WorkspaceLeaf, type TAbstractFile, moment } from "obsidian";
 type Moment = ReturnType<typeof moment>;
 import type WeekFlowPlugin from "./main";
 import { VIEW_TYPE_WEEKFLOW } from "./types";
-import type { PanelItem, ParseWarning, TimelineItem, WeekFlowSettings } from "./types";
+import type { CalendarEvent, PanelItem, ParseWarning, TimelineItem, WeekFlowSettings } from "./types";
+import { getCalendarEventsForWeek } from "./calendar";
 import { getWeekDates, getWeekNotePaths, loadWeekData, saveDailyNoteItems, resolveDailyNotePath, resolveInboxNotePath, getInboxItems, addToInbox, getActiveProjects, getProjectTasks, appendBlockIdToLine, completeProjectTask, loadWeekReviewData, saveDailyReviewContent } from "./daily-note";
 import type { ProjectInfo } from "./daily-note";
 import { GridRenderer } from "./grid-renderer";
@@ -35,6 +36,9 @@ export class WeekFlowView extends ItemView {
 	private panelSections: PanelSection[] = [];
 	private inboxItems: CheckboxItem[] = [];
 	private projectData: { project: ProjectInfo; tasks: CheckboxItem[] }[] = [];
+
+	// Calendar events
+	private calendarEvents: CalendarEvent[] = [];
 
 	// Review panel
 	private reviewData: Map<string, string> = new Map();
@@ -120,16 +124,30 @@ export class WeekFlowView extends ItemView {
 			this.weekNotePaths.push(inboxPath);
 		}
 
-		// Load week data, inbox, and review data
-		const [result, inbox, reviewData] = await Promise.all([
+		// Load week data, inbox, review data, and calendar events
+		const weekStart = this.dates[0].toDate();
+		const weekEnd = new Date(this.dates[6].toDate());
+		weekEnd.setDate(weekEnd.getDate() + 1); // end of last day
+
+		const [result, inbox, reviewData, calendarResult] = await Promise.all([
 			loadWeekData(this.app.vault, this.dates, settings),
 			getInboxItems(this.app.vault, settings),
 			loadWeekReviewData(this.app.vault, this.dates, settings),
+			getCalendarEventsForWeek(
+				settings.calendarSources, weekStart, weekEnd, settings.calendarCacheDuration
+			).catch(() => ({ events: [] as CalendarEvent[], errors: ["Calendar fetch failed"] })),
 		]);
 		this.weekData = result.weekData;
 		this.weekWarnings = result.warnings;
 		this.inboxItems = inbox;
 		this.reviewData = reviewData;
+		this.calendarEvents = calendarResult.events;
+
+		if (calendarResult.errors.length > 0) {
+			for (const err of calendarResult.errors) {
+				new Notice(`WeekFlow Calendar: ${err}`);
+			}
+		}
 
 		// Load project data (non-blocking — failure should not prevent rendering)
 		try {
@@ -212,6 +230,7 @@ export class WeekFlowView extends ItemView {
 					this.openDailyNote(dayIndex),
 			}
 		);
+		this.gridRenderer.setCalendarEvents(this.calendarEvents);
 		this.gridRenderer.render();
 
 		// Review panel (inside content area — aligns with grid columns)
@@ -503,6 +522,11 @@ export class WeekFlowView extends ItemView {
 			});
 		}
 
+	}
+
+	goToThisWeek(): void {
+		this.currentDate = window.moment();
+		this.refresh();
 	}
 
 	private async navigateWeek(delta: number) {

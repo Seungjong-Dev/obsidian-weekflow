@@ -1,6 +1,6 @@
 import { moment } from "obsidian";
 type Moment = ReturnType<typeof moment>;
-import type { Category, TimelineItem, WeekFlowSettings } from "./types";
+import type { CalendarEvent, Category, TimelineItem, WeekFlowSettings } from "./types";
 import { formatTime } from "./parser";
 
 export interface GridCallbacks {
@@ -74,6 +74,9 @@ export class GridRenderer {
 	// Resize state
 	private resizeState: ResizeState | null = null;
 	private resizeGhostEls: HTMLElement[] = [];
+
+	// Calendar events overlay
+	private calendarEvents: CalendarEvent[] = [];
 
 	// Bound handlers for cleanup
 	private boundMouseMove: ((e: MouseEvent) => void) | null = null;
@@ -200,6 +203,11 @@ export class GridRenderer {
 		document.addEventListener("mouseup", this.boundMouseUp);
 
 		this.renderBlocks();
+		this.renderCalendarOverlay();
+	}
+
+	setCalendarEvents(events: CalendarEvent[]): void {
+		this.calendarEvents = events;
 	}
 
 	destroy(): void {
@@ -1060,6 +1068,73 @@ export class GridRenderer {
 				htmlEl.addClass("weekflow-overlap-handle-active");
 			}
 		});
+	}
+
+	// ── Calendar Overlay ──
+
+	private renderCalendarOverlay(): void {
+		if (!this.gridEl || this.calendarEvents.length === 0) return;
+
+		const dayStartMin = this.settings.dayStartHour * 60;
+		const dayEndMin = this.settings.dayEndHour * 60;
+
+		for (let d = 0; d < 7; d++) {
+			const dayDate = this.dates[d];
+			const dayStart = new Date(dayDate.year(), dayDate.month(), dayDate.date(), 0, 0, 0);
+			const dayEnd = new Date(dayDate.year(), dayDate.month(), dayDate.date(), 23, 59, 59);
+
+			const dayEvents = this.calendarEvents.filter((ev) => {
+				return ev.start.getTime() < dayEnd.getTime() && ev.end.getTime() > dayStart.getTime();
+			});
+
+			for (const ev of dayEvents) {
+				// Clip event to this day
+				const evStartInDay = ev.start.getTime() < dayStart.getTime() ? dayStart : ev.start;
+				const evEndInDay = ev.end.getTime() > dayEnd.getTime() ? dayEnd : ev.end;
+
+				const startMinutes = evStartInDay.getHours() * 60 + evStartInDay.getMinutes();
+				const endMinutes = evEndInDay.getHours() * 60 + evEndInDay.getMinutes();
+
+				// Clamp to visible range
+				const clampedStart = Math.max(dayStartMin, Math.round(startMinutes / 10) * 10);
+				const clampedEnd = Math.min(dayEndMin, Math.round(endMinutes / 10) * 10);
+				if (clampedEnd <= clampedStart) continue;
+
+				const startOffset = clampedStart - dayStartMin;
+				const endOffset = clampedEnd - dayStartMin;
+				const dayColStart = d * 6 + 2;
+				const segments = this.getHourSegments(startOffset, endOffset);
+				if (segments.length === 0) continue;
+
+				// Find widest segment for label
+				const widestIdx = segments.reduce((best, seg, idx) => {
+					const w = seg.slotEnd - seg.slotStart;
+					const bw = segments[best].slotEnd - segments[best].slotStart;
+					return w > bw ? idx : best;
+				}, 0);
+
+				const formatTimeStr = (d: Date) => {
+					const h = d.getHours().toString().padStart(2, "0");
+					const m = d.getMinutes().toString().padStart(2, "0");
+					return `${h}:${m}`;
+				};
+				const tooltipText = `${ev.summary}\n${formatTimeStr(ev.start)}-${formatTimeStr(ev.end)}`;
+
+				segments.forEach((seg, i) => {
+					const block = this.gridEl!.createDiv({ cls: "weekflow-calendar-event" });
+					block.style.gridRow = `${seg.row}`;
+					block.style.gridColumn = `${dayColStart + seg.slotStart} / ${dayColStart + seg.slotEnd}`;
+					block.style.borderColor = ev.color;
+					block.style.color = ev.color;
+					block.title = tooltipText;
+
+					if (i === widestIdx) {
+						const content = block.createDiv({ cls: "weekflow-calendar-event-content" });
+						content.setText(ev.summary);
+					}
+				});
+			}
+		}
 	}
 
 	private getCategoryColor(tags: string[]): string {

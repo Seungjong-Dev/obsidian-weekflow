@@ -695,6 +695,33 @@
 	background: var(--background-primary-alt);
 }
 
+/* Calendar Event Overlay */
+.weekflow-calendar-event {
+	z-index: 2;
+	border: 1.5px dashed;
+	border-radius: 2px;
+	opacity: 0.6;
+	pointer-events: auto;
+	cursor: default;
+	overflow: hidden;
+	background-image: repeating-linear-gradient(
+		-45deg,
+		transparent,
+		transparent 3px,
+		currentColor 3px,
+		currentColor 4px
+	);
+}
+
+.weekflow-calendar-event-content {
+	font-size: 9px;
+	background: var(--background-primary);
+	padding: 0 2px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
 /* Statistics View */
 .weekflow-stats-container {
 	display: flex;

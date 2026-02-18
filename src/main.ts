@@ -69,6 +69,17 @@ export default class WeekFlowPlugin extends Plugin {
 		});
 
 		this.addCommand({
+			id: "weekflow-go-to-this-week",
+			name: "Go to this week",
+			checkCallback: (checking: boolean) => {
+				const view = this.getWeekFlowView();
+				if (!view) return false;
+				if (!checking) view.goToThisWeek();
+				return true;
+			},
+		});
+
+		this.addCommand({
 			id: "weekflow-open-statistics",
 			name: "Open statistics",
 			callback: () => this.activateStatsView(),

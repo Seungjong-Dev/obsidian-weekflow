@@ -1,6 +1,6 @@
 import { App, PluginSettingTab, Setting } from "obsidian";
 import type WeekFlowPlugin from "./main";
-import type { Category } from "./types";
+import type { CalendarSource, Category } from "./types";
 
 export class WeekFlowSettingTab extends PluginSettingTab {
 	plugin: WeekFlowPlugin;
@@ -287,6 +287,79 @@ export class WeekFlowSettingTab extends PluginSettingTab {
 					);
 			}
 		}
+
+		// Calendar Sources
+		containerEl.createEl("h3", { text: "Calendar Sources" });
+
+		new Setting(containerEl)
+			.setName("Cache duration")
+			.setDesc("Minutes to cache fetched ICS data (0 = no cache)")
+			.addSlider((slider) =>
+				slider
+					.setLimits(0, 120, 5)
+					.setValue(this.plugin.settings.calendarCacheDuration)
+					.setDynamicTooltip()
+					.onChange(async (value) => {
+						this.plugin.settings.calendarCacheDuration = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		this.plugin.settings.calendarSources.forEach((source, index) => {
+			const s = new Setting(containerEl)
+				.addText((text) =>
+					text
+						.setPlaceholder("Name")
+						.setValue(source.name)
+						.onChange(async (value) => {
+							this.plugin.settings.calendarSources[index].name = value;
+							await this.plugin.saveSettings();
+						})
+				)
+				.addText((text) =>
+					text
+						.setPlaceholder("ICS URL")
+						.setValue(source.url)
+						.onChange(async (value) => {
+							this.plugin.settings.calendarSources[index].url = value;
+							await this.plugin.saveSettings();
+						})
+				)
+				.addColorPicker((color) =>
+					color.setValue(source.color).onChange(async (value) => {
+						this.plugin.settings.calendarSources[index].color = value;
+						await this.plugin.saveSettings();
+					})
+				)
+				.addToggle((toggle) =>
+					toggle.setValue(source.enabled).onChange(async (value) => {
+						this.plugin.settings.calendarSources[index].enabled = value;
+						await this.plugin.saveSettings();
+					})
+				)
+				.addExtraButton((btn) =>
+					btn.setIcon("trash").onClick(async () => {
+						this.plugin.settings.calendarSources.splice(index, 1);
+						await this.plugin.saveSettings();
+						this.display();
+					})
+				);
+			s.infoEl.remove();
+		});
+
+		new Setting(containerEl).addButton((btn) =>
+			btn.setButtonText("Add calendar source").onClick(async () => {
+				this.plugin.settings.calendarSources.push({
+					id: Date.now().toString(36),
+					name: "",
+					url: "",
+					color: "#4A90D9",
+					enabled: true,
+				});
+				await this.plugin.saveSettings();
+				this.display();
+			})
+		);
 
 		// Categories
 		containerEl.createEl("h3", { text: "Categories" });
