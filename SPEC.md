@@ -379,7 +379,7 @@ Inbox Note Path:  [5. Periodic Notes/YYYY/YYYY-[W]ww     ]
 
 - Obsidian 커스텀 뷰(Leaf)로 표시되는 메인 타임테이블
 - 상단 툴바 (2줄 구성):
-  - **Row 1:** 패널 토글 | ◀ 주차·날짜 표시 ▶ | Today | 도구 버튼(↻ ↩ ↪ Presets Stats Review) + 오버플로 `⋯` 메뉴
+  - **Row 1:** 패널 토글 | ◀ 주차·날짜 표시 ▶ | Today | 도구 버튼(↻ ↩ ↪ Presets Stats Review) + 오버플로 `⋯` 메뉴. 오늘이 현재 뷰 범위 밖일 때 오늘 방향의 ◀/▶ 및 Today 버튼 하단에 accent 색상 dot 힌트 표시
   - **Row 2:** 카테고리 팔레트 (가로 스크롤)
 - ◀/▶ 버튼은 뷰 모드에 따라 역할 변경: 7일 뷰=주 이동, 3일 뷰=2일 단위 페이지 이동, 1일 뷰=1일 이동
 - 도구 버튼이 공간 부족 시 `⋯` 오버플로 메뉴(Obsidian `Menu`)로 접근 가능
@@ -571,7 +571,7 @@ function hapticFeedback(): void;
 모든 인터랙션은 Pointer Events API(`pointerdown`/`pointermove`/`pointerup`/`pointercancel`)로 통합 구현되어 마우스, 터치, 펜 입력을 처리한다. 셀 선택은 `e.pointerType`으로 터치/마우스를 분기한다.
 
 - **마우스 (`pointerType !== "touch"`):** 셀 `pointerdown`에서 `preventDefault()` 호출 → `cell-select` 드래그 모드로 다중 셀 선택
-- **터치 (`pointerType === "touch"`):** 셀 `pointerdown`에서 `preventDefault()` 미호출 (스크롤 허용) → 탭-탭 상태머신(`touchTapState`)으로 셀 선택. `pointerup`에서 이동 거리 <10px이면 탭으로 처리, >80px 수평이면 스와이프. `pointercancel`에서도 스와이프 판정 수행 (`touch-action: pan-y`로 인해 세로 스크롤 시 `pointercancel` 발생)
+- **터치 (`pointerType === "touch"`):** 셀 `pointerdown`에서 `preventDefault()` 미호출 (스크롤 허용) → 탭-탭 상태머신(`touchTapState`)으로 셀 선택. `pointerup`에서 이동 거리 <10px이면 탭으로 처리, >50px 수평이면 스와이프. `pointercancel`에서도 스와이프 판정 수행 (`touch-action: pan-y`로 인해 세로 스크롤 시 `pointercancel` 발생)
 - 리사이즈 핸들에 `setPointerCapture()`를 적용하여 요소 밖으로 드래그해도 이벤트 유지
 - 터치 디바이스에서 블록 드래그는 롱프레스(300ms) 후 시작, `weekflow-longpress-active` 클래스로 scale+shadow 시각 피드백 + 햅틱 진동
 - 데스크톱 블록 드래그는 150ms 딜레이 후 시작
@@ -580,7 +580,7 @@ function hapticFeedback(): void;
 
 빈 셀 영역에서의 가로 스와이프를 감지하여 날짜/주 이동:
 
-- **감지 기준:** 가로 이동 >80px, |가로| > |세로|*2, 시간 <300ms
+- **감지 기준:** 가로 이동 >50px, |가로| > |세로|*2, 시간 <300ms
 - **감지 시점:** `pointerup` 및 `pointercancel` 모두에서 판정 (브라우저가 세로 스크롤로 인해 `pointercancel`을 발생시켜도 수평 스와이프 데이터를 활용)
 - **Obsidian 사이드바 차단:** 그리드에 `touchstart`/`touchmove` 리스너로 수평 이동 >15px 감지 시 `stopPropagation()` 호출
 - **Wide + 터치:** 스와이프 → 주 이동
@@ -606,8 +606,9 @@ Narrow 모드에서 사이드 패널 대신 하단 시트로 표시:
   - Today 버튼: today가 포함되는 가장 앞 페이지 (과거 맥락 우선)
   - 매핑: 월화수→0, 목금→2, 토일→4
   - ◀/▶ 이동: 항상 2일 단위 (예측 가능한 네비게이션)
+  - 주 경계 착지: ◀(뒤로) → 이전 주 마지막 페이지(4), ▶(앞으로) → 다음 주 첫 페이지(0). `pendingDayOffset`으로 `refresh()` 시 자동 재계산을 오버라이드
 - **1일 (narrow):** 오늘의 dayIndex, ◀/▶로 1일씩 이동
-- 주 변경 시 dayOffset 자동 재계산
+- 주 변경 시 dayOffset 자동 재계산 (단, `pendingDayOffset`이 설정되어 있으면 해당 값 사용)
 
 ### CSS 터치 최적화
 
