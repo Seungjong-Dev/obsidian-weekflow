@@ -530,108 +530,116 @@ Sun ████           4h
 - **미루기 비율:** `- [>]` deferred 항목의 비율
 - **비계획 실행:** 계획 없이 `- [x]`로 바로 생성된 항목의 비율
 
-## Mobile
+## Responsive UI & Mobile
 
-모바일(Obsidian Mobile)에서도 데스크톱과 동일한 기능을 반응형 UI로 제공한다. 디바이스를 3단계(Desktop / Tablet / Phone)로 구분하여 각 폼팩터에 최적화된 레이아웃을 적용한다.
+모바일(Obsidian Mobile)과 다양한 화면 크기에서 동일한 기능을 반응형 UI로 제공한다. **디바이스 타입이 아닌 가용 너비(available width)를 기준으로** 레이아웃을 결정하며, `ResizeObserver`로 실시간 감시하여 데스크톱 창 리사이즈, Split View, 오리엔테이션 전환 모두 하나의 로직으로 처리한다.
 
-### 디바이스 감지
+### 레이아웃 브레이크포인트 (너비 기반)
 
-Obsidian 공식 API(`Platform`)는 `isMobile` / `isIosApp` 수준까지만 제공하며, 태블릿과 폰을 구분하지 않는다. 런타임에 `document.body`에 추가되는 CSS 클래스를 활용하여 3-tier 감지를 구현한다.
+| 뷰 너비 | Layout Tier | 표시 일수 | Planning Panel | Review Panel |
+|---------|-------------|----------|----------------|--------------|
+| **≥ 900px** | `wide` | 7일 | 사이드 패널 | 7칸 |
+| **500~899px** | `medium` | 3일 | 사이드 패널 (220px, 접힘 가능) | 표시 일수만큼 |
+| **< 500px** | `narrow` | 1일 | 하단 시트 (bottom sheet) | 1칸 |
+
+- 데스크톱에서 창을 줄이면 자연스럽게 7일→3일→1일로 전환, 넓히면 복원
+- iPad 가로=Wide, iPad Split View=Medium, iPhone 세로=Narrow, iPhone 가로=Medium
+- `ResizeObserver`가 `.weekflow-container`의 `contentRect.width`를 감시하므로 오리엔테이션 전환 시 자동 대응
+
+### 디바이스 감지 (`src/device.ts`)
 
 ```typescript
-// 비공식이나 Excalidraw 등 주요 플러그인에서 사용하는 사실상 표준 방식
-const isTablet = document.body.hasClass("is-tablet");
-const isPhone  = document.body.hasClass("is-phone");
-const isIPad   = isTablet && document.body.hasClass("is-ios");
+type DeviceTier = "desktop" | "tablet" | "phone";
+type LayoutTier = "wide" | "medium" | "narrow";
+
+// Obsidian body class 기반 디바이스 감지 (보조)
+function getDeviceTier(): DeviceTier;  // .is-tablet, .is-mobile
+function isMobileDevice(): boolean;
+
+// 뷰 너비 기반 레이아웃 결정 (핵심)
+function getLayoutTier(viewWidth: number): LayoutTier;
+function getVisibleDays(tier: LayoutTier): 1 | 3 | 7;
+function isTouchDevice(): boolean;
+function hapticFeedback(): void;
 ```
 
-| 클래스 | 의미 |
-|--------|------|
-| `.is-tablet` | 태블릿 (iPad, Android 태블릿). smallest width ~600dp 이상 |
-| `.is-phone` | 폰 (iPhone, Android 폰) |
-| `.is-ios` | iOS / iPadOS |
-| `.is-android` | Android |
+### Pointer Events
 
-> **주의:** 이 CSS 클래스는 `obsidian.d.ts`에 선언되어 있지 않다. 공식 API 변경 시 대비하여, 감지 로직을 한 곳에 모아두고 fallback으로 뷰포트 너비(`ResizeObserver`)를 병행한다.
+모든 인터랙션은 Pointer Events API(`pointerdown`/`pointermove`/`pointerup`)로 통합 구현되어 마우스, 터치, 펜 입력을 구분 없이 처리한다.
 
-### 디바이스 Tier 요약
+- 리사이즈 핸들에 `setPointerCapture()`를 적용하여 요소 밖으로 드래그해도 이벤트 유지
+- 터치 디바이스에서 블록 드래그는 롱프레스(300ms) 후 시작, `weekflow-longpress-active` 클래스로 scale+shadow 시각 피드백 + 햅틱 진동
+- 데스크톱 블록 드래그는 150ms 딜레이 후 시작 (기존과 동일)
 
-| | Desktop | Tablet (iPad) | Phone |
-|---|---------|---------------|-------|
-| **타임테이블 기본 뷰** | 7일 | 7일 (Split View 시 3일로 적응) | 1일 |
-| **Planning Panel** | 사이드 패널 상시 | 사이드 패널 (접기 가능) | 하단 시트 |
-| **Review Panel** | 7일 나란히 | 7일 나란히 (Split View 시 스크롤) | 선택된 1일 |
-| **Statistics** | 가로 배치 | 가로 배치 | 세로 스크롤 |
-| **5분 세분화** | 대각선 클릭 | 대각선 탭 | 셀이 충분히 클 때만 |
-| **날짜 이동** | 상단 네비게이션 | 상단 네비게이션 + 스와이프 | 좌우 스와이프 |
+### 스와이프 네비게이션
 
-### 레이아웃 적응
+빈 셀 영역에서의 가로 스와이프를 감지하여 날짜/주 이동:
 
-#### 타임테이블 뷰
+- **감지 기준:** 가로 이동 >80px, |가로| > |세로|*2, 시간 <300ms, 드래그 중이 아닐 때
+- **Wide + 터치:** 스와이프 → 주 이동 (기존 ◀▶ 버튼과 동일)
+- **Medium (3일):** 스와이프 → dayOffset ±3 (주 경계 넘으면 주 이동)
+- **Narrow (1일):** 스와이프 → dayOffset ±1 (주 경계 넘으면 주 이동)
+- **Wide + 데스크톱:** 비활성화 (마우스 드래그와 충돌 방지)
 
-**Phone:**
-- **기본 표시: 1일 뷰** — 7일 전체가 아닌 1일 단위로 표시. 좌우 스와이프로 날짜 이동.
-- **주간 뷰 전환:** 상단 토글로 7일 뷰 전환 가능. 이 경우 가로 스크롤 + 핀치 줌 지원.
-- **셀 크기:** 터치 타겟 최소 44px 보장. 1일 뷰에서는 10분 셀이 충분히 큰 크기로 표시됨.
+### 하단 시트 (Narrow 모드 Planning Panel)
 
-**Tablet (iPad):**
-- **기본 표시: 7일 뷰** — 데스크톱과 동일한 주간 그리드. 화면이 충분히 넓어 7컬럼 표시 가능.
-- **Split View / Stage Manager 적응:** `ResizeObserver`로 실제 뷰 너비를 감시하여, 좁아지면 3일 뷰로 자동 전환. 좌우 스와이프로 표시 범위 이동.
-- **셀 크기:** 터치 타겟 최소 44px 보장. 7일 뷰에서도 10분 셀이 탭 가능한 크기.
-- **외장 키보드:** 키보드 연결 시 데스크톱과 동일한 단축키 지원 (← → 주 이동, Tab으로 모드 전환 등).
-- **트랙패드 / 마우스:** 연결 시 hover 이벤트 활성화 — 블록 위 마우스오버 시 툴팁 표시, 커서 변경 등 데스크톱 UX 적용.
+Narrow 모드에서 사이드 패널 대신 하단 시트로 표시:
 
-#### Planning Panel
+- `collapsed` 상태: 핸들 바만 표시 (~40px)
+- `expanded` 상태: 최대 60vh
+- 핸들 스와이프 업/다운 또는 탭으로 토글
+- 내부에 PlanningPanel 컴포넌트를 재사용
 
-**Phone:**
-- 데스크톱의 사이드 패널 대신 **하단 시트(bottom sheet)** 로 표시
-- 스와이프 업으로 열고, 스와이프 다운으로 닫음
-- 열린 상태에서 타임테이블과 패널 사이를 드래그하여 항목 배정
+### dayOffset 로직
 
-**Tablet (iPad):**
-- 데스크톱과 동일한 **사이드 패널**로 표시 (접기/펼치기 토글 제공)
-- Split View로 화면이 좁아지면 자동으로 접혀서 아이콘 버튼으로 전환
-- 드래그 앤 드롭으로 항목 배정 (데스크톱과 동일)
+- **7일 (wide):** offset=0 (월~일 전부 표시)
+- **3일 (medium):** 오늘을 중앙에 놓되 주 범위 [0, 4]로 clamp
+- **1일 (narrow):** 오늘의 dayIndex
+- 주 변경 시 dayOffset 자동 재계산
 
-#### Review Panel
+### CSS 터치 최적화
 
-**Phone:**
-- 타임테이블 하단에 현재 선택된 날짜의 회고만 표시 (1일 뷰에 맞춤)
-- 7일 전체 회고는 별도 탭으로 전환하여 스크롤로 확인
+#### hover → `@media (pointer: fine)` 격리
 
-**Tablet (iPad):**
-- 데스크톱과 동일하게 7일분 회고를 나란히 표시
-- Split View로 좁아지면 표시된 날짜 범위(3일)의 회고만 표시, 나머지는 스크롤
+13개 `:hover` 규칙을 `@media (pointer: fine)` 블록으로 이동하여 터치 디바이스에서 hover가 stuck되지 않도록 방지.
 
-#### Statistics Panel
+#### `@media (pointer: coarse)` — 터치 디바이스
 
-**Phone:**
-- 차트와 통계를 세로 스크롤 레이아웃으로 재배치
+- 블록 토글 버튼 항상 표시 (opacity 0.5)
+- 리사이즈 핸들 6px→16px 확대
 
-**Tablet (iPad):**
-- 데스크톱과 동일한 가로 배치 레이아웃
-- 조회 범위 선택은 동일하게 지원
+#### touch-action: none
 
-### 터치 인터랙션
+드래그 가능한 모든 요소(`.weekflow-cell`, `.weekflow-block`, `.weekflow-resize-handle`, `.weekflow-panel-item`, `.weekflow-review-resize-handle`, `.weekflow-bottom-sheet-handle`)에 `touch-action: none` 적용하여 브라우저 기본 제스처(스크롤, 줌) 방지.
 
-| 동작 | Desktop | Tablet (iPad) | Phone |
-|------|---------|---------------|-------|
-| 셀 선택 | 클릭 | 탭 | 탭 |
-| 범위 선택 | 드래그 | 롱프레스 후 드래그 | 롱프레스 후 드래그 |
-| 블록 이동 | 드래그 | 롱프레스 후 드래그 | 롱프레스 후 드래그 |
-| 블록 리사이즈 | 경계 드래그 | 경계 롱프레스 후 드래그 | 경계 롱프레스 후 드래그 |
-| 날짜 이동 | 상단 네비게이션 | 상단 네비게이션 + 좌우 스와이프 | 좌우 스와이프 |
-| Planning Panel | 사이드 패널 상시 | 사이드 패널 (접기 가능) | 하단 시트 (스와이프 업/다운) |
-| 5분 세분화 | 대각선 클릭 | 대각선 영역 탭 | 대각선 영역 탭 (셀이 충분히 클 때만) |
-| 키보드 단축키 | 지원 | 외장 키보드 연결 시 지원 | — |
-| hover 툴팁 | 지원 | 트랙패드/마우스 연결 시 지원 | — |
+#### 터치 타겟 44px (`.is-mobile`)
+
+- 툴바 버튼: min-width/height 44px
+- 패널 아이템: padding 10px 12px, min-height 44px
+- 블록 토글 버튼: 28px×28px
+- 오버랩 핸들: 16px×16px
+
+#### Statistics 반응형
+
+`@media (max-width: 600px)`: 헤더 세로 배치, 요약 카드 1열, 차트 세로 배치
+
+### 오리엔테이션 전환
+
+별도의 `orientationchange` 이벤트 리스너 불필요. `ResizeObserver`가 뷰 너비 변경을 즉시 감지하여 브레이크포인트를 재평가한다.
+
+| 디바이스 | 세로(Portrait) | 가로(Landscape) |
+|---------|---------------|----------------|
+| **iPhone** | Narrow (1일) | Medium (3일) |
+| **iPad** | Wide (7일) | Wide (7일) |
+| **iPad Split View** | Medium (3일) | Wide or Medium |
+| **Desktop 좁은 창** | Medium 또는 Narrow | — |
 
 ### 모바일 전용 고려사항
 
-- **스크롤 충돌 방지:** 타임테이블 내 드래그와 페이지 스크롤이 충돌하지 않도록 터치 이벤트를 구분한다. 셀 영역 터치는 블록 조작, 빈 영역 터치는 스크롤.
-- **햅틱 피드백:** 블록 선택, 이동, 완료 시 진동 피드백 제공 (Obsidian Mobile API 지원 범위 내).
+- **스크롤 충돌 방지:** `touch-action: none`으로 드래그 가능 요소에서 브라우저 기본 제스처 차단. 그리드 래퍼의 세로 스크롤은 유지.
+- **햅틱 피드백:** 롱프레스 드래그 시작 시 `navigator.vibrate(10)` 호출.
 - **오프라인 동작:** 데이터가 로컬 마크다운 파일이므로 오프라인에서도 완전히 동작. 캘린더 오버레이만 캐시 기반으로 제한적 표시.
-- **Split View / Stage Manager (iPad):** `ResizeObserver`로 실제 뷰 영역 크기를 감시하여 레이아웃을 동적으로 적응시킨다. 디바이스 타입이 아닌 실제 가용 너비를 기준으로 컬럼 수를 결정하므로, Stage Manager에서 창 크기를 자유롭게 변경해도 자연스럽게 대응한다.
+- **Split View / Stage Manager (iPad):** `ResizeObserver`로 실제 뷰 영역 크기를 감시하여 레이아웃을 동적으로 적응. 디바이스 타입이 아닌 실제 가용 너비를 기준으로 컬럼 수를 결정하므로, Stage Manager에서 창 크기를 자유롭게 변경해도 자연스럽게 대응.
 
 ## Implementation Phases
 
@@ -733,19 +741,26 @@ const isIPad   = isTablet && document.body.hasClass("is-ios");
 
 **이 Phase가 끝나면:** 외부 일정을 참고하면서 계획을 세울 수 있고, 커맨드 팔레트로 빠르게 접근할 수 있다.
 
-### Phase 6 — 모바일 최적화
+### Phase 6 — 반응형 UI + 모바일 최적화 ✅
 
-**목표:** Phone / Tablet(iPad) 폼팩터 대응.
+**목표:** 뷰 너비 기반 반응형 레이아웃 + Pointer Events로 모바일/태블릿/데스크톱 통합 대응.
 
-- 3-tier 디바이스 감지 (Desktop / Tablet / Phone)
-- Phone: 1일 뷰, 하단 시트 Planning Panel, 터치 인터랙션
-- Tablet(iPad): 7일 뷰, Split View/Stage Manager 적응 (`ResizeObserver`), 사이드 패널 접기
-- 외장 키보드/트랙패드 연결 시 데스크톱 UX 전환
-- 터치 타겟 44px 보장
-- 스크롤 충돌 방지
-- 햅틱 피드백
+- `src/device.ts`: DeviceTier, LayoutTier, `getLayoutTier(viewWidth)`, `getVisibleDays(tier)`, `isTouchDevice()`, `hapticFeedback()`
+- 너비 기반 3-tier 레이아웃: Wide(≥900px, 7일) / Medium(500~899px, 3일) / Narrow(<500px, 1일)
+- `ResizeObserver`로 `.weekflow-container` 너비 실시간 감시 → 브레이크포인트 자동 전환
+- Pointer Events API로 모든 mouse 이벤트 통합 (`pointerdown`/`pointermove`/`pointerup`)
+- `setPointerCapture()`로 리사이즈 핸들 드래그 안정화
+- 동적 `visibleDays`/`dayOffset`로 표시 범위 제어 (GridRenderer.setVisibleRange)
+- 스와이프 네비게이션: 가로 >80px, |dx|>|dy|×2, <300ms 감지 → 1일/3일 뷰에서 날짜 이동
+- 롱프레스 드래그 (터치 300ms, 마우스 150ms) + 시각 피드백 (`weekflow-longpress-active`) + 햅틱
+- Narrow 모드: 하단 시트 Planning Panel (collapsed/expanded, 스와이프 핸들)
+- `@media (pointer: fine)`: hover 효과를 마우스 전용으로 격리
+- `@media (pointer: coarse)`: 항상 표시 토글/리사이즈 핸들, 터치 타겟 44px 보장
+- `touch-action: none`으로 브라우저 기본 제스처 방지
+- Review Panel 칼럼 수 visibleDays 연동
+- Statistics 뷰 좁은 화면 세로 배치 (`@media max-width: 600px`)
 
-**이 Phase가 끝나면:** 데스크톱, iPad, iPhone 어디서든 WeekFlow를 사용할 수 있다.
+**이 Phase가 끝나면:** 데스크톱 창 리사이즈, iPad Split View, iPhone 세로/가로 어디서든 WeekFlow를 사용할 수 있다.
 
 ### Phase 간 의존성
 
@@ -755,7 +770,7 @@ Phase 1 (Core MVP)
         ├─▶ Phase 3 (플래닝)
         │     └─▶ Phase 4 (회고 & 통계)
         ├─▶ Phase 5 (외부 연동 & 커맨드)
-        └─▶ Phase 6 (모바일)
+        └─▶ Phase 6 (반응형 UI + 모바일) ✅
 ```
 
 Phase 2 완료 후 Phase 3~6은 독립적으로 진행 가능하나, Phase 4는 Phase 3의 데이터(Deferred, 프로젝트 링크)를 통계에 활용하므로 Phase 3 이후가 자연스럽다.
@@ -767,6 +782,6 @@ Phase 2 완료 후 Phase 3~6은 독립적으로 진행 가능하나, Phase 4는 
 - 데이터는 데일리 노트 헤딩 아래 마크다운 리스트로 저장 (이식성 보장)
 - `workspace.on('active-leaf-change')` 등으로 포커스 시점에 데이터 갱신
 - 마크다운 헤딩+리스트 파서를 자체 구현하여 데이터 읽기/쓰기
-- 반응형 레이아웃: 3-tier 감지 (Desktop / Tablet / Phone). `Platform.isMobile`과 `document.body` CSS 클래스(`.is-tablet`, `.is-phone`)를 조합하고, `ResizeObserver`로 실제 뷰 너비를 병행 감시하여 Split View 등 동적 크기 변경에 대응
-- 터치 이벤트: `touchstart`/`touchmove`/`touchend`와 `pointerdown`/`pointermove`/`pointerup` 모두 지원. 외장 키보드/트랙패드 연결 시 hover·keyboard 이벤트도 활성화
+- 반응형 레이아웃: 뷰 너비 기반 3-tier (`wide` ≥900px / `medium` ≥500px / `narrow` <500px). `ResizeObserver`로 `.weekflow-container` 너비를 실시간 감시하여 데스크톱 창 리사이즈, iPad Split View, 오리엔테이션 전환에 자동 대응. `src/device.ts`의 `getLayoutTier()`/`getVisibleDays()` 유틸리티로 결정
+- Pointer Events API: 모든 인터랙션을 `pointerdown`/`pointermove`/`pointerup`으로 통합 (마우스+터치+펜). `setPointerCapture()`로 리사이즈 드래그 안정화. 터치 디바이스에서는 롱프레스(300ms) 후 드래그 시작 + 햅틱 피드백
 - Statistics Panel에서 장기 범위(분기/연간) 조회 시 다수의 데일리 노트를 읽어야 하므로, 파싱 결과를 캐싱하고 변경된 파일만 재파싱하는 증분 처리(incremental parsing) 방식을 적용한다
