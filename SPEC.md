@@ -404,7 +404,7 @@ Inbox Sources:                           (≡ 드래그로 순서 변경)
 
 - Obsidian 커스텀 뷰(Leaf)로 표시되는 메인 타임테이블
 - 상단 툴바 (2줄 구성):
-  - **Row 1:** 패널 토글 | ◀ 주차·날짜 표시 ▶ | Today | 도구 버튼(↻ ↩ ↪ Presets Stats Review) + 오버플로 `⋯` 메뉴. 오늘이 현재 뷰 범위 밖일 때 오늘 방향의 ◀/▶ 및 Today 버튼 하단에 accent 색상 dot 힌트 표시
+  - **Row 1:** 패널 토글 | ◀ 주차·날짜 표시 ▶ | Today | 도구 버튼(↻ ↩ ↪ Presets Stats Review) + 오버플로 `⋯` 메뉴. 주차 라벨 클릭 시 뷰 모드 메뉴(7d/3d/1d/Auto) 표시. 오늘이 현재 뷰 범위 밖일 때 오늘 방향의 ◀/▶ 및 Today 버튼 하단에 accent 색상 dot 힌트 표시
   - **Row 2:** 카테고리 팔레트 (가로 스크롤)
 - ◀/▶ 버튼은 뷰 모드에 따라 역할 변경: 7일 뷰=주 이동, 3일 뷰=2일 단위 페이지 이동, 1일 뷰=1일 이동
 - 도구 버튼이 공간 부족 시 `⋯` 오버플로 메뉴(Obsidian `Menu`)로 접근 가능
@@ -574,6 +574,16 @@ Sun ████           4h
 - iPad 가로=Wide, iPad Split View=Medium, iPhone 세로=Narrow, iPhone 가로=Medium
 - `ResizeObserver`가 `.weekflow-container`의 `contentRect.width`를 감시하므로 오리엔테이션 전환 시 자동 대응
 
+#### 수동 뷰 모드 전환
+
+기본값은 Auto(위 반응형 동작)이지만, 사용자가 주차 라벨을 클릭하여 수동으로 뷰 모드를 선택할 수 있다.
+
+- **주차 라벨 클릭** → Obsidian `Menu`로 4개 항목 표시: 7 days / 3 days / 1 day / Auto
+- **Override 활성 시**: 주차 라벨 뒤에 `(7d)` 같은 인디케이터 표시
+- **CSS layout tier는 항상 실제 너비 기반**: override 시에도 패널 레이아웃(사이드/바텀시트)은 실제 너비에 따라 적응
+- **스와이프 게이팅**: override로 3일 뷰를 넓은 화면에서 사용할 때 스와이프가 동작하도록 `currentVisibleDays` 기반으로 판단
+- **세션 내 지속**: `viewModeOverride`를 Obsidian view state에 저장/복원 (플러그인 설정에는 저장하지 않음)
+
 ### 디바이스 감지 (`src/device.ts`)
 
 ```typescript
@@ -615,7 +625,7 @@ function hapticFeedback(): void;
 - **Wide + 터치:** 스와이프 → 주 이동
 - **Medium (3일):** 스와이프 → dayOffset ±2 (고정 페이지 [0,2,4], 주 경계 넘으면 주 이동)
 - **Narrow (1일):** 스와이프 → dayOffset ±1 (주 경계 넘으면 주 이동)
-- **Wide + 데스크톱:** 제스처 스와이프 비활성화 (마우스 드래그와 충돌 방지). 단, ◀/▶ 버튼은 동작
+- **7일 뷰 + 데스크톱:** 제스처 스와이프 비활성화 (마우스 드래그와 충돌 방지). 단, ◀/▶ 버튼은 동작. override로 3일 뷰를 넓은 화면에서 사용할 때는 스와이프 동작
 
 ### 하단 시트 (Narrow 모드 Planning Panel)
 
@@ -815,8 +825,9 @@ Narrow 모드에서 사이드 패널 대신 하단 시트로 표시:
 - `renderView()` 전 기존 `GridRenderer.destroy()` 호출 (글로벌 리스너 누수 방지)
 - Review Panel 칼럼 수 visibleDays 연동
 - Statistics 뷰 좁은 화면 세로 배치 (`@media max-width: 600px`)
+- 수동 뷰 모드 전환: 주차 라벨 클릭 → 메뉴(7d/3d/1d/Auto), view state 저장, CSS tier와 visibleDays 분리
 
-**이 Phase가 끝나면:** 데스크톱 창 리사이즈, iPad Split View, iPhone 세로/가로 어디서든 WeekFlow를 사용할 수 있다.
+**이 Phase가 끝나면:** 데스크톱 창 리사이즈, iPad Split View, iPhone 세로/가로 어디서든 WeekFlow를 사용할 수 있다. 사용자가 원하면 수동으로 뷰 모드를 고정할 수도 있다.
 
 ### Phase 간 의존성
 
