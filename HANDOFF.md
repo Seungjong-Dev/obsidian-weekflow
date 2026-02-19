@@ -1,7 +1,7 @@
 # WeekFlow 작업 핸드오프
 
 > 작성일: 2026-02-18
-> 마지막 커밋: `6bbdc6c` feat: redesign inbox from single dynamic path to static multi-source model
+> 마지막 커밋: `431eb14` docs: update HANDOFF.md last commit hash
 
 ## 프로젝트 개요
 
