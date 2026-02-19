@@ -1,7 +1,7 @@
 # WeekFlow 작업 핸드오프
 
 > 작성일: 2026-02-18
-> 마지막 커밋: `e2e27de` refactor: disable project sections in planning panel
+> 마지막 커밋: `67a5d42` fix: prevent time blocks and ghost blocks from affecting grid row height
 
 ## 프로젝트 개요
 
@@ -131,6 +131,10 @@ WeekFlow는 Obsidian 플러그인으로, 데일리 노트의 마크다운 체크
 
 ### Planning Panel 프로젝트 섹션 비활성화
 - **`view.ts`**: 프로젝트 섹션을 패널에서 임시 제거 (`collectProjectSections()` 호출 주석 처리, `loadProjectDataAsync()` 호출 제거). 프로젝트 기능 강화 시 재활성화 예정. 관련 코드는 보존됨.
+
+### 그리드 행 높이 안정화
+- **`grid-renderer.ts`**: 타임라인 블록을 `position: absolute; inset: 0`으로 변경하여 그리드 트랙 크기 계산에 참여하지 않도록 함. `grid-row`에 명시적 끝 라인 추가 (`N / N+1`) — absolute 아이템의 `auto` end가 그리드 컨테이너 끝으로 해석되는 문제 방지
+- **`styles.css`**: `.weekflow-5min-start/end`에서 `position: relative` 제거 (absolute가 이미 containing block 역할). `.weekflow-block-ghost`에 `white-space: nowrap; text-overflow: ellipsis` 추가하여 고스트 블록의 텍스트 줄바꿈으로 인한 행 높이 변동 방지
 
 ## 미완료 Phase
 
