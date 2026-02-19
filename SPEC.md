@@ -716,6 +716,7 @@ Narrow 모드에서 사이드 패널 대신 하단 시트로 표시:
 - 에러 핸들링: 파싱 불가 항목은 무시하되, 뷰 상단에 경고 배너 표시.
 - 시간 겹침 블록: 겹치는 블록 그룹 상단 바깥에 카테고리 색상 핸들(원형 점)을 호버 시 표시. 핸들 클릭으로 블록 선택 시 두꺼운 테두리(3px)와 그림자로 강조, 나머지 블록은 dim 처리(opacity 0.3). 빈 셀 클릭 시 선택 해제.
 - 다중 행 블록: 콘텐츠 텍스트는 가장 넓은 세그먼트에 표시하여 좁은 세그먼트에서의 행 높이 변동 방지.
+- 그리드 행 높이 안정화: 타임라인 블록은 `position: absolute`로 그리드 트랙 크기 계산에서 제외되어 행 높이가 블록 콘텐츠에 영향받지 않음. 고스트 블록(드래그 프리뷰)은 `white-space: nowrap; text-overflow: ellipsis`로 텍스트 줄바꿈 방지.
 - 블록 우클릭 컨텍스트 메뉴: Edit / Mark as Done(or Incomplete) / Delete. Obsidian 네이티브 `Menu` 사용.
 - EditBlockModal 완료 토글: Plan 블록에 "Mark as Done", Actual 블록에 "Mark as Incomplete" 버튼. Deferred 블록 미표시.
 
@@ -837,7 +838,7 @@ Phase 2 완료 후 Phase 3~6은 독립적으로 진행 가능하나, Phase 4는 
 - Pointer Events API: 모든 인터랙션을 `pointerdown`/`pointermove`/`pointerup`으로 통합 (마우스+터치+펜). `setPointerCapture()`로 리사이즈 드래그 안정화. 터치 디바이스에서는 롱프레스(300ms) 후 드래그 시작 + 햅틱 피드백
 - Statistics Panel에서 장기 범위(분기/연간) 조회 시 다수의 데일리 노트를 읽어야 하므로, 파싱 결과를 캐싱하고 변경된 파일만 재파싱하는 증분 처리(incremental parsing) 방식을 적용한다
 
-## 구현 상태 (2026-02-18)
+## 구현 상태 (2026-02-19)
 
 ### 완료
 
