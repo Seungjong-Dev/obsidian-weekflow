@@ -10,6 +10,112 @@ export class WeekFlowSettingTab extends PluginSettingTab {
 		this.plugin = plugin;
 	}
 
+	private renderInboxSources(containerEl: HTMLElement): void {
+		containerEl.empty();
+		const sources = this.plugin.settings.inboxSources;
+
+		sources.forEach((source, index) => {
+			const row = containerEl.createDiv({ cls: "weekflow-inbox-source-row" });
+
+			// Drag handle
+			const handle = row.createSpan({ cls: "weekflow-inbox-source-handle", text: "≡" });
+			handle.setAttribute("draggable", "true");
+
+			handle.addEventListener("dragstart", (e) => {
+				e.dataTransfer?.setData("text/plain", String(index));
+				row.addClass("weekflow-inbox-source-dragging");
+			});
+
+			handle.addEventListener("dragend", () => {
+				row.removeClass("weekflow-inbox-source-dragging");
+			});
+
+			row.addEventListener("dragover", (e) => {
+				e.preventDefault();
+				row.addClass("weekflow-inbox-source-dragover");
+			});
+
+			row.addEventListener("dragleave", () => {
+				row.removeClass("weekflow-inbox-source-dragover");
+			});
+
+			row.addEventListener("drop", async (e) => {
+				e.preventDefault();
+				row.removeClass("weekflow-inbox-source-dragover");
+				const fromIdx = parseInt(e.dataTransfer?.getData("text/plain") || "-1");
+				if (fromIdx >= 0 && fromIdx !== index) {
+					const [moved] = sources.splice(fromIdx, 1);
+					sources.splice(index, 0, moved);
+					await this.plugin.saveSettings();
+					this.renderInboxSources(containerEl);
+				}
+			});
+
+			// Path input
+			const pathInput = row.createEl("input", { type: "text", cls: "weekflow-inbox-source-path" });
+			pathInput.placeholder = "Path (e.g., Inbox.md or Projects/)";
+			pathInput.value = source.path;
+			pathInput.addEventListener("change", async () => {
+				sources[index].path = pathInput.value;
+				await this.plugin.saveSettings();
+				this.updateSourceTypeLabel(row, pathInput.value);
+			});
+
+			// Heading input
+			const headingInput = row.createEl("input", { type: "text", cls: "weekflow-inbox-source-heading" });
+			headingInput.placeholder = "Heading (optional)";
+			headingInput.value = source.heading;
+			headingInput.addEventListener("change", async () => {
+				sources[index].heading = headingInput.value;
+				await this.plugin.saveSettings();
+			});
+
+			// Type label (Note/Folder auto-detect)
+			const typeLabel = row.createSpan({ cls: "weekflow-inbox-source-type" });
+			this.updateSourceTypeLabel(row, source.path);
+
+			// Delete button
+			const delBtn = row.createEl("button", { cls: "weekflow-inbox-source-delete" });
+			delBtn.setText("✕");
+			delBtn.addEventListener("click", async () => {
+				sources.splice(index, 1);
+				await this.plugin.saveSettings();
+				this.renderInboxSources(containerEl);
+			});
+		});
+
+		if (sources.length === 0) {
+			containerEl.createEl("p", {
+				text: "No inbox sources configured.",
+				cls: "setting-item-description",
+			});
+		}
+	}
+
+	private updateSourceTypeLabel(row: HTMLElement, path: string): void {
+		const label = row.querySelector(".weekflow-inbox-source-type") as HTMLElement | null;
+		if (!label) return;
+
+		const normalPath = path.trim();
+		if (!normalPath) {
+			label.setText("");
+			return;
+		}
+
+		// Check vault for folder vs file
+		const vault = this.app.vault;
+		const abstract = vault.getAbstractFileByPath(normalPath);
+		if (abstract && "children" in abstract) {
+			label.setText("Folder");
+			label.addClass("weekflow-inbox-source-type-folder");
+			label.removeClass("weekflow-inbox-source-type-note");
+		} else {
+			label.setText("Note");
+			label.removeClass("weekflow-inbox-source-type-folder");
+			label.addClass("weekflow-inbox-source-type-note");
+		}
+	}
+
 	display(): void {
 		const { containerEl } = this;
 		containerEl.empty();
@@ -137,43 +243,27 @@ export class WeekFlowSettingTab extends PluginSettingTab {
 		// Planning Panel section
 		containerEl.createEl("h3", { text: "Planning Panel" });
 
-		// Inbox Note Path
-		const inboxPathSetting = new Setting(containerEl)
-			.setName("Inbox note path")
-			.setDesc("Path pattern for weekly inbox note (moment.js tokens)")
-			.addText((text) =>
-				text
-					.setPlaceholder("YYYY-[W]ww")
-					.setValue(this.plugin.settings.inboxNotePath)
-					.onChange(async (value) => {
-						this.plugin.settings.inboxNotePath = value;
-						await this.plugin.saveSettings();
-						updateInboxPreview();
-					})
-			);
+		// Inbox Sources
+		containerEl.createEl("h4", { text: "Inbox Sources" });
 
-		const inboxPreviewEl = inboxPathSetting.descEl.createDiv({
-			cls: "weekflow-setting-preview",
+		const inboxDesc = containerEl.createEl("p", {
+			text: "Add note or folder paths as inbox sources. Items are read from all sources. New items are written to the first note source. Drag to reorder priority.",
+			cls: "setting-item-description",
 		});
-		const updateInboxPreview = () => {
-			const preview = window.moment().format(this.plugin.settings.inboxNotePath);
-			inboxPreviewEl.setText(`Preview: ${preview}.md`);
-		};
-		updateInboxPreview();
 
-		// Inbox Heading
-		new Setting(containerEl)
-			.setName("Inbox heading")
-			.setDesc("Heading under which inbox items are stored")
-			.addText((text) =>
-				text
-					.setPlaceholder("### To Do")
-					.setValue(this.plugin.settings.inboxHeading)
-					.onChange(async (value) => {
-						this.plugin.settings.inboxHeading = value;
-						await this.plugin.saveSettings();
-					})
-			);
+		const inboxListEl = containerEl.createDiv({ cls: "weekflow-inbox-sources-list" });
+		this.renderInboxSources(inboxListEl);
+
+		new Setting(containerEl).addButton((btn) =>
+			btn.setButtonText("Add source").onClick(async () => {
+				this.plugin.settings.inboxSources.push({
+					path: "",
+					heading: "",
+				});
+				await this.plugin.saveSettings();
+				this.renderInboxSources(inboxListEl);
+			})
+		);
 
 		// Default Block Duration
 		new Setting(containerEl)

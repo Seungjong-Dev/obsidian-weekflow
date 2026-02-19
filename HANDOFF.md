@@ -1,7 +1,7 @@
 # WeekFlow 작업 핸드오프
 
 > 작성일: 2026-02-18
-> 마지막 커밋: `414b654` fix: offset bottom sheet above mobile navigation bar
+> 마지막 커밋: `78432ad` docs: resolve remaining inbox decisions — recursive scan and auto-migration
 
 ## 프로젝트 개요
 
@@ -109,17 +109,28 @@ WeekFlow는 Obsidian 플러그인으로, 데일리 노트의 마크다운 체크
 - Review Panel 칼럼 수 visibleDays 연동
 - Statistics 뷰 좁은 화면 세로 배치
 
+### Inbox 소스 리디자인
+- **배경**: 기존 inbox는 `inboxNotePath`에 moment.js 동적 경로를 지원하여 주가 바뀌면 이전 inbox의 미완료 항목이 사라지는 문제 → 정적 다중 소스 모델로 교체
+- **`types.ts`**: `InboxSource` 인터페이스 추가 (`{ path: string; heading: string }`), `inboxNotePath`/`inboxHeading` 제거 → `inboxSources: InboxSource[]` 배열로 교체, 기본값 `[{ path: "Inbox.md", heading: "" }]`
+- **`parser.ts`**: `parseCheckboxItems()`가 빈 heading 문자열 수용 → 파일 전체 파싱
+- **`daily-note.ts`**: `resolveInboxNotePath()` 제거 (moment 의존 제거). 새 함수: `getInboxItems()` (모든 소스 순회, 노트/폴더 대응), `getInboxWatchPaths()` (파일 변경 감지용), `addToInbox()` (우선순위 1위 노트 소스에 쓰기), `removeFromInboxFile()` (파일+라인 기반 제거), `getPrimaryInboxNoteSource()` 헬퍼, `collectMarkdownFiles()` (재귀 폴더 스캔)
+- **`settings.ts`**: Inbox Sources 리스트 UI — path+heading 입력, 드래그 리오더(우선순위), Note/Folder 자동 감지, 추가/삭제 버튼
+- **`view.ts`**: 모든 inbox 참조를 다중 소스 기반으로 변경, `InboxCheckboxItem`에 `sourcePath` 추가, `onInboxAddItem()` 핸들러 추가
+- **`planning-panel.ts`**: 인박스 섹션에 새 항목 추가 입력 UI, 소스가 여러 개일 때 소스 경로 라벨 표시
+- **`main.ts`**: 플러그인 로드 시 기존 `inboxNotePath`/`inboxHeading` → `inboxSources`로 자동 마이그레이션
+- **`styles.css`**: 설정 UI (inbox source rows, drag reorder) 및 패널 add-item input, source path label 스타일 추가
+
 ## 미완료 Phase
 
-모든 Phase (1~6) 완료. SPEC.md 참조.
+모든 Phase (1~6) 및 Inbox 리디자인 완료. SPEC.md 참조.
 
 ## 파일 구조 및 역할
 
 ```
 src/
-├── types.ts              # TimelineItem, WeekFlowSettings, CategoryStats, PlanActualSummary, SwipeCallbacks 등 타입
+├── types.ts              # TimelineItem, WeekFlowSettings, InboxSource, CategoryStats, PlanActualSummary, SwipeCallbacks 등 타입
 ├── parser.ts             # 마크다운 ↔ TimelineItem 파싱/직렬화, Review 섹션 파싱/업데이트
-├── daily-note.ts         # 데일리 노트 읽기/쓰기, 인박스 I/O, 프로젝트 I/O, 리뷰 I/O
+├── daily-note.ts         # 데일리 노트 읽기/쓰기, 인박스 다중 소스 I/O, 프로젝트 I/O, 리뷰 I/O
 ├── device.ts             # DeviceTier, LayoutTier, getLayoutTier(), getVisibleDays(), isTouchDevice(), hapticFeedback()
 ├── grid-renderer.ts      # CSS Grid 렌더링, Pointer Events 드래그 상태머신, 리사이즈, 스와이프 감지, visibleDays/dayOffset 동적화
 ├── view.ts               # WeekFlowView — 메인 뷰 컨트롤러, ResizeObserver + LayoutTier, 리뷰 패널, 하단 시트, 데일리 노트 네비게이션
@@ -129,13 +140,13 @@ src/
 ├── stats-cache.ts         # StatsCache — mtime 기반 증분 파싱 캐시
 ├── calendar.ts           # ICS 페칭/파싱/캐시 (ical.js 사용, requestUrl, Promise.allSettled)
 ├── ical.d.ts             # ical.js 최소 TypeScript 타입 선언
-├── main.ts               # 플러그인 엔트리포인트, 커맨드 등록, StatsView 등록
+├── main.ts               # 플러그인 엔트리포인트, 커맨드 등록, StatsView 등록, inbox 설정 자동 마이그레이션
 ├── block-modal.ts        # 새 블록 생성 모달 (시간 편집 가능, step=300)
 ├── edit-block-modal.ts   # 기존 블록 편집/삭제/완료토글 모달
 ├── confirm-modal.ts      # Yes/No 확인 다이얼로그
 ├── preset-modal.ts       # CreatePresetModal, ApplyPresetModal, PresetModal
 ├── undo-manager.ts       # UndoableAction + UndoManager (50개 제한)
-└── settings.ts           # 설정 탭 UI (기본 + Planning + Project + Calendar Sources + Presets + Categories + Review)
+└── settings.ts           # 설정 탭 UI (기본 + Planning + Inbox Sources + Project + Calendar Sources + Presets + Categories + Review)
 styles.css                # 전체 CSS (그리드, 캘린더 오버레이, 리뷰 패널, 통계 뷰, 차트, 반응형 @media, touch-action, 하단 시트)
 ```
 
@@ -183,67 +194,9 @@ npm run dev          # 개발 모드 (hot reload)
 
 현재 상태: 빌드 통과 (clean).
 
-## 다음 작업: Inbox 소스 리디자인
+## 다음 작업
 
-### 배경 (문제)
-
-현재 inbox는 `inboxNotePath` 설정에 moment.js 동적 경로를 지원한다 (기본값: `YYYY-[W]ww`).
-동적 경로를 사용하면 주가 바뀔 때 이전 inbox 파일의 미완료 항목이 UI에서 사라져,
-inbox가 "미처리 대기열"이 아니라 "다시 볼 수 없는 무덤"이 되는 문제가 있다.
-
-### 결정사항
-
-- moment.js 동적 경로 지원을 **제거**하고, 정적 소스 목록으로 교체
-- 단일 `inboxNotePath` + `inboxHeading` → **`inboxSources: {path: string, heading?: string}[]`** 배열로 변경
-- 각 소스는 **노트 경로** 또는 **폴더 경로** — 폴더면 하위 `.md` 파일 전체 스캔
-- 소스 개수 제한 없음, 드래그로 순서(우선순위) 변경 가능
-- **헤딩 동작**:
-  - 헤딩 있음 → 해당 헤딩 아래만 읽기 + 쓰기
-  - 헤딩 없음 → 노트 전체에서 읽기 + 파일 끝에 추가
-  - 폴더 소스 → 헤딩 없이 각 노트 전체 읽기, 쓰기 불가
-- **쓰기 대상**: 소스 목록의 우선순위 1위 노트 소스 (폴더 소스는 쓰기 불가이므로 건너뜀)
-- **패널에서 새 항목 추가**: 우선순위 1위 노트 소스에 기록. 노트 소스가 없으면 추가 버튼 미표시
-
-### 변경 범위
-
-#### 1. `src/types.ts`
-- `WeekFlowSettings`에서 `inboxNotePath: string` + `inboxHeading: string` 제거
-- `InboxSource` 인터페이스 신규: `{ path: string; heading: string }` (heading 빈 문자열 = 전체)
-- `inboxSources: InboxSource[]` 추가
-- `DEFAULT_SETTINGS`에서 기본값 설정 (예: `[{ path: "Inbox.md", heading: "" }]`)
-- `defaultBlockDuration`은 유지
-
-#### 2. `src/daily-note.ts`
-- `resolveInboxNotePath()` 제거 (moment 의존 제거)
-- `getInboxItems()` 변경: 소스 배열 순회, 각 소스가 파일이면 직접 읽기, 폴더면 하위 파일 순회
-- 헤딩 있는 소스 → 해당 헤딩 섹션만 파싱, 헤딩 없는 소스 → 노트 전체 파싱
-- `addToInbox()` 변경: 우선순위 1위 노트 소스에 쓰기 (폴더 소스 건너뜀)
-- 헤딩 있으면 해당 헤딩 아래에 삽입, 없으면 파일 끝에 추가
-
-#### 3. `src/parser.ts`
-- `parseCheckboxItems(content, heading)` — heading이 빈 문자열이면 전체 파싱, 있으면 해당 섹션만 파싱
-
-#### 4. `src/settings.ts`
-- 기존 Inbox Note Path / Inbox Heading 설정 제거
-- Inbox Sources 리스트 UI: 경로 + 헤딩 입력, 추가/삭제 버튼, 드래그로 순서(우선순위) 변경
-- Note/Folder 자동 판별 (vault에서 확인)
-
-#### 5. `src/view.ts`
-- `resolveInboxNotePath()` 호출부 → 새 소스 목록 기반으로 교체
-- `weekNotePaths`에 inbox 소스 전체 등록 (파일 변경 감지용)
-- `collectInboxPanelItems()`에서 소스 정보(어느 파일에서 왔는지) 보존
-- `removeFromInbox()` — 원본 파일 경로 + 라인 번호로 제거
-- `onBlockReturnToInbox()` — 우선순위 1위 노트 소스에 기록
-- 새 항목 추가 핸들러: 우선순위 1위 노트 소스에 `addToInbox()`, 노트 소스 없으면 추가 버튼 숨김
-
-#### 6. `src/planning-panel.ts`
-- 패널 아이템에 소스 파일 경로 표시 (선택적, 소스가 여러 개일 때 구분용)
-- 인박스 섹션 상단에 "새 항목 추가" 입력 UI (노트 소스가 있을 때만 표시)
-
-### 추가 결정사항
-
-- **폴더 스캔 깊이**: 재귀 스캔 (하위 폴더 포함)
-- **마이그레이션**: 기존 `inboxNotePath`/`inboxHeading` 설정이 있으면 `inboxSources`로 자동 변환 (플러그인 로드 시 감지 → 변환 → 저장)
+모든 기능 구현 완료. SPEC.md 참조.
 
 ## 알려진 이슈 / 개선 여지
 

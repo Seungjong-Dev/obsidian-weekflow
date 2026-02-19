@@ -52,6 +52,11 @@ export interface CalendarEvent {
 	color: string;
 }
 
+export interface InboxSource {
+	path: string;    // note path (e.g., "Inbox.md") or folder path (e.g., "Projects/Active")
+	heading: string; // heading to scope reads/writes; empty string = entire note
+}
+
 export interface WeekFlowSettings {
 	dailyNotePath: string;
 	dailyNoteTemplatePath: string;
@@ -61,8 +66,7 @@ export interface WeekFlowSettings {
 	weekStartDay: number; // 0=Sun, 1=Mon, ...
 	defaultMode: "plan" | "actual";
 	categories: Category[];
-	inboxNotePath: string;
-	inboxHeading: string;
+	inboxSources: InboxSource[];
 	defaultBlockDuration: number; // minutes
 	planningPanelOpen: boolean;
 
@@ -97,8 +101,7 @@ export const DEFAULT_SETTINGS: WeekFlowSettings = {
 		{ tag: "work", label: "Work", color: "#4A90D9" },
 		{ tag: "personal", label: "Personal", color: "#BD10E0" },
 	],
-	inboxNotePath: "YYYY-[W]ww",
-	inboxHeading: "### To Do",
+	inboxSources: [{ path: "Inbox.md", heading: "" }],
 	defaultBlockDuration: 60,
 	planningPanelOpen: true,
 	projectTag: "type/project",

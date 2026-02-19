@@ -180,6 +180,7 @@ const INBOX_CHECKBOX_RE = /^- \[([ x>])\] (.+)$/;
 /**
  * Parse checkbox items (without time ranges) from a note under a given heading.
  * Returns only unchecked items (- [ ]).
+ * If heading is empty string, parses the entire note.
  */
 export function parseCheckboxItems(
 	content: string,
@@ -187,22 +188,31 @@ export function parseCheckboxItems(
 ): CheckboxItem[] {
 	const lines = content.split("\n");
 
-	const headingLevel = (heading.match(/^#+/) || [""])[0].length;
-	let startIdx = -1;
-	for (let i = 0; i < lines.length; i++) {
-		if (lines[i].trim() === heading.trim()) {
-			startIdx = i + 1;
-			break;
-		}
-	}
-	if (startIdx === -1) return [];
+	let startIdx: number;
+	let endIdx: number;
 
-	let endIdx = lines.length;
-	for (let i = startIdx; i < lines.length; i++) {
-		const match = lines[i].match(/^(#+)\s/);
-		if (match && match[1].length <= headingLevel) {
-			endIdx = i;
-			break;
+	if (!heading.trim()) {
+		// No heading: parse entire file
+		startIdx = 0;
+		endIdx = lines.length;
+	} else {
+		const headingLevel = (heading.match(/^#+/) || [""])[0].length;
+		startIdx = -1;
+		for (let i = 0; i < lines.length; i++) {
+			if (lines[i].trim() === heading.trim()) {
+				startIdx = i + 1;
+				break;
+			}
+		}
+		if (startIdx === -1) return [];
+
+		endIdx = lines.length;
+		for (let i = startIdx; i < lines.length; i++) {
+			const match = lines[i].match(/^(#+)\s/);
+			if (match && match[1].length <= headingLevel) {
+				endIdx = i;
+				break;
+			}
 		}
 	}
 

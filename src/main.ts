@@ -126,7 +126,26 @@ export default class WeekFlowPlugin extends Plugin {
 	}
 
 	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+		const data = await this.loadData();
+		this.settings = Object.assign({}, DEFAULT_SETTINGS, data);
+
+		// Auto-migrate old inboxNotePath/inboxHeading → inboxSources
+		if (data && ("inboxNotePath" in data || "inboxHeading" in data) && !("inboxSources" in data)) {
+			const oldPath = (data as any).inboxNotePath || "";
+			const oldHeading = (data as any).inboxHeading || "";
+			if (oldPath) {
+				// Convert old moment.js dynamic path to static path using current date
+				const resolvedPath = window.moment().format(oldPath);
+				this.settings.inboxSources = [{
+					path: resolvedPath + ".md",
+					heading: oldHeading,
+				}];
+			}
+			// Clean up old properties
+			delete (this.settings as any).inboxNotePath;
+			delete (this.settings as any).inboxHeading;
+			await this.saveSettings();
+		}
 	}
 
 	async saveSettings() {

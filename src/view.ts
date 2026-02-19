@@ -4,8 +4,8 @@ import type WeekFlowPlugin from "./main";
 import { VIEW_TYPE_WEEKFLOW } from "./types";
 import type { CalendarEvent, PanelItem, ParseWarning, TimelineItem, WeekFlowSettings } from "./types";
 import { getCalendarEventsForWeek, clearCalendarCache } from "./calendar";
-import { getWeekDates, getWeekNotePaths, loadWeekData, saveDailyNoteItems, resolveDailyNotePath, resolveInboxNotePath, getInboxItems, addToInbox, getActiveProjects, getProjectTasks, appendBlockIdToLine, completeProjectTask, loadWeekReviewData, saveDailyReviewContent } from "./daily-note";
-import type { ProjectInfo } from "./daily-note";
+import { getWeekDates, getWeekNotePaths, loadWeekData, saveDailyNoteItems, resolveDailyNotePath, getInboxItems, getInboxWatchPaths, addToInbox, removeFromInboxFile, getPrimaryInboxNoteSource, getActiveProjects, getProjectTasks, appendBlockIdToLine, completeProjectTask, loadWeekReviewData, saveDailyReviewContent } from "./daily-note";
+import type { ProjectInfo, InboxCheckboxItem } from "./daily-note";
 import { GridRenderer } from "./grid-renderer";
 import { BlockModal } from "./block-modal";
 import { EditBlockModal } from "./edit-block-modal";
@@ -35,7 +35,7 @@ export class WeekFlowView extends ItemView {
 	// Planning panel
 	private planningPanel: PlanningPanel | null = null;
 	private panelSections: PanelSection[] = [];
-	private inboxItems: CheckboxItem[] = [];
+	private inboxItems: InboxCheckboxItem[] = [];
 	private projectData: { project: ProjectInfo; tasks: CheckboxItem[] }[] = [];
 
 	// Calendar events
@@ -194,10 +194,12 @@ export class WeekFlowView extends ItemView {
 			this.currentDayOffset = this.calculateDayOffset(this.currentVisibleDays);
 		}
 
-		// Add inbox note path to watched files
-		const inboxPath = resolveInboxNotePath(settings.inboxNotePath);
-		if (!this.weekNotePaths.includes(inboxPath)) {
-			this.weekNotePaths.push(inboxPath);
+		// Add inbox source paths to watched files
+		const inboxPaths = getInboxWatchPaths(this.app.vault, settings.inboxSources);
+		for (const ip of inboxPaths) {
+			if (!this.weekNotePaths.includes(ip)) {
+				this.weekNotePaths.push(ip);
+			}
 		}
 
 		// Load week data, inbox, and review data (local — fast)
@@ -1374,6 +1376,8 @@ export class WeekFlowView extends ItemView {
 	}
 
 	private buildPanelSections(): void {
+		const hasPrimaryNoteSource = getPrimaryInboxNoteSource(this.app.vault, this.plugin.settings.inboxSources) !== null;
+		const hasMultipleSources = this.plugin.settings.inboxSources.length > 1;
 		this.panelSections = [
 			{
 				type: "overdue",
@@ -1388,9 +1392,25 @@ export class WeekFlowView extends ItemView {
 				icon: "inbox",
 				items: this.collectInboxPanelItems(),
 				collapsed: false,
+				canAddItem: hasPrimaryNoteSource,
+				showSourcePath: hasMultipleSources,
+				onAddItem: hasPrimaryNoteSource
+					? (text: string) => this.onInboxAddItem(text)
+					: undefined,
 			},
 			...this.collectProjectSections(),
 		];
+	}
+
+	private async onInboxAddItem(text: string): Promise<void> {
+		const line = `- [ ] ${text}`;
+		this.isSelfWriting = true;
+		try {
+			await addToInbox(this.app.vault, this.plugin.settings, line);
+		} finally {
+			this.isSelfWriting = false;
+		}
+		await this.refresh();
 	}
 
 	private collectProjectSections(): PanelSection[] {
@@ -1449,7 +1469,6 @@ export class WeekFlowView extends ItemView {
 	}
 
 	private collectInboxPanelItems(): PanelItem[] {
-		const inboxPath = resolveInboxNotePath(this.plugin.settings.inboxNotePath);
 		return this.inboxItems.map((ci) => ({
 			id: generateItemId(),
 			content: ci.content,
@@ -1457,7 +1476,7 @@ export class WeekFlowView extends ItemView {
 			rawSuffix: ci.rawSuffix,
 			source: {
 				type: "inbox" as const,
-				notePath: inboxPath,
+				notePath: ci.sourcePath,
 				lineNumber: ci.lineNumber,
 			},
 		}));
@@ -1616,7 +1635,7 @@ export class WeekFlowView extends ItemView {
 		} else if (src.type === "inbox") {
 			// Remove from inbox note
 			const inboxLine = serializeCheckboxItem(item.content, item.tags, item.rawSuffix);
-			await this.removeFromInbox(src.lineNumber);
+			await this.removeFromInbox(src.notePath, src.lineNumber);
 
 			const action: UndoableAction = {
 				description: "Schedule inbox item",
@@ -1659,19 +1678,10 @@ export class WeekFlowView extends ItemView {
 		}
 	}
 
-	private async removeFromInbox(lineNumber: number): Promise<void> {
-		const path = resolveInboxNotePath(this.plugin.settings.inboxNotePath);
-		const file = this.app.vault.getAbstractFileByPath(path);
-		if (!file || !("extension" in file)) return;
-
+	private async removeFromInbox(filePath: string, lineNumber: number): Promise<void> {
 		this.isSelfWriting = true;
 		try {
-			const content = await this.app.vault.read(file as any);
-			const lines = content.split("\n");
-			if (lineNumber >= 0 && lineNumber < lines.length) {
-				lines.splice(lineNumber, 1);
-				await this.app.vault.modify(file as any, lines.join("\n"));
-			}
+			await removeFromInboxFile(this.app.vault, filePath, lineNumber);
 		} finally {
 			this.isSelfWriting = false;
 		}

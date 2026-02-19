@@ -9,6 +9,9 @@ export interface PanelSection {
 	items: PanelItem[];
 	collapsed: boolean;
 	key?: string; // unique key for collapse state (defaults to type)
+	canAddItem?: boolean; // show add-item UI (inbox only)
+	showSourcePath?: boolean; // show source file path per item
+	onAddItem?: (text: string) => void; // callback when user adds new item
 }
 
 export interface PlanningPanelCallbacks {
@@ -59,6 +62,23 @@ export class PlanningPanel {
 			}
 			this.sectionCollapseState.set(collapseKey, false);
 
+			// Add-item UI (inbox section, when note source exists)
+			if (section.canAddItem && section.onAddItem) {
+				const addRow = sectionEl.createDiv({ cls: "weekflow-panel-add-row" });
+				const input = addRow.createEl("input", {
+					type: "text",
+					cls: "weekflow-panel-add-input",
+					placeholder: "+ Add item...",
+				});
+				const onAdd = section.onAddItem;
+				input.addEventListener("keydown", (e) => {
+					if (e.key === "Enter" && input.value.trim()) {
+						onAdd(input.value.trim());
+						input.value = "";
+					}
+				});
+			}
+
 			// Items
 			if (section.items.length === 0) {
 				const emptyEl = sectionEl.createDiv({ cls: "weekflow-panel-empty" });
@@ -78,6 +98,13 @@ export class PlanningPanel {
 				if (item.tags.length > 0) {
 					const tagEl = itemEl.createSpan({ cls: "weekflow-panel-item-tag" });
 					tagEl.setText(`#${item.tags[0]}`);
+				}
+
+				// Source path (when multiple sources)
+				if (section.showSourcePath && item.source.type === "inbox") {
+					const srcEl = itemEl.createSpan({ cls: "weekflow-panel-item-source" });
+					const shortPath = item.source.notePath.replace(/\.md$/, "");
+					srcEl.setText(shortPath);
 				}
 
 				// Drag via pointerdown

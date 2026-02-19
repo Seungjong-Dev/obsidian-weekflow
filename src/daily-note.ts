@@ -1,6 +1,6 @@
-import { type App, type Vault, normalizePath, moment, TFile } from "obsidian";
+import { type App, type Vault, normalizePath, moment, TFile, TFolder } from "obsidian";
 type Moment = ReturnType<typeof moment>;
-import type { ParseWarning, TimelineItem, WeekFlowSettings } from "./types";
+import type { InboxSource, ParseWarning, TimelineItem, WeekFlowSettings } from "./types";
 import { parseTimelineItems, parseCheckboxItems, serializeTimelineItem, updateTimelineSection, extractBlockId, parseReviewContent, updateReviewSection } from "./parser";
 import type { CheckboxItem } from "./parser";
 
@@ -260,77 +260,196 @@ export async function loadWeekReviewData(
 
 // ── Inbox I/O ──
 
-/**
- * Resolve inbox note path from a moment.js pattern (uses current date).
- */
-export function resolveInboxNotePath(pattern: string): string {
-	return normalizePath(window.moment().format(pattern) + ".md");
+export interface InboxCheckboxItem extends CheckboxItem {
+	sourcePath: string; // file path where this item was found
 }
 
 /**
- * Read unchecked checkbox items from the inbox note.
+ * Check if an inbox source path is a folder.
+ */
+function isFolder(vault: Vault, path: string): boolean {
+	const abstract = vault.getAbstractFileByPath(normalizePath(path));
+	return abstract instanceof TFolder;
+}
+
+/**
+ * Collect all .md files under a folder recursively.
+ */
+function collectMarkdownFiles(vault: Vault, folderPath: string): TFile[] {
+	const folder = vault.getAbstractFileByPath(normalizePath(folderPath));
+	if (!folder || !(folder instanceof TFolder)) return [];
+
+	const files: TFile[] = [];
+	const recurse = (f: TFolder) => {
+		for (const child of f.children) {
+			if (child instanceof TFile && child.extension === "md") {
+				files.push(child);
+			} else if (child instanceof TFolder) {
+				recurse(child);
+			}
+		}
+	};
+	recurse(folder);
+	return files;
+}
+
+/**
+ * Get all file paths that inbox sources reference (for file-change watching).
+ */
+export function getInboxWatchPaths(vault: Vault, sources: InboxSource[]): string[] {
+	const paths: string[] = [];
+	for (const src of sources) {
+		const p = normalizePath(src.path);
+		if (isFolder(vault, p)) {
+			for (const f of collectMarkdownFiles(vault, p)) {
+				paths.push(f.path);
+			}
+		} else {
+			// Ensure .md extension
+			const filePath = p.endsWith(".md") ? p : p + ".md";
+			paths.push(filePath);
+		}
+	}
+	return paths;
+}
+
+/**
+ * Read unchecked checkbox items from all inbox sources.
+ * Returns items annotated with their source file path.
  */
 export async function getInboxItems(
 	vault: Vault,
 	settings: WeekFlowSettings
-): Promise<CheckboxItem[]> {
-	const path = resolveInboxNotePath(settings.inboxNotePath);
-	const file = vault.getAbstractFileByPath(path);
-	if (!file || !("extension" in file)) return [];
+): Promise<InboxCheckboxItem[]> {
+	const allItems: InboxCheckboxItem[] = [];
 
-	const content = await vault.read(file as any);
-	return parseCheckboxItems(content, settings.inboxHeading);
+	for (const source of settings.inboxSources) {
+		const p = normalizePath(source.path);
+
+		if (isFolder(vault, p)) {
+			// Folder source: read all .md files recursively
+			const files = collectMarkdownFiles(vault, p);
+			for (const file of files) {
+				const content = await vault.read(file);
+				const items = parseCheckboxItems(content, ""); // No heading: parse entire file
+				for (const item of items) {
+					allItems.push({ ...item, sourcePath: file.path });
+				}
+			}
+		} else {
+			// Note source
+			const filePath = p.endsWith(".md") ? p : p + ".md";
+			const file = vault.getAbstractFileByPath(filePath);
+			if (!file || !(file instanceof TFile)) continue;
+
+			const content = await vault.read(file);
+			const items = parseCheckboxItems(content, source.heading);
+			for (const item of items) {
+				allItems.push({ ...item, sourcePath: file.path });
+			}
+		}
+	}
+
+	return allItems;
 }
 
 /**
- * Add a checkbox line to the inbox note under the configured heading.
+ * Find the first note source (non-folder) from inbox sources.
+ * Returns null if no note source exists.
+ */
+export function getPrimaryInboxNoteSource(vault: Vault, sources: InboxSource[]): InboxSource | null {
+	for (const src of sources) {
+		const p = normalizePath(src.path);
+		if (!isFolder(vault, p)) {
+			return src;
+		}
+	}
+	return null;
+}
+
+/**
+ * Add a checkbox line to the priority-1 note source in inbox.
  * Creates the note and/or heading if they don't exist.
+ * Skips folder sources (read-only).
  */
 export async function addToInbox(
 	vault: Vault,
 	settings: WeekFlowSettings,
 	line: string
 ): Promise<void> {
-	const path = resolveInboxNotePath(settings.inboxNotePath);
-	const file = vault.getAbstractFileByPath(path);
+	const primary = getPrimaryInboxNoteSource(vault, settings.inboxSources);
+	if (!primary) return; // No writable note source
 
-	if (file && "extension" in file) {
-		const content = await vault.read(file as any);
-		const heading = settings.inboxHeading;
-		const headingLevel = (heading.match(/^#+/) || [""])[0].length;
-		const lines = content.split("\n");
+	const p = normalizePath(primary.path);
+	const filePath = p.endsWith(".md") ? p : p + ".md";
+	const file = vault.getAbstractFileByPath(filePath);
 
-		let insertIdx = -1;
-		for (let i = 0; i < lines.length; i++) {
-			if (lines[i].trim() === heading.trim()) {
-				// Find the end of items under this heading
-				let j = i + 1;
-				for (; j < lines.length; j++) {
-					const match = lines[j].match(/^(#+)\s/);
-					if (match && match[1].length <= headingLevel) break;
-				}
-				insertIdx = j;
-				break;
-			}
-		}
+	if (file && file instanceof TFile) {
+		const content = await vault.read(file);
+		const heading = primary.heading;
 
-		if (insertIdx === -1) {
-			// Heading not found: append heading + line at end
+		if (!heading.trim()) {
+			// No heading: append to end of file
 			const suffix = content.endsWith("\n") ? "" : "\n";
-			const updated = content + suffix + "\n" + heading + "\n" + line + "\n";
-			await vault.modify(file as any, updated);
+			const updated = content + suffix + line + "\n";
+			await vault.modify(file, updated);
 		} else {
-			lines.splice(insertIdx, 0, line);
-			await vault.modify(file as any, lines.join("\n"));
+			const headingLevel = (heading.match(/^#+/) || [""])[0].length;
+			const lines = content.split("\n");
+
+			let insertIdx = -1;
+			for (let i = 0; i < lines.length; i++) {
+				if (lines[i].trim() === heading.trim()) {
+					let j = i + 1;
+					for (; j < lines.length; j++) {
+						const match = lines[j].match(/^(#+)\s/);
+						if (match && match[1].length <= headingLevel) break;
+					}
+					insertIdx = j;
+					break;
+				}
+			}
+
+			if (insertIdx === -1) {
+				// Heading not found: append heading + line at end
+				const suffix = content.endsWith("\n") ? "" : "\n";
+				const updated = content + suffix + "\n" + heading + "\n" + line + "\n";
+				await vault.modify(file, updated);
+			} else {
+				lines.splice(insertIdx, 0, line);
+				await vault.modify(file, lines.join("\n"));
+			}
 		}
 	} else {
 		// Create new file
-		const dir = path.substring(0, path.lastIndexOf("/"));
+		const dir = filePath.substring(0, filePath.lastIndexOf("/"));
 		if (dir) {
 			await ensureFolderExists(vault, dir);
 		}
-		const content = `${settings.inboxHeading}\n${line}\n`;
-		await vault.create(path, content);
+		const heading = primary.heading;
+		const content = heading.trim()
+			? `${heading}\n${line}\n`
+			: `${line}\n`;
+		await vault.create(filePath, content);
+	}
+}
+
+/**
+ * Remove a checkbox item from a specific inbox file by line number.
+ */
+export async function removeFromInboxFile(
+	vault: Vault,
+	filePath: string,
+	lineNumber: number
+): Promise<void> {
+	const file = vault.getAbstractFileByPath(filePath);
+	if (!file || !(file instanceof TFile)) return;
+
+	const content = await vault.read(file);
+	const lines = content.split("\n");
+	if (lineNumber >= 0 && lineNumber < lines.length) {
+		lines.splice(lineNumber, 1);
+		await vault.modify(file, lines.join("\n"));
 	}
 }
 
