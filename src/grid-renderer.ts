@@ -682,9 +682,10 @@ export class GridRenderer {
 
 		segments.forEach((seg, i) => {
 			const block = this.gridEl!.createDiv({ cls: "weekflow-block" });
-			block.style.gridRow = `${seg.row}`;
+			block.style.gridRow = `${seg.row} / ${seg.row + 1}`;
 			block.style.gridColumn = `${dayColStart + seg.slotStart} / ${dayColStart + seg.slotEnd}`;
-			block.style.position = "relative";
+			block.style.position = "absolute";
+			block.style.inset = "0";
 
 			// Overlap styling
 			if (isOverlap) {

@@ -424,7 +424,7 @@
 /* 5-minute diagonal edges */
 .weekflow-5min-start,
 .weekflow-5min-end {
-	position: relative;
+	/* position: absolute on block already provides containing block for pseudo-elements */
 }
 
 .weekflow-5min-start:not(.weekflow-5min-end) {
@@ -521,6 +521,8 @@
 	border: 2px dashed;
 	font-size: 10px;
 	min-height: 0;
+	white-space: nowrap;
+	text-overflow: ellipsis;
 }
 
 /* Block toggle button (complete/uncomplete) */
