@@ -215,9 +215,6 @@ export class WeekFlowView extends ItemView {
 
 		this.renderView();
 
-		// Load project data async — don't block view rendering on file I/O
-		this.loadProjectDataAsync(settings);
-
 		// Load calendar events async — don't block view rendering on network I/O
 		this.loadCalendarEventsAsync(settings);
 	}
@@ -1398,7 +1395,7 @@ export class WeekFlowView extends ItemView {
 					? (text: string) => this.onInboxAddItem(text)
 					: undefined,
 			},
-			...this.collectProjectSections(),
+			// Project sections disabled — will be re-added when project feature is enhanced
 		];
 	}
 
@@ -1414,7 +1411,7 @@ export class WeekFlowView extends ItemView {
 	}
 
 	private collectProjectSections(): PanelSection[] {
-		return this.projectData.map(({ project, tasks }) => ({
+		return this.projectData.filter(({ tasks }) => tasks.length > 0).map(({ project, tasks }) => ({
 			type: "project" as const,
 			title: project.title,
 			icon: "folder",
