@@ -1,7 +1,7 @@
 # WeekFlow 작업 핸드오프
 
 > 작성일: 2026-02-18
-> 마지막 커밋: `86b9a1f` fix: preserve recurring event pattern alignment and register VTIMEZONE
+> 마지막 커밋: `e2e27de` refactor: disable project sections in planning panel
 
 ## 프로젝트 개요
 
@@ -68,7 +68,9 @@ WeekFlow는 Obsidian 플러그인으로, 데일리 노트의 마크다운 체크
 ### Phase 5 (External Calendar & Commands)
 - **ICS Calendar Overlay**: `ical.js` 라이브러리로 ICS 파싱, `requestUrl` (Obsidian API)로 CORS 우회 페칭
   - 인메모리 캐시 (`Map<url, { text, fetchedAt }>`) + stale cache fallback (오프라인 대응)
-  - 반복 이벤트 확장 (`Event.iterator()`, MAX_EXPANSIONS=365)
+  - VTIMEZONE 등록 (`ICAL.TimezoneService.register()`)으로 TZID 참조 해석
+  - 반복 이벤트 확장 (`Event.iterator()`, MAX_EXPANSIONS=3650), 이벤트 자체 DTSTART 기준 이터레이션 (INTERVAL 위상 보존)
+  - 타임존 인식 범위 필터링 (`toJSDate().getTime()` 기반 Unix 타임스탬프 비교)
   - `Promise.allSettled()`로 소스별 독립 처리 (한 소스 실패가 전체를 막지 않음)
   - All-day 이벤트 스킵, 주간 범위 클리핑
   - 비동기 로딩: 뷰 렌더 후 백그라운드 fetch → `renderCalendarOverlayOnly()`로 오버레이만 패치 (뷰 먹통 방지)
@@ -120,6 +122,16 @@ WeekFlow는 Obsidian 플러그인으로, 데일리 노트의 마크다운 체크
 - **`main.ts`**: 플러그인 로드 시 기존 `inboxNotePath`/`inboxHeading` → `inboxSources`로 자동 마이그레이션
 - **`styles.css`**: 설정 UI (inbox source rows, drag reorder) 및 패널 add-item input, source path label 스타일 추가
 
+### Calendar 파싱 수정
+- **`calendar.ts`**: VTIMEZONE 컴포넌트를 `ICAL.TimezoneService`에 등록하여 TZID 참조가 있는 이벤트의 시간 변환 정확도 확보
+- **타임존 인식 비교**: `ICAL.Time.compare()` (raw 값 비교) → `toJSDate().getTime()` (Unix 타임스탬프 비교)로 교체하여 UTC가 아닌 타임존에서 주 경계 부근 이벤트 누락 방지
+- **반복 이벤트 이터레이터**: `event.iterator(rangeStartTime)` → `event.iterator()` (이벤트 자체 DTSTART 사용)로 변경하여 INTERVAL 기반 반복 패턴(격주 등)의 위상 정렬 보존
+- **MAX_EXPANSIONS**: 365 → 3650 (10년 분량의 일일 반복 커버)
+- **`daily-note.ts`**: frontmatter `tags` 배열에 문자열이 아닌 값(숫자 등) 포함 시 `TypeError` 방지 (`.filter()` 타입 가드 추가)
+
+### Planning Panel 프로젝트 섹션 비활성화
+- **`view.ts`**: 프로젝트 섹션을 패널에서 임시 제거 (`collectProjectSections()` 호출 주석 처리, `loadProjectDataAsync()` 호출 제거). 프로젝트 기능 강화 시 재활성화 예정. 관련 코드는 보존됨.
+
 ## 미완료 Phase
 
 모든 Phase (1~6) 및 Inbox 리디자인 완료. SPEC.md 참조.
@@ -134,7 +146,7 @@ src/
 ├── device.ts             # DeviceTier, LayoutTier, getLayoutTier(), getVisibleDays(), isTouchDevice(), hapticFeedback()
 ├── grid-renderer.ts      # CSS Grid 렌더링, Pointer Events 드래그 상태머신, 리사이즈, 스와이프 감지, visibleDays/dayOffset 동적화
 ├── view.ts               # WeekFlowView — 메인 뷰 컨트롤러, ResizeObserver + LayoutTier, 리뷰 패널, 하단 시트, 데일리 노트 네비게이션
-├── planning-panel.ts     # PlanningPanel — overdue/inbox/project 섹션 렌더링, 접기/펼치기
+├── planning-panel.ts     # PlanningPanel — overdue/inbox 섹션 렌더링, 접기/펼치기 (프로젝트 섹션 비활성화)
 ├── statistics.ts          # 통계 계산 (카테고리, 프로젝트, Plan vs Actual, Burning Rate, 시간 분포)
 ├── stats-view.ts          # StatsView (ItemView) — 통계 뷰, 범위 선택, 차트 렌더링
 ├── stats-cache.ts         # StatsCache — mtime 기반 증분 파싱 캐시

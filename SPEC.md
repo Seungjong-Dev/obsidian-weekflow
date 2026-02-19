@@ -288,7 +288,7 @@ WeekFlow 뷰 사이드에 플래닝 패널을 제공한다. 시간 배정이 필
    - **노트 소스 (헤딩 없음):** 노트 전체에서 미완료 체크박스 읽기. 새 항목 추가 시 파일 끝에 삽입.
    - **폴더 소스:** 하위 `.md` 파일을 재귀적으로 스캔하여 미완료 체크박스 읽기. 읽기 전용 (쓰기 불가).
    - **새 항목 추가:** 소스 목록의 순서(우선순위)에서 첫 번째 노트 소스(폴더 소스 제외)에 기록. 노트 소스가 없으면 추가 버튼 미표시.
-3. **📁 프로젝트별 태스크:** 설정에 지정된 조건에 맞는 활성 프로젝트의 태스크 헤딩에서 미완료 태스크.
+3. **📁 프로젝트별 태스크:** 설정에 지정된 조건에 맞는 활성 프로젝트의 태스크 헤딩에서 미완료 태스크. *(현재 비활성화 — 프로젝트 기능 강화 후 재활성화 예정)*
 
 **동작:**
 - 패널의 항목을 타임테이블에 드래그하면 **새 타임라인 항목을 생성** (원본은 그대로 유지)
@@ -769,7 +769,7 @@ Narrow 모드에서 사이드 패널 대신 하단 시트로 표시:
 
 **목표:** 외부 캘린더 통합, 커맨드 팔레트 지원, 편의 기능.
 
-- Calendar Overlay: ICS URL 구독 (`ical.js` 라이브러리), `requestUrl`로 CORS 우회 페칭, 인메모리 캐시 (stale cache fallback), 반복 이벤트 확장 (`Event.iterator()`), `Promise.allSettled()`로 소스별 병렬 처리, 빗금+점선 오버레이 렌더링 (z-index 2, 타임라인 블록 아래), all-day 이벤트 스킵
+- Calendar Overlay: ICS URL 구독 (`ical.js` 라이브러리), `requestUrl`로 CORS 우회 페칭, 인메모리 캐시 (stale cache fallback), VTIMEZONE 등록 (`ICAL.TimezoneService`), 반복 이벤트 확장 (`Event.iterator()`, 이벤트 DTSTART 기준, MAX_EXPANSIONS=3650), 타임존 인식 범위 필터링 (`toJSDate().getTime()`), `Promise.allSettled()`로 소스별 병렬 처리, 빗금+점선 오버레이 렌더링 (z-index 2, 타임라인 블록 아래), all-day 이벤트 스킵
 - 설정: Calendar Sources (name, URL, color, enabled, delete), Calendar Cache Duration (슬라이더 0~120분)
 - Obsidian 커맨드 등록 (Phase 1~3에서 이미 구현된 것 포함):
   - `WeekFlow: Open weekly view` ✅
@@ -806,7 +806,7 @@ Narrow 모드에서 사이드 패널 대신 하단 시트로 표시:
 - `pointercancel` 시 `dragMode` 리셋 (Apple Pencil 리프트/팜 리젝션 대응)
 - `getCellFromPoint()`: `getBoundingClientRect()`가 스크롤 반영하므로 `scrollLeft/Top` 미가산
 - 같은 주 내 페이지 이동: `updatePage()`로 그리드+툴바+리뷰만 업데이트 (전체 재렌더 안 함)
-- 프로젝트 데이터 비동기 로딩: `loadProjectDataAsync()`로 뷰 렌더 후 백그라운드 로드 → 패널만 패치
+- 프로젝트 섹션 비활성화: 프로젝트 기능 강화 시 재활성화 예정 (관련 코드 보존)
 - `renderView()` 전 기존 `GridRenderer.destroy()` 호출 (글로벌 리스너 누수 방지)
 - Review Panel 칼럼 수 visibleDays 연동
 - Statistics 뷰 좁은 화면 세로 배치 (`@media max-width: 600px`)
