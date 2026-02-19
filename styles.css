@@ -1300,6 +1300,25 @@
 	z-index: 20;
 }
 
+/* ── Block tooltip ── */
+.weekflow-tooltip {
+	position: fixed;
+	transform: translateX(-50%) translateY(calc(-100% - 6px));
+	max-width: 240px;
+	padding: 4px 8px;
+	border-radius: 4px;
+	background: var(--background-primary);
+	color: var(--text-normal);
+	font-size: 12px;
+	line-height: 1.4;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+	border: 1px solid var(--background-modifier-border);
+	z-index: 1000;
+	pointer-events: none;
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+
 /* ── Obsidian Mobile (.is-mobile) touch target sizing ── */
 .is-mobile .weekflow-block-toggle {
 	width: 28px;

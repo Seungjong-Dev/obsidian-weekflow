@@ -105,6 +105,10 @@ export class GridRenderer {
 	private longpressActive = false;
 	private longpressEl: HTMLElement | null = null;
 
+	// Custom tooltip
+	private tooltipEl: HTMLElement | null = null;
+	private tooltipTimer: ReturnType<typeof setTimeout> | null = null;
+
 	// Swipe detection state
 	private swipeStartX = 0;
 	private swipeStartY = 0;
@@ -305,6 +309,49 @@ export class GridRenderer {
 		if (this.boundPointerCancel) {
 			document.removeEventListener("pointercancel", this.boundPointerCancel);
 		}
+		this.hideTooltip();
+	}
+
+	// ── Tooltip ──
+
+	private showTooltip(text: string, anchorEl: HTMLElement): void {
+		this.hideTooltip();
+		const tip = document.createElement("div");
+		tip.className = "weekflow-tooltip";
+		tip.textContent = text;
+		document.body.appendChild(tip);
+		this.tooltipEl = tip;
+
+		const rect = anchorEl.getBoundingClientRect();
+		tip.style.left = `${rect.left + rect.width / 2}px`;
+		tip.style.top = `${rect.top}px`;
+
+		// Clamp to viewport after rendering
+		requestAnimationFrame(() => {
+			if (!this.tooltipEl) return;
+			const tipRect = tip.getBoundingClientRect();
+			if (tipRect.left < 4) {
+				tip.style.left = `${4 + tipRect.width / 2}px`;
+			} else if (tipRect.right > window.innerWidth - 4) {
+				tip.style.left = `${window.innerWidth - 4 - tipRect.width / 2}px`;
+			}
+			if (tipRect.top < 4) {
+				// Show below the block instead
+				tip.style.top = `${rect.bottom}px`;
+				tip.style.transform = "translateX(-50%) translateY(4px)";
+			}
+		});
+	}
+
+	private hideTooltip(): void {
+		if (this.tooltipTimer) {
+			clearTimeout(this.tooltipTimer);
+			this.tooltipTimer = null;
+		}
+		if (this.tooltipEl) {
+			this.tooltipEl.remove();
+			this.tooltipEl = null;
+		}
 	}
 
 	// ── Global Pointer Handlers ──
@@ -328,6 +375,8 @@ export class GridRenderer {
 	}
 
 	private onGlobalPointerUp(e: PointerEvent) {
+		this.hideTooltip();
+
 		// Clear longpress visual feedback
 		if (this.longpressActive && this.longpressEl) {
 			this.longpressEl.removeClass("weekflow-longpress-active");
@@ -359,6 +408,8 @@ export class GridRenderer {
 	}
 
 	private onGlobalPointerCancel(e: PointerEvent) {
+		this.hideTooltip();
+
 		// Check for swipe before discarding touch state
 		// (browser fires pointercancel during pan-y scroll, but horizontal swipe data is still valid)
 		if (this.touchTapState) {
@@ -680,6 +731,9 @@ export class GridRenderer {
 			return w > bw ? idx : best;
 		}, 0);
 
+		const tooltipTime = `${formatTime(item.planTime.start)}-${formatTime(item.planTime.end)}`;
+		const tooltipText = `${tooltipTime} ${item.content}`;
+
 		segments.forEach((seg, i) => {
 			const block = this.gridEl!.createDiv({ cls: "weekflow-block" });
 			block.style.gridRow = `${seg.row} / ${seg.row + 1}`;
@@ -833,6 +887,7 @@ export class GridRenderer {
 						this.longpressEl = targetBlock;
 						targetBlock.addClass("weekflow-longpress-active");
 						hapticFeedback();
+						this.showTooltip(tooltipText, targetBlock);
 					}
 
 					this.updateGhostPosition(e);
@@ -855,6 +910,18 @@ export class GridRenderer {
 				if (this.callbacks.onBlockRightClick) {
 					this.callbacks.onBlockRightClick(dayIndex, item, e as unknown as PointerEvent);
 				}
+			});
+
+			// Tooltip: mouse/pen hover
+			block.addEventListener("pointerenter", (e) => {
+				if (e.pointerType === "touch") return;
+				this.tooltipTimer = setTimeout(() => {
+					this.showTooltip(tooltipText, block);
+				}, 300);
+			});
+			block.addEventListener("pointerleave", (e) => {
+				if (e.pointerType === "touch") return;
+				this.hideTooltip();
 			});
 		});
 
@@ -942,6 +1009,7 @@ export class GridRenderer {
 		const dy = e.clientY - this.blockDragStartY;
 		if (Math.abs(dx) < DRAG_DISTANCE_PX && Math.abs(dy) < DRAG_DISTANCE_PX) return;
 
+		this.hideTooltip();
 		this.updateGhostPosition(e);
 	}
 
