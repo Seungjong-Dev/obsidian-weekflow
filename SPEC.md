@@ -600,6 +600,10 @@ function hapticFeedback(): void;
 - 리사이즈 핸들에 `setPointerCapture()`를 적용하여 요소 밖으로 드래그해도 이벤트 유지
 - 터치 디바이스에서 블록 드래그는 롱프레스(300ms) 후 시작, `weekflow-longpress-active` 클래스로 scale+shadow 시각 피드백 + 햅틱 진동
 - 데스크톱 블록 드래그는 150ms 딜레이 후 시작
+- **블록 툴팁:** 작은 블록에서 잘리는 타이틀을 확인할 수 있는 커스텀 툴팁. 시간과 내용을 `HH:MM-HH:MM content` 형식으로 표시. 입력 방식별 트리거:
+  - **마우스/Apple Pencil:** `pointerenter` 후 300ms 딜레이로 표시, `pointerleave` 시 즉시 숨김
+  - **터치(손가락):** 롱프레스(300ms) 시 드래그 진입과 함께 표시, 드래그 이동 또는 pointerup 시 숨김
+  - 툴팁은 블록 상단에 `position: fixed`로 배치되며, 뷰포트 경계 클램핑 적용 (상단 넘침 시 블록 하단으로 전환)
 
 ### 스와이프 네비게이션
 

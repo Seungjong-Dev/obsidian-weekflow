@@ -1,7 +1,7 @@
 # WeekFlow 작업 핸드오프
 
-> 작성일: 2026-02-18
-> 마지막 커밋: `67a5d42` fix: prevent time blocks and ghost blocks from affecting grid row height
+> 작성일: 2026-02-19
+> 마지막 커밋: `c72b6b4` feat: add custom tooltip for time blocks (mouse, Apple Pencil, touch)
 
 ## 프로젝트 개요
 
@@ -135,6 +135,13 @@ WeekFlow는 Obsidian 플러그인으로, 데일리 노트의 마크다운 체크
 ### 그리드 행 높이 안정화
 - **`grid-renderer.ts`**: 타임라인 블록을 `position: absolute; inset: 0`으로 변경하여 그리드 트랙 크기 계산에 참여하지 않도록 함. `grid-row`에 명시적 끝 라인 추가 (`N / N+1`) — absolute 아이템의 `auto` end가 그리드 컨테이너 끝으로 해석되는 문제 방지
 - **`styles.css`**: `.weekflow-5min-start/end`에서 `position: relative` 제거 (absolute가 이미 containing block 역할). `.weekflow-block-ghost`에 `white-space: nowrap; text-overflow: ellipsis` 추가하여 고스트 블록의 텍스트 줄바꿈으로 인한 행 높이 변동 방지
+
+### 블록 커스텀 툴팁
+- **`grid-renderer.ts`**: 네이티브 `title` 속성 대신 커스텀 툴팁 구현. `showTooltip()`/`hideTooltip()` 메서드 추가, `tooltipEl`/`tooltipTimer` 상태 관리
+  - 마우스/펜(Apple Pencil): 블록 `pointerenter` 시 300ms 딜레이 후 표시, `pointerleave` 시 즉시 숨김 (`pointerType === "touch"` 제외)
+  - 터치: 기존 롱프레스(300ms) 타이머에서 `showTooltip()` 호출 — 드래그 진입 시 함께 표시
+  - 드래그 이동(`onBlockDragMove`), `pointerup`, `pointercancel`, `destroy()` 시 `hideTooltip()` 호출
+- **`styles.css`**: `.weekflow-tooltip` 스타일 추가 — `position: fixed`, `transform: translateX(-50%) translateY(calc(-100% - 6px))`, 뷰포트 경계 클램핑 (상단 넘침 시 블록 하단으로 전환), `pointer-events: none`, `z-index: 1000`
 
 ## 미완료 Phase
 
