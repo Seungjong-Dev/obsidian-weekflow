@@ -2,7 +2,7 @@ import { requestUrl } from "obsidian";
 import ICAL from "ical.js";
 import type { CalendarSource, CalendarEvent } from "./types";
 
-const MAX_EXPANSIONS = 365;
+const MAX_EXPANSIONS = 3650; // ~10 years of daily events
 
 // In-memory cache
 const cache = new Map<string, { text: string; fetchedAt: number }>();
@@ -40,30 +40,35 @@ function parseICSEvents(
 ): CalendarEvent[] {
 	const events: CalendarEvent[] = [];
 	const comp = ICAL.Component.fromString(icsText);
+
+	// Register VTIMEZONE components so ical.js can resolve TZID references.
+	// Without this, events with TZID may fail to convert or silently produce
+	// incorrect times, causing them to be filtered out of the visible range.
+	for (const vtz of comp.getAllSubcomponents("vtimezone")) {
+		const tz = new ICAL.Timezone(vtz);
+		ICAL.TimezoneService.register(tz.tzid, tz);
+	}
+
 	const vevents = comp.getAllSubcomponents("vevent");
 
-	// Use local timezone and buffer by 1 day to avoid missing events
-	// near range boundaries due to timezone offset differences.
-	const iterSeedDate = new Date(rangeStart.getTime() - 86_400_000);
-	const rangeStartTime = ICAL.Time.fromJSDate(iterSeedDate, false);
 	const rangeStartMs = rangeStart.getTime();
 	const rangeEndMs = rangeEnd.getTime();
 
 	for (const vevent of vevents) {
 		try {
 			const event = new ICAL.Event(vevent);
+			const summary = event.summary || "(No title)";
 
 			if (event.isRecurring()) {
-				const iter = event.iterator(rangeStartTime);
+				// Use event's own DTSTART to preserve recurrence pattern
+				// alignment (e.g., bi-weekly INTERVAL=2 phase).
+				const iter = event.iterator();
 				let count = 0;
 				let next = iter.next();
 
 				while (next && !iter.complete && count < MAX_EXPANSIONS) {
 					count++;
 
-					// Use JS Date comparison (timezone-aware) instead of
-					// ICAL.Time.compare which compares raw values without
-					// timezone conversion and can drop events.
 					const occStart = next.toJSDate();
 					if (occStart.getTime() >= rangeEndMs) break;
 
@@ -82,7 +87,7 @@ function parseICSEvents(
 
 					events.push({
 						uid: event.uid + "_" + occStart.toISOString(),
-						summary: event.summary || "(No title)",
+						summary,
 						start: occStart,
 						end: occEnd,
 						allDay: false,
@@ -96,17 +101,12 @@ function parseICSEvents(
 				const start = event.startDate.toJSDate();
 				const end = event.endDate.toJSDate();
 
-				// Skip if outside range
-				if (end.getTime() <= rangeStartMs || start.getTime() >= rangeEndMs) {
-					continue;
-				}
-
-				// Skip all-day events
 				if (event.startDate.isDate) continue;
+				if (end.getTime() <= rangeStartMs || start.getTime() >= rangeEndMs) continue;
 
 				events.push({
 					uid: event.uid,
-					summary: event.summary || "(No title)",
+					summary,
 					start,
 					end,
 					allDay: false,

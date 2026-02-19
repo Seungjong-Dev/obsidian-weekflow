@@ -475,7 +475,7 @@ export function getActiveProjects(
 		// Check tags: frontmatter tags + inline tags
 		const rawFmTags = cache.frontmatter?.tags;
 		const fmTags: string[] = Array.isArray(rawFmTags)
-			? rawFmTags.map((t: string) => t.replace(/^#/, ""))
+			? rawFmTags.filter((t: unknown): t is string => typeof t === "string").map((t) => t.replace(/^#/, ""))
 			: typeof rawFmTags === "string"
 				? [rawFmTags.replace(/^#/, "")]
 				: [];
