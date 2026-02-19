@@ -42,8 +42,12 @@ function parseICSEvents(
 	const comp = ICAL.Component.fromString(icsText);
 	const vevents = comp.getAllSubcomponents("vevent");
 
-	const rangeStartTime = ICAL.Time.fromJSDate(rangeStart, true);
-	const rangeEndTime = ICAL.Time.fromJSDate(rangeEnd, true);
+	// Use local timezone and buffer by 1 day to avoid missing events
+	// near range boundaries due to timezone offset differences.
+	const iterSeedDate = new Date(rangeStart.getTime() - 86_400_000);
+	const rangeStartTime = ICAL.Time.fromJSDate(iterSeedDate, false);
+	const rangeStartMs = rangeStart.getTime();
+	const rangeEndMs = rangeEnd.getTime();
 
 	for (const vevent of vevents) {
 		try {
@@ -57,13 +61,16 @@ function parseICSEvents(
 				while (next && !iter.complete && count < MAX_EXPANSIONS) {
 					count++;
 
-					if (next.compare(rangeEndTime) > 0) break;
-
+					// Use JS Date comparison (timezone-aware) instead of
+					// ICAL.Time.compare which compares raw values without
+					// timezone conversion and can drop events.
 					const occStart = next.toJSDate();
+					if (occStart.getTime() >= rangeEndMs) break;
+
 					const duration = event.endDate.toJSDate().getTime() - event.startDate.toJSDate().getTime();
 					const occEnd = new Date(occStart.getTime() + duration);
 
-					if (occEnd.getTime() <= rangeStart.getTime()) {
+					if (occEnd.getTime() <= rangeStartMs) {
 						next = iter.next();
 						continue;
 					}
@@ -90,7 +97,7 @@ function parseICSEvents(
 				const end = event.endDate.toJSDate();
 
 				// Skip if outside range
-				if (end.getTime() <= rangeStart.getTime() || start.getTime() >= rangeEnd.getTime()) {
+				if (end.getTime() <= rangeStartMs || start.getTime() >= rangeEndMs) {
 					continue;
 				}
 
