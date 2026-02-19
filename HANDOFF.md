@@ -1,7 +1,7 @@
 # WeekFlow 작업 핸드오프
 
 > 작성일: 2026-02-18
-> 마지막 커밋: `38539a7` fix: use timezone-aware JS Date comparison for calendar event filtering
+> 마지막 커밋: `86b9a1f` fix: preserve recurring event pattern alignment and register VTIMEZONE
 
 ## 프로젝트 개요
 
