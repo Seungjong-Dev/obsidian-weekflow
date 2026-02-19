@@ -73,6 +73,7 @@ export class GridRenderer {
 	private blockDragTimer: ReturnType<typeof setTimeout> | null = null;
 	private blockDragStartX = 0;
 	private blockDragStartY = 0;
+	private lastBlockPointerType: string = "mouse";
 	private ghostEls: HTMLElement[] = [];
 
 	// Resize state
@@ -847,6 +848,7 @@ export class GridRenderer {
 
 			// ── Block pointerdown: click vs drag detection ──
 			block.addEventListener("pointerdown", (e) => {
+				this.lastBlockPointerType = e.pointerType;
 				if (e.pointerType !== "touch") {
 					// Mouse/pen: prevent default immediately (no scroll conflict)
 					e.preventDefault();
@@ -907,6 +909,7 @@ export class GridRenderer {
 			block.addEventListener("contextmenu", (e) => {
 				e.preventDefault();
 				e.stopPropagation();
+				if (this.lastBlockPointerType === "touch") return;
 				if (this.callbacks.onBlockRightClick) {
 					this.callbacks.onBlockRightClick(dayIndex, item, e as unknown as PointerEvent);
 				}
