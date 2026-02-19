@@ -1,7 +1,7 @@
 # WeekFlow 작업 핸드오프
 
 > 작성일: 2026-02-18
-> 마지막 커밋: `431eb14` docs: update HANDOFF.md last commit hash
+> 마지막 커밋: `38539a7` fix: use timezone-aware JS Date comparison for calendar event filtering
 
 ## 프로젝트 개요
 
