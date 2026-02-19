@@ -51,6 +51,7 @@ export class WeekFlowView extends ItemView {
 	private currentVisibleDays = 7;
 	private currentDayOffset = 0;
 	private pendingDayOffset: number | null = null;
+	private viewModeOverride: "auto" | 7 | 3 | 1 = "auto";
 
 	// Bottom sheet (narrow mode)
 	private bottomSheetEl: HTMLElement | null = null;
@@ -146,16 +147,54 @@ export class WeekFlowView extends ItemView {
 	}
 
 	private onLayoutTierChanged(tier: LayoutTier): void {
-		const newDays = getVisibleDays(tier);
-		this.currentVisibleDays = newDays;
-		this.currentDayOffset = this.calculateDayOffset(newDays);
 		this.currentLayoutTier = tier;
 
-		// Toggle layout CSS classes
+		// Toggle layout CSS classes (always based on real width — affects panel/bottom-sheet)
 		this.contentEl.removeClass("weekflow-layout-wide", "weekflow-layout-medium", "weekflow-layout-narrow");
 		this.contentEl.addClass(`weekflow-layout-${tier}`);
 
+		// Only update visibleDays/dayOffset in auto mode
+		if (this.viewModeOverride === "auto") {
+			const newDays = getVisibleDays(tier);
+			this.currentVisibleDays = newDays;
+			this.currentDayOffset = this.calculateDayOffset(newDays);
+		}
+
 		this.renderView();
+	}
+
+	private setViewModeOverride(mode: "auto" | 7 | 3 | 1): void {
+		this.viewModeOverride = mode;
+		if (mode === "auto") {
+			this.currentVisibleDays = getVisibleDays(this.currentLayoutTier);
+		} else {
+			this.currentVisibleDays = mode;
+		}
+		this.currentDayOffset = this.calculateDayOffset(this.currentVisibleDays);
+		this.renderView();
+	}
+
+	private showViewModeMenu(e: MouseEvent | PointerEvent): void {
+		const menu = new Menu();
+		const options: { label: string; value: "auto" | 7 | 3 | 1 }[] = [
+			{ label: "7 days", value: 7 },
+			{ label: "3 days", value: 3 },
+			{ label: "1 day", value: 1 },
+		];
+		for (const opt of options) {
+			menu.addItem((mi) => {
+				mi.setTitle(opt.label);
+				mi.setChecked(this.viewModeOverride === opt.value);
+				mi.onClick(() => this.setViewModeOverride(opt.value));
+			});
+		}
+		menu.addSeparator();
+		menu.addItem((mi) => {
+			mi.setTitle("Auto");
+			mi.setChecked(this.viewModeOverride === "auto");
+			mi.onClick(() => this.setViewModeOverride("auto"));
+		});
+		menu.showAtMouseEvent(e);
 	}
 
 	private calculateDayOffset(visibleDays: number): number {
@@ -633,6 +672,7 @@ export class WeekFlowView extends ItemView {
 		}
 
 		const weekLabel = nav.createSpan({ cls: "weekflow-week-label" });
+		weekLabel.addEventListener("click", (e) => this.showViewModeMenu(e));
 		if (this.currentVisibleDays < 7) {
 			const weekNum = this.dates[0].format("[W]ww");
 			const startDate = this.dates[this.currentDayOffset];
@@ -640,6 +680,9 @@ export class WeekFlowView extends ItemView {
 			weekLabel.setText(`${weekNum} \u00B7 ${startDate.format("MM/DD")}\u2013${endDate.format("MM/DD")}`);
 		} else {
 			weekLabel.setText(this.dates[0].format("[W]ww, YYYY"));
+		}
+		if (this.viewModeOverride !== "auto") {
+			weekLabel.createSpan({ text: `(${this.viewModeOverride}d)`, cls: "weekflow-viewmode-indicator" });
 		}
 
 		const nextBtn = nav.createEl("button", { text: "\u25B6" });
@@ -760,6 +803,10 @@ export class WeekFlowView extends ItemView {
 			} else {
 				weekLabel.setText(this.dates[0].format("[W]ww, YYYY"));
 			}
+			// Re-add override indicator (setText clears children)
+			if (this.viewModeOverride !== "auto") {
+				weekLabel.createSpan({ text: `(${this.viewModeOverride}d)`, cls: "weekflow-viewmode-indicator" });
+			}
 		}
 
 		// Update today hints on ◀/▶ and Today buttons
@@ -834,8 +881,8 @@ export class WeekFlowView extends ItemView {
 	}
 
 	private onSwipeGesture(direction: "left" | "right"): void {
-		// On wide+desktop, gesture swipe is disabled (would conflict with mouse drag)
-		if (this.currentLayoutTier === "wide" && !isTouchDevice()) return;
+		// On 7-day+desktop, gesture swipe is disabled (would conflict with mouse drag)
+		if (this.currentVisibleDays >= 7 && !isTouchDevice()) return;
 		this.onSwipe(direction);
 	}
 
@@ -2168,12 +2215,19 @@ export class WeekFlowView extends ItemView {
 	getState(): Record<string, unknown> {
 		return {
 			currentDate: this.currentDate.format("YYYY-MM-DD"),
+			viewModeOverride: this.viewModeOverride,
 		};
 	}
 
 	async setState(state: any, result: { history: boolean }): Promise<void> {
 		if (typeof state.currentDate === "string") {
 			this.currentDate = window.moment(state.currentDate, "YYYY-MM-DD");
+		}
+		if (state.viewModeOverride === "auto" || state.viewModeOverride === 7 || state.viewModeOverride === 3 || state.viewModeOverride === 1) {
+			this.viewModeOverride = state.viewModeOverride;
+			if (this.viewModeOverride !== "auto") {
+				this.currentVisibleDays = this.viewModeOverride;
+			}
 		}
 		await this.refresh();
 	}

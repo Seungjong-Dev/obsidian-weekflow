@@ -73,6 +73,16 @@
 	font-size: 13px;
 	text-align: center;
 	white-space: nowrap;
+	cursor: pointer;
+	border-radius: 4px;
+	padding: 2px 6px;
+}
+
+.weekflow-viewmode-indicator {
+	font-size: 10px;
+	font-weight: 400;
+	color: var(--text-muted);
+	margin-left: 4px;
 }
 
 /* Today direction hint — dot indicator on nav arrows */
@@ -1218,6 +1228,10 @@
 	.weekflow-toolbar-nav button:hover,
 	.weekflow-toolbar-tools button:hover,
 	.weekflow-overflow-btn:hover {
+		background: var(--background-modifier-hover);
+	}
+
+	.weekflow-week-label:hover {
 		background: var(--background-modifier-hover);
 	}
 
