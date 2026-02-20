@@ -1048,6 +1048,10 @@ export class GridRenderer {
 			block.addEventListener("pointerenter", (e) => {
 				if (e.pointerType === "touch") return;
 				if (e.pointerType === "pen") {
+					// Don't allow pen hover to interrupt move or delete-confirm mode
+					if (this.touchBlockSelection?.mode === "move" || this.touchBlockSelection?.mode === "delete-confirm") {
+						return;
+					}
 					// Apple Pencil hover → transient selection
 					if (!this.touchBlockSelection || this.touchBlockSelection.item.id !== item.id) {
 						this.clearTouchBlockSelection();
@@ -1727,6 +1731,12 @@ export class GridRenderer {
 	// ── Touch Block Selection ──
 
 	private handleTouchBlockTap(dayIndex: number, item: TimelineItem, blockEl: HTMLElement): void {
+		// In move or delete-confirm mode, ignore taps on other blocks
+		if (this.touchBlockSelection
+			&& (this.touchBlockSelection.mode === "move" || this.touchBlockSelection.mode === "delete-confirm")
+			&& this.touchBlockSelection.item.id !== item.id) {
+			return;
+		}
 		// Clear any pending cell tap-tap anchor
 		this.clearSelection();
 
@@ -1984,13 +1994,11 @@ export class GridRenderer {
 		leftHandle.addEventListener("pointerdown", (e) => {
 			e.preventDefault();
 			e.stopPropagation();
-			// Clean up previous state
-			this.removeGhost();
-			this.removeResizeGhost();
+			// Ghost handles live inside ghost elements — don't remove them.
+			// Document-level listeners handle pointermove/pointerup.
 			this.blockDragState = null;
 			this.resizeState = null;
 
-			leftHandle.setPointerCapture(e.pointerId);
 			this.dragMode = "resize";
 			this.resizeState = {
 				item, dayIndex, edge: "left",
@@ -2005,13 +2013,11 @@ export class GridRenderer {
 		rightHandle.addEventListener("pointerdown", (e) => {
 			e.preventDefault();
 			e.stopPropagation();
-			// Clean up previous state
-			this.removeGhost();
-			this.removeResizeGhost();
+			// Ghost handles live inside ghost elements — don't remove them.
+			// Document-level listeners handle pointermove/pointerup.
 			this.blockDragState = null;
 			this.resizeState = null;
 
-			rightHandle.setPointerCapture(e.pointerId);
 			this.dragMode = "resize";
 			this.resizeState = {
 				item, dayIndex, edge: "right",
@@ -2030,9 +2036,8 @@ export class GridRenderer {
 				e.preventDefault();
 				e.stopPropagation();
 
-				// Clean up previous drag state
-				this.removeGhost();
-				this.removeResizeGhost();
+				// Ghost body lives inside ghost elements — don't remove them here.
+				// renderGhostSegments will clean up old ghosts on first move.
 				this.blockDragState = null;
 				this.resizeState = null;
 
