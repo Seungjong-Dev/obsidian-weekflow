@@ -104,6 +104,15 @@ export class WeekFlowView extends ItemView {
 
 		await this.refresh();
 
+		// Block Obsidian sidebar swipe: unconditionally stop touch event
+		// propagation on the entire view container. Native vertical scrolling
+		// still works because touch-action: pan-y is handled by the browser
+		// before JS listeners; stopPropagation only prevents Obsidian's
+		// sidebar gesture JS handler from seeing these events.
+		this.contentEl.addEventListener("touchmove", (e) => {
+			e.stopPropagation();
+		}, { passive: true });
+
 		// ResizeObserver for responsive layout changes
 		this.resizeObserver = new ResizeObserver((entries) => {
 			const width = entries[0].contentRect.width;

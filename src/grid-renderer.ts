@@ -115,10 +115,7 @@ export class GridRenderer {
 	private boundPointerUp: ((e: PointerEvent) => void) | null = null;
 	private boundPointerCancel: ((e: PointerEvent) => void) | null = null;
 
-	// Touch swipe lock: prevent Obsidian sidebar from opening during horizontal swipe
-	private touchStartX = 0;
-	private touchStartY = 0;
-	private touchSwipeLocked = false;
+
 
 	// Longpress state (touch drag)
 	private longpressActive = false;
@@ -289,26 +286,6 @@ export class GridRenderer {
 				}
 			}
 		}
-
-		// Block Obsidian sidebar swipe: stop horizontal touch propagation on the grid
-		this.gridEl.addEventListener("touchstart", (e) => {
-			if (e.touches.length !== 1) return;
-			this.touchStartX = e.touches[0].clientX;
-			this.touchStartY = e.touches[0].clientY;
-			this.touchSwipeLocked = false;
-		}, { passive: true });
-
-		this.gridEl.addEventListener("touchmove", (e) => {
-			if (e.touches.length !== 1) return;
-			const dx = e.touches[0].clientX - this.touchStartX;
-			const dy = e.touches[0].clientY - this.touchStartY;
-			if (!this.touchSwipeLocked && Math.abs(dx) > 15 && Math.abs(dx) > Math.abs(dy)) {
-				this.touchSwipeLocked = true;
-			}
-			if (this.touchSwipeLocked) {
-				e.stopPropagation();
-			}
-		}, { passive: true });
 
 		// Global pointer handlers
 		this.boundPointerMove = (e: PointerEvent) => this.onGlobalPointerMove(e);
