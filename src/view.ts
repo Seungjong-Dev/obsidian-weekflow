@@ -1158,7 +1158,8 @@ export class WeekFlowView extends ItemView {
 	) {
 		const dragTime = item.checkbox === "actual" && item.actualTime ? item.actualTime : item.planTime;
 		const duration = newDuration ?? (dragTime.end - dragTime.start);
-		const newEnd = newStart + duration;
+		// Sunday clamping: can't overflow past last day of week
+		const newEnd = toDay >= 6 ? Math.min(newStart + duration, 1440) : newStart + duration;
 		const fromDate = this.dates[fromDay];
 		const fromKey = fromDate.format("YYYY-MM-DD");
 		const toDate = this.dates[toDay];
@@ -1200,25 +1201,58 @@ export class WeekFlowView extends ItemView {
 					items[idx].actualTime = { start: newStart, end: newStart + actDuration };
 				}
 
-				await this.guardedSave(fromDate, items);
+				// Check overnight split
+				const splitResult = this.splitOvernightItem(items[idx], fromDay);
+				if (splitResult) {
+					// Replace original with today portion
+					items[idx] = splitResult.today;
+					await this.guardedSave(fromDate, items);
 
-				const action: UndoableAction = {
-					description: "Move block",
-					execute: async () => { /* already executed */ },
-					undo: async () => {
-						const items = this.weekData.get(fromKey) || [];
-						const idx = items.findIndex(i => i.id === item.id);
-						if (idx !== -1) {
-							items[idx].planTime = { start: oldStart, end: oldEnd };
-							if (items[idx].actualTime) {
-								const actDuration = items[idx].actualTime!.end - items[idx].actualTime!.start;
-								items[idx].actualTime = { start: oldStart, end: oldStart + actDuration };
+					// Add tomorrow portion
+					const tomorrowItems = [...(this.weekData.get(splitResult.tomorrowKey) || []), splitResult.tomorrow];
+					this.weekData.set(splitResult.tomorrowKey, tomorrowItems);
+					await this.guardedSave(this.dates[splitResult.tomorrowDayIndex], tomorrowItems);
+
+					const action: UndoableAction = {
+						description: "Move block (overnight split)",
+						execute: async () => { /* already executed */ },
+						undo: async () => {
+							// Restore original planTime
+							const items = this.weekData.get(fromKey) || [];
+							const idx = items.findIndex(i => i.id === splitResult.today.id);
+							if (idx !== -1) {
+								items[idx].planTime = { start: oldStart, end: oldEnd };
+								items[idx].id = item.id;
+								await this.guardedSave(fromDate, items);
 							}
-							await this.guardedSave(fromDate, items);
-						}
-					},
-				};
-				this.undoManager.pushExecuted(action);
+							// Remove tomorrow portion
+							const tmr = this.weekData.get(splitResult.tomorrowKey) || [];
+							this.weekData.set(splitResult.tomorrowKey, tmr.filter(i => i.id !== splitResult.tomorrow.id));
+							await this.guardedSave(this.dates[splitResult.tomorrowDayIndex], this.weekData.get(splitResult.tomorrowKey)!);
+						},
+					};
+					this.undoManager.pushExecuted(action);
+				} else {
+					await this.guardedSave(fromDate, items);
+
+					const action: UndoableAction = {
+						description: "Move block",
+						execute: async () => { /* already executed */ },
+						undo: async () => {
+							const items = this.weekData.get(fromKey) || [];
+							const idx = items.findIndex(i => i.id === item.id);
+							if (idx !== -1) {
+								items[idx].planTime = { start: oldStart, end: oldEnd };
+								if (items[idx].actualTime) {
+									const actDuration = items[idx].actualTime!.end - items[idx].actualTime!.start;
+									items[idx].actualTime = { start: oldStart, end: oldStart + actDuration };
+								}
+								await this.guardedSave(fromDate, items);
+							}
+						},
+					};
+					this.undoManager.pushExecuted(action);
+				}
 			}
 		} else {
 			// Cross-day move
@@ -1245,29 +1279,60 @@ export class WeekFlowView extends ItemView {
 					rawSuffix: movedItem.rawSuffix,
 				};
 
-				const toItems = this.weekData.get(toKey) || [];
-				toItems.push(newItem);
-				this.weekData.set(toKey, toItems);
-				await this.guardedSave(toDate, toItems);
+				// Check overnight split for deferred item
+				const splitResult = this.splitOvernightItem(newItem, toDay);
+				if (splitResult) {
+					const toItems = this.weekData.get(splitResult.todayKey) || [];
+					toItems.push(splitResult.today);
+					this.weekData.set(splitResult.todayKey, toItems);
+					await this.guardedSave(this.dates[splitResult.todayDayIndex], toItems);
 
-				const action: UndoableAction = {
-					description: "Defer block to another day",
-					execute: async () => { /* already executed */ },
-					undo: async () => {
-						// Restore original checkbox
-						const fi = this.weekData.get(fromKey) || [];
-						const idx = fi.findIndex(i => i.id === item.id);
-						if (idx !== -1) {
-							fi[idx].checkbox = oldCheckbox;
-							await this.guardedSave(fromDate, fi);
-						}
-						// Remove new item from target day
-						const ti = this.weekData.get(toKey) || [];
-						this.weekData.set(toKey, ti.filter(i => i.id !== newItem.id));
-						await this.guardedSave(toDate, this.weekData.get(toKey)!);
-					},
-				};
-				this.undoManager.pushExecuted(action);
+					const tomorrowItems = [...(this.weekData.get(splitResult.tomorrowKey) || []), splitResult.tomorrow];
+					this.weekData.set(splitResult.tomorrowKey, tomorrowItems);
+					await this.guardedSave(this.dates[splitResult.tomorrowDayIndex], tomorrowItems);
+
+					const action: UndoableAction = {
+						description: "Defer block (overnight split)",
+						execute: async () => { /* already executed */ },
+						undo: async () => {
+							const fi = this.weekData.get(fromKey) || [];
+							const idx = fi.findIndex(i => i.id === item.id);
+							if (idx !== -1) {
+								fi[idx].checkbox = oldCheckbox;
+								await this.guardedSave(fromDate, fi);
+							}
+							const ti = this.weekData.get(splitResult.todayKey) || [];
+							this.weekData.set(splitResult.todayKey, ti.filter(i => i.id !== splitResult.today.id));
+							await this.guardedSave(this.dates[splitResult.todayDayIndex], this.weekData.get(splitResult.todayKey)!);
+							const tmr = this.weekData.get(splitResult.tomorrowKey) || [];
+							this.weekData.set(splitResult.tomorrowKey, tmr.filter(i => i.id !== splitResult.tomorrow.id));
+							await this.guardedSave(this.dates[splitResult.tomorrowDayIndex], this.weekData.get(splitResult.tomorrowKey)!);
+						},
+					};
+					this.undoManager.pushExecuted(action);
+				} else {
+					const toItems = this.weekData.get(toKey) || [];
+					toItems.push(newItem);
+					this.weekData.set(toKey, toItems);
+					await this.guardedSave(toDate, toItems);
+
+					const action: UndoableAction = {
+						description: "Defer block to another day",
+						execute: async () => { /* already executed */ },
+						undo: async () => {
+							const fi = this.weekData.get(fromKey) || [];
+							const idx = fi.findIndex(i => i.id === item.id);
+							if (idx !== -1) {
+								fi[idx].checkbox = oldCheckbox;
+								await this.guardedSave(fromDate, fi);
+							}
+							const ti = this.weekData.get(toKey) || [];
+							this.weekData.set(toKey, ti.filter(i => i.id !== newItem.id));
+							await this.guardedSave(toDate, this.weekData.get(toKey)!);
+						},
+					};
+					this.undoManager.pushExecuted(action);
+				}
 			} else {
 				// Simple move: remove from original day, add to new day
 				this.weekData.set(fromKey, fromItems.filter(i => i.id !== item.id));
@@ -1278,37 +1343,79 @@ export class WeekFlowView extends ItemView {
 					movedItem.actualTime = { start: newStart, end: newStart + actDuration };
 				}
 
-				const toItems = this.weekData.get(toKey) || [];
-				toItems.push(movedItem);
-				this.weekData.set(toKey, toItems);
+				// Check overnight split for moved item
+				const splitResult = this.splitOvernightItem(movedItem, toDay);
+				if (splitResult) {
+					const toItems = this.weekData.get(splitResult.todayKey) || [];
+					toItems.push(splitResult.today);
+					this.weekData.set(splitResult.todayKey, toItems);
 
-				await this.guardedSave(fromDate, this.weekData.get(fromKey)!);
-				await this.guardedSave(toDate, toItems);
+					const tomorrowItems = [...(this.weekData.get(splitResult.tomorrowKey) || []), splitResult.tomorrow];
+					this.weekData.set(splitResult.tomorrowKey, tomorrowItems);
 
-				const action: UndoableAction = {
-					description: "Move block to another day",
-					execute: async () => { /* already executed */ },
-					undo: async () => {
-						const toItems = this.weekData.get(toKey) || [];
-						const itemBack = toItems.find(i => i.id === item.id);
-						if (!itemBack) return;
+					await this.guardedSave(fromDate, this.weekData.get(fromKey)!);
+					await this.guardedSave(this.dates[splitResult.todayDayIndex], toItems);
+					await this.guardedSave(this.dates[splitResult.tomorrowDayIndex], tomorrowItems);
 
-						this.weekData.set(toKey, toItems.filter(i => i.id !== item.id));
-						itemBack.planTime = { start: oldStart, end: oldEnd };
-						if (itemBack.actualTime) {
-							const actDuration = itemBack.actualTime.end - itemBack.actualTime.start;
-							itemBack.actualTime = { start: oldStart, end: oldStart + actDuration };
-						}
+					const action: UndoableAction = {
+						description: "Move block (overnight split)",
+						execute: async () => { /* already executed */ },
+						undo: async () => {
+							// Remove split items
+							const ti = this.weekData.get(splitResult.todayKey) || [];
+							this.weekData.set(splitResult.todayKey, ti.filter(i => i.id !== splitResult.today.id));
+							await this.guardedSave(this.dates[splitResult.todayDayIndex], this.weekData.get(splitResult.todayKey)!);
 
-						const fromItems = this.weekData.get(fromKey) || [];
-						fromItems.push(itemBack);
-						this.weekData.set(fromKey, fromItems);
+							const tmr = this.weekData.get(splitResult.tomorrowKey) || [];
+							this.weekData.set(splitResult.tomorrowKey, tmr.filter(i => i.id !== splitResult.tomorrow.id));
+							await this.guardedSave(this.dates[splitResult.tomorrowDayIndex], this.weekData.get(splitResult.tomorrowKey)!);
 
-						await this.guardedSave(toDate, this.weekData.get(toKey)!);
-						await this.guardedSave(fromDate, fromItems);
-					},
-				};
-				this.undoManager.pushExecuted(action);
+							// Restore original
+							movedItem.planTime = { start: oldStart, end: oldEnd };
+							if (movedItem.actualTime) {
+								const actDuration = movedItem.actualTime.end - movedItem.actualTime.start;
+								movedItem.actualTime = { start: oldStart, end: oldStart + actDuration };
+							}
+							const fromItems = this.weekData.get(fromKey) || [];
+							fromItems.push(movedItem);
+							this.weekData.set(fromKey, fromItems);
+							await this.guardedSave(fromDate, fromItems);
+						},
+					};
+					this.undoManager.pushExecuted(action);
+				} else {
+					const toItems = this.weekData.get(toKey) || [];
+					toItems.push(movedItem);
+					this.weekData.set(toKey, toItems);
+
+					await this.guardedSave(fromDate, this.weekData.get(fromKey)!);
+					await this.guardedSave(toDate, toItems);
+
+					const action: UndoableAction = {
+						description: "Move block to another day",
+						execute: async () => { /* already executed */ },
+						undo: async () => {
+							const toItems = this.weekData.get(toKey) || [];
+							const itemBack = toItems.find(i => i.id === item.id);
+							if (!itemBack) return;
+
+							this.weekData.set(toKey, toItems.filter(i => i.id !== item.id));
+							itemBack.planTime = { start: oldStart, end: oldEnd };
+							if (itemBack.actualTime) {
+								const actDuration = itemBack.actualTime.end - itemBack.actualTime.start;
+								itemBack.actualTime = { start: oldStart, end: oldStart + actDuration };
+							}
+
+							const fromItems = this.weekData.get(fromKey) || [];
+							fromItems.push(itemBack);
+							this.weekData.set(fromKey, fromItems);
+
+							await this.guardedSave(toDate, this.weekData.get(toKey)!);
+							await this.guardedSave(fromDate, fromItems);
+						},
+					};
+					this.undoManager.pushExecuted(action);
+				}
 			}
 		}
 
@@ -1388,8 +1495,8 @@ export class WeekFlowView extends ItemView {
 		todayDayIndex: number;
 		tomorrowDayIndex: number;
 	} | null {
-		const dayEndMin = this.plugin.settings.dayEndHour * 60;
-		if (item.planTime.end <= dayEndMin) return null;
+		const MIDNIGHT = 1440;
+		if (item.planTime.end <= MIDNIGHT) return null;
 		if (dayIndex >= 6) return null; // Can't split past last day of week
 
 		const todayDayIndex = dayIndex;
@@ -1397,19 +1504,20 @@ export class WeekFlowView extends ItemView {
 		const todayKey = this.dates[todayDayIndex].format("YYYY-MM-DD");
 		const tomorrowKey = this.dates[tomorrowDayIndex].format("YYYY-MM-DD");
 
+		// Today portion: start ~ 24:00
 		const today: TimelineItem = {
 			...item,
 			id: generateItemId(),
-			planTime: { start: item.planTime.start, end: dayEndMin },
+			planTime: { start: item.planTime.start, end: MIDNIGHT },
 		};
 
-		const overflowMinutes = item.planTime.end - dayEndMin;
-		const tomorrowStart = this.plugin.settings.dayStartHour * 60;
+		// Tomorrow portion: 00:00 ~ overflow
+		const overflowMinutes = item.planTime.end - MIDNIGHT;
 		const tomorrow: TimelineItem = {
 			...item,
 			id: generateItemId(),
 			tags: [...item.tags],
-			planTime: { start: tomorrowStart, end: tomorrowStart + overflowMinutes },
+			planTime: { start: 0, end: overflowMinutes },
 		};
 
 		return { today, tomorrow, todayKey, tomorrowKey, todayDayIndex, tomorrowDayIndex };
@@ -1654,83 +1762,154 @@ export class WeekFlowView extends ItemView {
 			contentForTimeline = `${item.content} [[${projectName}#^${blockId}]]`;
 		}
 
+		// Sunday clamping
+		const finalEnd = cell.dayIndex >= 6 ? Math.min(snappedEnd, 1440) : snappedEnd;
+
 		const newItem: TimelineItem = {
 			id: generateItemId(),
 			checkbox: isPast ? "actual" : "plan",
-			planTime: { start: snappedStart, end: snappedEnd },
+			planTime: { start: snappedStart, end: finalEnd },
 			content: contentForTimeline,
 			tags: [...item.tags],
 			rawSuffix: item.rawSuffix,
 		};
 
-		const existing = this.weekData.get(dateKey) || [];
-		existing.push(newItem);
-		this.weekData.set(dateKey, existing);
+		// Check overnight split
+		const splitResult = this.splitOvernightItem(newItem, cell.dayIndex);
+		if (splitResult) {
+			// Save today portion
+			const todayItems = [...(this.weekData.get(splitResult.todayKey) || []), splitResult.today];
+			this.weekData.set(splitResult.todayKey, todayItems);
+			await this.guardedSave(this.dates[splitResult.todayDayIndex], todayItems);
 
-		await this.guardedSave(date, existing);
+			// Save tomorrow portion
+			const tomorrowItems = [...(this.weekData.get(splitResult.tomorrowKey) || []), splitResult.tomorrow];
+			this.weekData.set(splitResult.tomorrowKey, tomorrowItems);
+			await this.guardedSave(this.dates[splitResult.tomorrowDayIndex], tomorrowItems);
 
-		// Handle source-specific side effects
-		if (src.type === "overdue") {
-			// Mark original as deferred
-			const origDate = this.dates.find(d => d.format("YYYY-MM-DD") === src.dateKey);
-			if (origDate) {
-				const origItems = this.weekData.get(src.dateKey) || [];
-				const origIdx = origItems.findIndex(i => i.id === src.originalId);
-				if (origIdx !== -1) {
-					const oldCheckbox = origItems[origIdx].checkbox;
-					origItems[origIdx].checkbox = "deferred";
-					await this.guardedSave(origDate, origItems);
+			// Build undo that removes both split items and undoes source side-effect
+			const undoSplitItems = async () => {
+				const ti = this.weekData.get(splitResult.todayKey) || [];
+				this.weekData.set(splitResult.todayKey, ti.filter(i => i.id !== splitResult.today.id));
+				await this.guardedSave(this.dates[splitResult.todayDayIndex], this.weekData.get(splitResult.todayKey)!);
 
-					const action: UndoableAction = {
-						description: "Schedule overdue item",
-						execute: async () => { /* already executed */ },
-						undo: async () => {
-							// Restore original
-							const oi = this.weekData.get(src.dateKey) || [];
-							const idx = oi.findIndex(i => i.id === src.originalId);
-							if (idx !== -1) {
-								oi[idx].checkbox = oldCheckbox;
-								await this.guardedSave(origDate, oi);
-							}
-							// Remove new block
-							const ni = this.weekData.get(dateKey) || [];
-							this.weekData.set(dateKey, ni.filter(i => i.id !== newItem.id));
-							await this.guardedSave(date, this.weekData.get(dateKey)!);
-						},
-					};
-					this.undoManager.pushExecuted(action);
+				const tmr = this.weekData.get(splitResult.tomorrowKey) || [];
+				this.weekData.set(splitResult.tomorrowKey, tmr.filter(i => i.id !== splitResult.tomorrow.id));
+				await this.guardedSave(this.dates[splitResult.tomorrowDayIndex], this.weekData.get(splitResult.tomorrowKey)!);
+			};
+
+			// Handle source-specific side effects
+			if (src.type === "overdue") {
+				const origDate = this.dates.find(d => d.format("YYYY-MM-DD") === src.dateKey);
+				if (origDate) {
+					const origItems = this.weekData.get(src.dateKey) || [];
+					const origIdx = origItems.findIndex(i => i.id === src.originalId);
+					if (origIdx !== -1) {
+						const oldCheckbox = origItems[origIdx].checkbox;
+						origItems[origIdx].checkbox = "deferred";
+						await this.guardedSave(origDate, origItems);
+
+						const action: UndoableAction = {
+							description: "Schedule overdue item (overnight split)",
+							execute: async () => { /* already executed */ },
+							undo: async () => {
+								const oi = this.weekData.get(src.dateKey) || [];
+								const idx = oi.findIndex(i => i.id === src.originalId);
+								if (idx !== -1) {
+									oi[idx].checkbox = oldCheckbox;
+									await this.guardedSave(origDate, oi);
+								}
+								await undoSplitItems();
+							},
+						};
+						this.undoManager.pushExecuted(action);
+					}
 				}
-			}
-		} else if (src.type === "inbox") {
-			// Remove from inbox note
-			const inboxLine = serializeCheckboxItem(item.content, item.tags, item.rawSuffix);
-			await this.removeFromInbox(src.notePath, src.lineNumber);
+			} else if (src.type === "inbox") {
+				const inboxLine = serializeCheckboxItem(item.content, item.tags, item.rawSuffix);
+				await this.removeFromInbox(src.notePath, src.lineNumber);
 
-			const action: UndoableAction = {
-				description: "Schedule inbox item",
-				execute: async () => { /* already executed */ },
-				undo: async () => {
-					// Remove new block
-					const ni = this.weekData.get(dateKey) || [];
-					this.weekData.set(dateKey, ni.filter(i => i.id !== newItem.id));
-					await this.guardedSave(date, this.weekData.get(dateKey)!);
-					// Re-add to inbox
-					await addToInbox(this.app.vault, this.plugin.settings, inboxLine);
-				},
-			};
-			this.undoManager.pushExecuted(action);
+				const action: UndoableAction = {
+					description: "Schedule inbox item (overnight split)",
+					execute: async () => { /* already executed */ },
+					undo: async () => {
+						await undoSplitItems();
+						await addToInbox(this.app.vault, this.plugin.settings, inboxLine);
+					},
+				};
+				this.undoManager.pushExecuted(action);
+			} else {
+				const action: UndoableAction = {
+					description: "Schedule project task (overnight split)",
+					execute: async () => { /* already executed */ },
+					undo: undoSplitItems,
+				};
+				this.undoManager.pushExecuted(action);
+			}
 		} else {
-			// Project source: don't remove from panel (copy model)
-			const action: UndoableAction = {
-				description: "Schedule project task",
-				execute: async () => { /* already executed */ },
-				undo: async () => {
-					const ni = this.weekData.get(dateKey) || [];
-					this.weekData.set(dateKey, ni.filter(i => i.id !== newItem.id));
-					await this.guardedSave(date, this.weekData.get(dateKey)!);
-				},
-			};
-			this.undoManager.pushExecuted(action);
+			const existing = this.weekData.get(dateKey) || [];
+			existing.push(newItem);
+			this.weekData.set(dateKey, existing);
+
+			await this.guardedSave(date, existing);
+
+			// Handle source-specific side effects
+			if (src.type === "overdue") {
+				// Mark original as deferred
+				const origDate = this.dates.find(d => d.format("YYYY-MM-DD") === src.dateKey);
+				if (origDate) {
+					const origItems = this.weekData.get(src.dateKey) || [];
+					const origIdx = origItems.findIndex(i => i.id === src.originalId);
+					if (origIdx !== -1) {
+						const oldCheckbox = origItems[origIdx].checkbox;
+						origItems[origIdx].checkbox = "deferred";
+						await this.guardedSave(origDate, origItems);
+
+						const action: UndoableAction = {
+							description: "Schedule overdue item",
+							execute: async () => { /* already executed */ },
+							undo: async () => {
+								const oi = this.weekData.get(src.dateKey) || [];
+								const idx = oi.findIndex(i => i.id === src.originalId);
+								if (idx !== -1) {
+									oi[idx].checkbox = oldCheckbox;
+									await this.guardedSave(origDate, oi);
+								}
+								const ni = this.weekData.get(dateKey) || [];
+								this.weekData.set(dateKey, ni.filter(i => i.id !== newItem.id));
+								await this.guardedSave(date, this.weekData.get(dateKey)!);
+							},
+						};
+						this.undoManager.pushExecuted(action);
+					}
+				}
+			} else if (src.type === "inbox") {
+				const inboxLine = serializeCheckboxItem(item.content, item.tags, item.rawSuffix);
+				await this.removeFromInbox(src.notePath, src.lineNumber);
+
+				const action: UndoableAction = {
+					description: "Schedule inbox item",
+					execute: async () => { /* already executed */ },
+					undo: async () => {
+						const ni = this.weekData.get(dateKey) || [];
+						this.weekData.set(dateKey, ni.filter(i => i.id !== newItem.id));
+						await this.guardedSave(date, this.weekData.get(dateKey)!);
+						await addToInbox(this.app.vault, this.plugin.settings, inboxLine);
+					},
+				};
+				this.undoManager.pushExecuted(action);
+			} else {
+				const action: UndoableAction = {
+					description: "Schedule project task",
+					execute: async () => { /* already executed */ },
+					undo: async () => {
+						const ni = this.weekData.get(dateKey) || [];
+						this.weekData.set(dateKey, ni.filter(i => i.id !== newItem.id));
+						await this.guardedSave(date, this.weekData.get(dateKey)!);
+					},
+				};
+				this.undoManager.pushExecuted(action);
+			}
 		}
 
 		await this.refresh();

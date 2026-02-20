@@ -140,6 +140,11 @@ export class GridRenderer {
 	private swipeStartY = 0;
 	private swipeStartTime = 0;
 
+	// Fold state for early/late hours
+	private earlyFolded = true;  // 0:00 ~ dayStartHour
+	private lateFolded = true;   // dayEndHour ~ 24:00
+	private readonly FOLDED_ROW_HEIGHT = 4; // px per folded hour row
+
 	// Responsive layout
 	private visibleDays = 7;
 	private dayOffset = 0;
@@ -163,17 +168,63 @@ export class GridRenderer {
 		this.dayOffset = dayOffset;
 	}
 
+	private toggleEarlyFold(): void {
+		this.earlyFolded = !this.earlyFolded;
+		this.render();
+	}
+
+	private toggleLateFold(): void {
+		this.lateFolded = !this.lateFolded;
+		this.render();
+	}
+
+	private isHourFolded(hour: number): boolean {
+		if (hour < this.settings.dayStartHour) return this.earlyFolded;
+		if (hour >= this.settings.dayEndHour) return this.lateFolded;
+		return false;
+	}
+
+	private getNormalRowHeight(bodyHeight: number): number {
+		let foldedCount = 0;
+		for (let h = 0; h < 24; h++) {
+			if (this.isHourFolded(h)) foldedCount++;
+		}
+		const normalCount = 24 - foldedCount;
+		if (normalCount === 0) return bodyHeight / 24;
+		return (bodyHeight - foldedCount * this.FOLDED_ROW_HEIGHT) / normalCount;
+	}
+
+	private minutesToPixelY(minutes: number, bodyHeight: number): number {
+		const hour = Math.floor(minutes / 60);
+		const minuteInHour = minutes % 60;
+		const normalRowHeight = this.getNormalRowHeight(bodyHeight);
+		let cumY = 0;
+		for (let h = 0; h < hour && h < 24; h++) {
+			cumY += this.isHourFolded(h) ? this.FOLDED_ROW_HEIGHT : normalRowHeight;
+		}
+		if (hour < 24) {
+			const rh = this.isHourFolded(hour) ? this.FOLDED_ROW_HEIGHT : normalRowHeight;
+			cumY += (minuteInHour / 60) * rh;
+		}
+		return cumY;
+	}
+
 	render(): void {
 		this.containerEl.empty();
 
 		this.gridEl = this.containerEl.createDiv({ cls: "weekflow-grid" });
-		const totalHours = this.settings.dayEndHour - this.settings.dayStartHour;
 
 		const cols = this.visibleDays * 6;
 		this.gridEl.style.gridTemplateColumns =
 			`60px repeat(${cols}, 1fr)`;
-		this.gridEl.style.gridTemplateRows =
-			`auto repeat(${totalHours}, minmax(40px, 1fr))`;
+
+		// 24-hour grid with folded rows for early/late hours
+		const rowTemplate = Array.from({ length: 24 }, (_, h) =>
+			this.isHourFolded(h)
+				? `${this.FOLDED_ROW_HEIGHT}px`
+				: `minmax(40px, 1fr)`
+		).join(' ');
+		this.gridEl.style.gridTemplateRows = `auto ${rowTemplate}`;
 
 		// ── Header row ──
 		const corner = this.gridEl.createDiv({
@@ -200,16 +251,43 @@ export class GridRenderer {
 			}
 		}
 
-		// ── Hour rows with 10-min cells ──
-		for (let h = this.settings.dayStartHour; h < this.settings.dayEndHour; h++) {
-			const row = (h - this.settings.dayStartHour) + 2;
+		// ── Hour rows with 10-min cells (24 hours: 0-23) ──
+		for (let h = 0; h < 24; h++) {
+			const row = h + 2;
+			const folded = this.isHourFolded(h);
 
-			const timeLabel = this.gridEl.createDiv({
-				cls: "weekflow-time-label",
-				text: formatTime(h * 60),
-			});
-			timeLabel.style.gridColumn = "1";
-			timeLabel.style.gridRow = `${row}`;
+			// Fold toggle button at the first folded row of each group
+			const isEarlyFoldStart = h === 0 && this.settings.dayStartHour > 0;
+			const isLateFoldStart = h === this.settings.dayEndHour && this.settings.dayEndHour < 24;
+
+			if (isEarlyFoldStart || isLateFoldStart) {
+				const toggleLabel = this.gridEl.createDiv({ cls: "weekflow-time-label weekflow-fold-toggle" });
+				toggleLabel.style.gridColumn = "1";
+				toggleLabel.style.gridRow = `${row}`;
+				const isFolded = isEarlyFoldStart ? this.earlyFolded : this.lateFolded;
+				const foldHours = isEarlyFoldStart
+					? this.settings.dayStartHour
+					: (24 - this.settings.dayEndHour);
+				toggleLabel.setText(isFolded ? `▸ ${foldHours}h` : `▾`);
+				toggleLabel.addEventListener("click", () => {
+					if (isEarlyFoldStart) this.toggleEarlyFold();
+					else this.toggleLateFold();
+				});
+			} else if (folded) {
+				// Hidden time label for other folded rows
+				const timeLabel = this.gridEl.createDiv({
+					cls: "weekflow-time-label weekflow-time-label-folded",
+				});
+				timeLabel.style.gridColumn = "1";
+				timeLabel.style.gridRow = `${row}`;
+			} else {
+				const timeLabel = this.gridEl.createDiv({
+					cls: "weekflow-time-label",
+					text: formatTime(h * 60),
+				});
+				timeLabel.style.gridColumn = "1";
+				timeLabel.style.gridRow = `${row}`;
+			}
 
 			for (let i = 0; i < this.visibleDays; i++) {
 				const d = this.dayOffset + i;
@@ -224,6 +302,16 @@ export class GridRenderer {
 					cell.style.gridRow = `${row}`;
 
 					if (slot === 0) cell.addClass("weekflow-cell-day-start");
+
+					if (folded) {
+						cell.addClass("weekflow-cell-folded");
+						// Add boundary class on the last row of each fold group
+						const nextHourFolded = (h + 1 < 24) && this.isHourFolded(h + 1);
+						if (!nextHourFolded) {
+							cell.addClass("weekflow-fold-boundary");
+						}
+						continue; // Skip event handlers for folded cells
+					}
 
 					cell.dataset.day = String(d);
 					cell.dataset.minutes = String(minutes);
@@ -605,17 +693,12 @@ export class GridRenderer {
 		this.removeExternalGhost();
 		if (!this.gridEl) return;
 
-		const dayStartMin = this.settings.dayStartHour * 60;
-		const dayEndMin = this.settings.dayEndHour * 60;
-
-		const clampedStart = Math.max(dayStartMin, Math.round(startMin / 10) * 10);
-		const clampedEnd = Math.min(dayEndMin, Math.round(endMin / 10) * 10);
+		const clampedStart = Math.max(0, Math.round(startMin / 10) * 10);
+		const clampedEnd = Math.min(1440, Math.round(endMin / 10) * 10);
 		if (clampedEnd <= clampedStart) return;
 
-		const startOffset = clampedStart - dayStartMin;
-		const endOffset = clampedEnd - dayStartMin;
 		const dayColStart = (dayIndex - this.dayOffset) * 6 + 2;
-		const segments = this.getHourSegments(startOffset, endOffset);
+		const segments = this.getHourSegments(clampedStart, clampedEnd);
 
 		const widestIdx = segments.reduce((best, seg, idx) => {
 			const w = seg.slotEnd - seg.slotStart;
@@ -669,8 +752,7 @@ export class GridRenderer {
 		const dayIndex = this.dayOffset + Math.floor(slotIndex / 6);
 		const slotInDay = slotIndex % 6;
 
-		// Row layout: header row (auto height) + hour rows
-		// Find header height from the first header cell
+		// Row layout: header row (auto height) + 24 hour rows (variable height)
 		const headerCell = this.gridEl.querySelector(".weekflow-header-cell");
 		if (!headerCell) return null;
 		const headerHeight = (headerCell as HTMLElement).getBoundingClientRect().height;
@@ -678,15 +760,23 @@ export class GridRenderer {
 		const bodyY = y - headerHeight;
 		if (bodyY < 0) return null;
 
-		const totalHours = this.settings.dayEndHour - this.settings.dayStartHour;
 		const bodyHeight = gridRect.height - headerHeight;
 		if (bodyHeight <= 0) return null;
 
-		const rowHeight = bodyHeight / totalHours;
-		const hourIndex = Math.floor(bodyY / rowHeight);
-		if (hourIndex < 0 || hourIndex >= totalHours) return null;
+		// Variable row height: folded rows are FOLDED_ROW_HEIGHT, others share remaining space
+		const normalRowHeight = this.getNormalRowHeight(bodyHeight);
+		let cumHeight = 0;
+		let hour = -1;
+		for (let h = 0; h < 24; h++) {
+			const rh = this.isHourFolded(h) ? this.FOLDED_ROW_HEIGHT : normalRowHeight;
+			if (bodyY < cumHeight + rh) {
+				hour = h;
+				break;
+			}
+			cumHeight += rh;
+		}
+		if (hour === -1) return null;
 
-		const hour = this.settings.dayStartHour + hourIndex;
 		const minutes = hour * 60 + slotInDay * 10;
 
 		return { dayIndex, minutes };
@@ -712,20 +802,25 @@ export class GridRenderer {
 		}
 	}
 
+	/**
+	 * Convert an absolute-minute range (0-1440) into grid row/slot segments.
+	 * Each segment corresponds to one hour row in the 24-hour grid.
+	 * row = absoluteHour + 2 (row 1 is the header).
+	 */
 	private getHourSegments(
-		startOffset: number,
-		endOffset: number
+		startMinute: number,
+		endMinute: number
 	): { row: number; slotStart: number; slotEnd: number }[] {
-		const startHour = Math.floor(startOffset / 60);
-		const lastHour = Math.floor((endOffset - 1) / 60);
+		const startHour = Math.floor(startMinute / 60);
+		const lastHour = Math.floor((endMinute - 1) / 60);
 		const segments: { row: number; slotStart: number; slotEnd: number }[] = [];
 
-		for (let h = startHour; h <= lastHour; h++) {
+		for (let h = startHour; h <= lastHour && h < 24; h++) {
 			const hourStartMin = h * 60;
 			const hourEndMin = hourStartMin + 60;
 
-			const segStart = Math.max(startOffset, hourStartMin);
-			const segEnd = Math.min(endOffset, hourEndMin);
+			const segStart = Math.max(startMinute, hourStartMin);
+			const segEnd = Math.min(endMinute, hourEndMin);
 
 			const slotStart = Math.floor((segStart - hourStartMin) / 10);
 			const slotEnd = Math.ceil((segEnd - hourStartMin) / 10);
@@ -748,22 +843,15 @@ export class GridRenderer {
 				? item.actualTime
 				: item.planTime;
 
-		const dayStartMin = this.settings.dayStartHour * 60;
-		const dayEndMin = this.settings.dayEndHour * 60;
-		const startOffset = displayTime.start - dayStartMin;
-		const endOffset = displayTime.end - dayStartMin;
-
-		if (startOffset < 0 || endOffset > (dayEndMin - dayStartMin)) return;
-
 		const visibleIndex = dayIndex - this.dayOffset;
 		const dayColStart = visibleIndex * 6 + 2;
-		const segments = this.getHourSegments(startOffset, endOffset);
+		const segments = this.getHourSegments(displayTime.start, displayTime.end);
 		if (segments.length === 0) return;
 
 		const color = this.getCategoryColor(item.tags);
 		const isOverlap = this.overlapGroupMap.has(item.id);
-		const has5minStart = startOffset % 10 !== 0;
-		const has5minEnd = endOffset % 10 !== 0;
+		const has5minStart = displayTime.start % 10 !== 0;
+		const has5minEnd = displayTime.end % 10 !== 0;
 
 		// Put content text in the widest segment to avoid row height expansion
 		const widestIdx = segments.reduce((best, seg, idx) => {
@@ -1078,7 +1166,7 @@ export class GridRenderer {
 			duration = dragTime.end - dragTime.start;
 		}
 		const newStart = Math.max(
-			this.settings.dayStartHour * 60,
+			0,
 			cell.minutes - this.blockDragState.startOffset
 		);
 		const snappedStart = Math.round(newStart / 10) * 10;
@@ -1089,12 +1177,9 @@ export class GridRenderer {
 		this.blockDragState.lastStart = snappedStart;
 
 		const snappedEnd = snappedStart + duration;
-		const dayStartMin = this.settings.dayStartHour * 60;
-		const startOffset = snappedStart - dayStartMin;
-		const endOffset = snappedEnd - dayStartMin;
 
 		const dayColStart = (cell.dayIndex - this.dayOffset) * 6 + 2;
-		const segments = this.getHourSegments(startOffset, endOffset);
+		const segments = this.getHourSegments(snappedStart, snappedEnd);
 		if (segments.length === 0) return;
 
 		const color = this.getCategoryColor(item.tags);
@@ -1152,7 +1237,7 @@ export class GridRenderer {
 			const cell = this.getCellFromPoint(e.clientX, e.clientY);
 			if (cell && this.blockDragState) {
 				const newStart = Math.round(
-					Math.max(this.settings.dayStartHour * 60,
+					Math.max(0,
 						cell.minutes - this.blockDragState.startOffset) / 10
 				) * 10;
 				this.blockDragState.lastDay = cell.dayIndex;
@@ -1203,7 +1288,7 @@ export class GridRenderer {
 		const item = this.blockDragState.item;
 		const fromDay = this.blockDragState.fromDay;
 		const newStart = Math.max(
-			this.settings.dayStartHour * 60,
+			0,
 			cell.minutes - this.blockDragState.startOffset
 		);
 		const snappedStart = Math.round(newStart / 10) * 10;
@@ -1251,11 +1336,9 @@ export class GridRenderer {
 			newEnd = Math.max(snappedMinutes + 10, newStart + 10);
 		}
 
-		// Clamp to day bounds
-		const dayStartMin = this.settings.dayStartHour * 60;
-		const dayEndMin = this.settings.dayEndHour * 60;
-		newStart = Math.max(dayStartMin, newStart);
-		newEnd = Math.min(dayEndMin, newEnd);
+		// Clamp to absolute day bounds
+		newStart = Math.max(0, newStart);
+		newEnd = Math.min(1440, newEnd);
 
 		if (newEnd <= newStart) return;
 
@@ -1269,9 +1352,7 @@ export class GridRenderer {
 		// Render all ghost segments
 		const color = this.getCategoryColor(this.resizeState.item.tags);
 		const dayColStart = (this.resizeState.dayIndex - this.dayOffset) * 6 + 2;
-		const startOffset = newStart - dayStartMin;
-		const endOffset = newEnd - dayStartMin;
-		const segments = this.getHourSegments(startOffset, endOffset);
+		const segments = this.getHourSegments(newStart, newEnd);
 
 		this.removeGhost();
 		this.removeResizeGhost();
@@ -1340,18 +1421,12 @@ export class GridRenderer {
 	private renderPlanOutline(dayIndex: number, item: TimelineItem, showText = true): void {
 		if (!this.gridEl) return;
 
-		const dayStartMin = this.settings.dayStartHour * 60;
-		const dayEndMin = this.settings.dayEndHour * 60;
-		const startOffset = item.planTime.start - dayStartMin;
-		const endOffset = item.planTime.end - dayStartMin;
-
-		if (startOffset < 0 || endOffset > (dayEndMin - dayStartMin)) return;
-
 		const dayColStart = (dayIndex - this.dayOffset) * 6 + 2;
 		const color = this.getCategoryColor(item.tags);
-		const segments = this.getHourSegments(startOffset, endOffset);
-		const has5minStart = startOffset % 10 !== 0;
-		const has5minEnd = endOffset % 10 !== 0;
+		const segments = this.getHourSegments(item.planTime.start, item.planTime.end);
+		if (segments.length === 0) return;
+		const has5minStart = item.planTime.start % 10 !== 0;
+		const has5minEnd = item.planTime.end % 10 !== 0;
 
 		segments.forEach((seg, i) => {
 			const outline = this.gridEl!.createDiv({
@@ -1464,14 +1539,12 @@ export class GridRenderer {
 		const getTime = (item: TimelineItem) =>
 			item.checkbox === "actual" && item.actualTime ? item.actualTime : item.planTime;
 
-		const dayStartMin = this.settings.dayStartHour * 60;
 		let minStart = Infinity;
 		for (const item of group) {
 			minStart = Math.min(minStart, getTime(item).start);
 		}
 
-		const startOffset = minStart - dayStartMin;
-		const startHour = Math.floor(startOffset / 60);
+		const startHour = Math.floor(minStart / 60);
 		const row = startHour + 2;
 		const dayColStart = (dayIndex - this.dayOffset) * 6 + 2;
 
@@ -1579,9 +1652,6 @@ export class GridRenderer {
 	private renderCalendarOverlay(): void {
 		if (!this.gridEl || this.calendarEvents.length === 0) return;
 
-		const dayStartMin = this.settings.dayStartHour * 60;
-		const dayEndMin = this.settings.dayEndHour * 60;
-
 		for (let i = 0; i < this.visibleDays; i++) {
 			const d = this.dayOffset + i;
 			const dayDate = this.dates[d];
@@ -1600,15 +1670,13 @@ export class GridRenderer {
 				const startMinutes = evStartInDay.getHours() * 60 + evStartInDay.getMinutes();
 				const endMinutes = evEndInDay.getHours() * 60 + evEndInDay.getMinutes();
 
-				// Clamp to visible range
-				const clampedStart = Math.max(dayStartMin, Math.round(startMinutes / 10) * 10);
-				const clampedEnd = Math.min(dayEndMin, Math.round(endMinutes / 10) * 10);
+				// Clamp to 24-hour range
+				const clampedStart = Math.max(0, Math.round(startMinutes / 10) * 10);
+				const clampedEnd = Math.min(1440, Math.round(endMinutes / 10) * 10);
 				if (clampedEnd <= clampedStart) continue;
 
-				const startOffset = clampedStart - dayStartMin;
-				const endOffset = clampedEnd - dayStartMin;
 				const dayColStart = i * 6 + 2;
-				const segments = this.getHourSegments(startOffset, endOffset);
+				const segments = this.getHourSegments(clampedStart, clampedEnd);
 				if (segments.length === 0) continue;
 
 				// Find widest segment for label
@@ -1669,13 +1737,9 @@ export class GridRenderer {
 		}
 		if (todayVisibleIndex === -1) return;
 
-		// Check if current time is within day range
 		const currentMinutes = today.hour() * 60 + today.minute();
-		const dayStartMin = this.settings.dayStartHour * 60;
-		const dayEndMin = this.settings.dayEndHour * 60;
-		if (currentMinutes < dayStartMin || currentMinutes >= dayEndMin) return;
 
-		// Calculate geometry (same approach as getCellFromPoint)
+		// Calculate geometry using variable row heights
 		const gridRect = this.gridEl.getBoundingClientRect();
 		if (gridRect.width === 0 || gridRect.height === 0) return;
 
@@ -1687,12 +1751,10 @@ export class GridRenderer {
 		if (!headerCell) return;
 		const headerHeight = (headerCell as HTMLElement).getBoundingClientRect().height;
 
-		const totalMinutes = dayEndMin - dayStartMin;
 		const bodyHeight = gridRect.height - headerHeight;
 		if (bodyHeight <= 0) return;
 
-		const minutesSinceDayStart = currentMinutes - dayStartMin;
-		const topPos = headerHeight + (minutesSinceDayStart / totalMinutes) * bodyHeight;
+		const topPos = headerHeight + this.minutesToPixelY(currentMinutes, bodyHeight);
 		const leftPos = timeLabelWidth + todayVisibleIndex * dayWidth;
 
 		// Create line

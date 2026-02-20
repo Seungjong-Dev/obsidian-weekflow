@@ -177,7 +177,7 @@ export class WeekFlowSettingTab extends PluginSettingTab {
 		// Day Start Hour
 		new Setting(containerEl)
 			.setName("Day start hour")
-			.setDesc("First hour shown in the timetable (0-23)")
+			.setDesc("Hours before this are shown folded (collapsed) in the grid (0-23)")
 			.addSlider((slider) =>
 				slider
 					.setLimits(0, 23, 1)
@@ -192,7 +192,7 @@ export class WeekFlowSettingTab extends PluginSettingTab {
 		// Day End Hour
 		new Setting(containerEl)
 			.setName("Day end hour")
-			.setDesc("Last hour shown in the timetable (1-24)")
+			.setDesc("Hours from this onward are shown folded (collapsed) in the grid (1-24)")
 			.addSlider((slider) =>
 				slider
 					.setLimits(1, 24, 1)
