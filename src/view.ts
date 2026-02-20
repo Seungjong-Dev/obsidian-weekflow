@@ -222,14 +222,16 @@ export class WeekFlowView extends ItemView {
 
 	async refresh() {
 		const settings = this.plugin.settings;
-		this.dates = getWeekDates(this.currentDate, settings.weekStartDay);
+		const newDates = getWeekDates(this.currentDate, settings.weekStartDay);
+		const weekChanged = this.dates.length === 0 || !this.dates[0].isSame(newDates[0], "day");
+		this.dates = newDates;
 		this.weekNotePaths = getWeekNotePaths(this.dates, settings);
 
-		// Recalculate dayOffset for current visible days (week might have changed)
+		// Recalculate dayOffset only when week actually changed or pending offset exists
 		if (this.pendingDayOffset !== null) {
 			this.currentDayOffset = this.pendingDayOffset;
 			this.pendingDayOffset = null;
-		} else {
+		} else if (weekChanged) {
 			this.currentDayOffset = this.calculateDayOffset(this.currentVisibleDays);
 		}
 
