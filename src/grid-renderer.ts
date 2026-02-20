@@ -1848,20 +1848,28 @@ export class GridRenderer {
 	private positionActionBar(anchorEl: HTMLElement): void {
 		if (!this.actionBarEl) return;
 
-		const rect = anchorEl.getBoundingClientRect();
+		// Find the last (bottom-most) segment of this block
+		const itemId = anchorEl.dataset.itemId;
+		let lastRect = anchorEl.getBoundingClientRect();
+		if (itemId && this.gridEl) {
+			const segments = this.gridEl.querySelectorAll(`.weekflow-block[data-item-id="${itemId}"]`);
+			segments.forEach((seg) => {
+				const r = seg.getBoundingClientRect();
+				if (r.bottom > lastRect.bottom) {
+					lastRect = r;
+				}
+			});
+		}
+
 		const barHeight = this.actionBarEl.offsetHeight || 44;
 		const gap = 4;
 
-		// Default: below the block
-		let top = rect.bottom + gap;
-		// If it overflows viewport bottom, place above
-		if (top + barHeight > window.innerHeight - 8) {
-			top = rect.top - barHeight - gap;
-		}
-		// Clamp top
+		// Always below the last segment, clamped to viewport
+		let top = lastRect.bottom + gap;
+		top = Math.min(top, window.innerHeight - barHeight - 4);
 		top = Math.max(4, top);
 
-		let left = rect.left + rect.width / 2;
+		let left = lastRect.left + lastRect.width / 2;
 		this.actionBarEl.style.left = `${left}px`;
 		this.actionBarEl.style.top = `${top}px`;
 
