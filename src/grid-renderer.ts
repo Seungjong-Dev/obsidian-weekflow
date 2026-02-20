@@ -2020,10 +2020,35 @@ export class GridRenderer {
 			};
 		});
 
-		// Make ghost interactive for resize handles
+		// Make ghosts interactive: drag to re-move, resize handles
 		ghosts.forEach((g) => {
 			g.style.pointerEvents = "auto";
 			g.style.touchAction = "none";
+
+			g.addEventListener("pointerdown", (e) => {
+				if (e.button !== 0) return;
+				e.preventDefault();
+				e.stopPropagation();
+
+				// Clean up previous drag state
+				this.removeGhost();
+				this.removeResizeGhost();
+				this.blockDragState = null;
+				this.resizeState = null;
+
+				const cell = this.getCellFromPoint(e.clientX, e.clientY);
+				const offsetMinutes = cell ? (cell.minutes - virtualStart) : 0;
+				this.blockDragStartX = e.clientX;
+				this.blockDragStartY = e.clientY;
+				this.dragMode = "block-drag";
+				this.blockDragState = {
+					item,
+					fromDay: this.touchBlockSelection!.originalDayIndex,
+					startOffset: Math.max(0, offsetMinutes),
+					lastDay: -1,
+					lastStart: -1,
+				};
+			});
 		});
 	}
 
