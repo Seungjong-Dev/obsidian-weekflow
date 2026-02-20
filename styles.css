@@ -1613,16 +1613,19 @@
 	border-style: dashed !important;
 	opacity: 0.8;
 }
-.weekflow-block-move-mode > .weekflow-resize-handle {
+.weekflow-block-move-mode > .weekflow-resize-handle,
+.weekflow-ghost-handle {
 	width: 24px;
-	opacity: 0.6;
-	background: var(--background-modifier-border);
+	opacity: 0;
+	background: transparent;
 	border-radius: 3px;
 }
-.weekflow-block-move-mode > .weekflow-resize-left {
+.weekflow-block-move-mode > .weekflow-resize-left,
+.weekflow-ghost-handle.weekflow-resize-left {
 	left: -8px;
 }
-.weekflow-block-move-mode > .weekflow-resize-right {
+.weekflow-block-move-mode > .weekflow-resize-right,
+.weekflow-ghost-handle.weekflow-resize-right {
 	right: -8px;
 }
 .weekflow-block-move-mode > .weekflow-block-toggle {

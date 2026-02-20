@@ -232,8 +232,34 @@ export class GridRenderer {
 						if (this.dragMode !== "none") return;
 
 						if (e.pointerType === "touch") {
-							// Deselect touch block selection (unless in move mode)
-							if (this.touchBlockSelection && this.touchBlockSelection.mode !== "move") {
+							// Move mode: re-drag from cell (ghost or anywhere)
+							if (this.touchBlockSelection?.mode === "move") {
+								e.preventDefault();
+								e.stopPropagation();
+								// Clean up previous drag state
+								this.removeGhost();
+								this.removeResizeGhost();
+								this.blockDragState = null;
+								this.resizeState = null;
+
+								const item = this.touchBlockSelection.item;
+								const fromDay = this.touchBlockSelection.dayIndex;
+								const dragTime = item.checkbox === "actual" && item.actualTime ? item.actualTime : item.planTime;
+								const cell = this.getCellFromPoint(e.clientX, e.clientY);
+								const offsetMinutes = cell ? (cell.minutes - dragTime.start) : 0;
+								this.dragMode = "block-drag";
+								this.blockDragState = {
+									item, fromDay,
+									startOffset: Math.max(0, offsetMinutes),
+									lastDay: -1, lastStart: -1,
+								};
+								this.blockDragStartX = e.clientX;
+								this.blockDragStartY = e.clientY;
+								return;
+							}
+
+							// Deselect touch block selection
+							if (this.touchBlockSelection) {
 								this.clearTouchBlockSelection();
 							}
 							// Touch: tap-tap mode — no preventDefault() (allow scroll)
@@ -1160,11 +1186,16 @@ export class GridRenderer {
 				this.blockDragState.lastStart = newStart;
 			}
 			this.dragMode = "none";
-			// Re-show move action bar at updated block position
-			const blockEl = this.touchBlockSelection.item.id
-				? this.findBlockElement(this.touchBlockSelection.item.id)
-				: null;
-			if (blockEl) this.showMoveActionBar(blockEl);
+			// Add resize handles to ghost
+			this.addGhostResizeHandles();
+			// Re-show move action bar at ghost position
+			const lastGhost = this.ghostEls[this.ghostEls.length - 1];
+			if (lastGhost) {
+				this.showMoveActionBar(lastGhost);
+			} else {
+				const blockEl = this.findBlockElement(this.touchBlockSelection.item.id);
+				if (blockEl) this.showMoveActionBar(blockEl);
+			}
 			return;
 		}
 
@@ -1289,10 +1320,17 @@ export class GridRenderer {
 		if (this.touchBlockSelection?.mode === "move") {
 			// Move mode: keep resize ghost and resizeState — wait for confirm/cancel
 			this.dragMode = "none";
-			const blockEl = this.touchBlockSelection.item.id
-				? this.findBlockElement(this.touchBlockSelection.item.id)
-				: null;
-			if (blockEl) this.showMoveActionBar(blockEl);
+			// Add resize handles to resize ghost
+			this.addResizeGhostResizeHandles();
+			// Re-show move action bar
+			const lastGhost = this.resizeGhostEls[this.resizeGhostEls.length - 1]
+				|| this.ghostEls[this.ghostEls.length - 1];
+			if (lastGhost) {
+				this.showMoveActionBar(lastGhost);
+			} else {
+				const blockEl = this.findBlockElement(this.touchBlockSelection.item.id);
+				if (blockEl) this.showMoveActionBar(blockEl);
+			}
 			return;
 		}
 
@@ -1902,6 +1940,90 @@ export class GridRenderer {
 			} else if (barRect.right > window.innerWidth - 4) {
 				this.actionBarEl.style.left = `${window.innerWidth - 4 - barRect.width / 2}px`;
 			}
+		});
+	}
+
+	/** Add resize handles to drag ghost segments in move mode */
+	private addGhostResizeHandles(): void {
+		if (!this.touchBlockSelection || this.ghostEls.length === 0 || !this.blockDragState) return;
+
+		const item = this.touchBlockSelection.item;
+		const dragTime = item.checkbox === "actual" && item.actualTime ? item.actualTime : item.planTime;
+		const duration = dragTime.end - dragTime.start;
+		const ghostDayIndex = this.blockDragState.lastDay;
+		const ghostStart = this.blockDragState.lastStart;
+		const ghostEnd = ghostStart + duration;
+
+		this.addHandlesToGhostEls(this.ghostEls, item, ghostDayIndex, ghostStart, ghostEnd);
+	}
+
+	/** Add resize handles to resize ghost segments in move mode */
+	private addResizeGhostResizeHandles(): void {
+		if (!this.touchBlockSelection || !this.resizeState) return;
+		const ghosts = this.resizeGhostEls.length > 0 ? this.resizeGhostEls : this.ghostEls;
+		if (ghosts.length === 0) return;
+
+		const item = this.touchBlockSelection.item;
+		const dayIndex = this.resizeState.dayIndex;
+		const start = this.resizeState.currentStart;
+		const end = this.resizeState.currentEnd;
+
+		this.addHandlesToGhostEls(ghosts, item, dayIndex, start, end);
+	}
+
+	private addHandlesToGhostEls(
+		ghosts: HTMLElement[],
+		item: TimelineItem,
+		dayIndex: number,
+		virtualStart: number,
+		virtualEnd: number
+	): void {
+		// First ghost: left handle
+		const firstGhost = ghosts[0];
+		const leftHandle = firstGhost.createDiv({ cls: "weekflow-resize-handle weekflow-resize-left weekflow-ghost-handle" });
+		leftHandle.addEventListener("pointerdown", (e) => {
+			e.preventDefault();
+			e.stopPropagation();
+			// Clean up previous state
+			this.removeGhost();
+			this.removeResizeGhost();
+			this.blockDragState = null;
+			this.resizeState = null;
+
+			leftHandle.setPointerCapture(e.pointerId);
+			this.dragMode = "resize";
+			this.resizeState = {
+				item, dayIndex, edge: "left",
+				originalStart: virtualStart, originalEnd: virtualEnd,
+				currentStart: virtualStart, currentEnd: virtualEnd,
+			};
+		});
+
+		// Last ghost: right handle
+		const lastGhost = ghosts[ghosts.length - 1];
+		const rightHandle = lastGhost.createDiv({ cls: "weekflow-resize-handle weekflow-resize-right weekflow-ghost-handle" });
+		rightHandle.addEventListener("pointerdown", (e) => {
+			e.preventDefault();
+			e.stopPropagation();
+			// Clean up previous state
+			this.removeGhost();
+			this.removeResizeGhost();
+			this.blockDragState = null;
+			this.resizeState = null;
+
+			rightHandle.setPointerCapture(e.pointerId);
+			this.dragMode = "resize";
+			this.resizeState = {
+				item, dayIndex, edge: "right",
+				originalStart: virtualStart, originalEnd: virtualEnd,
+				currentStart: virtualStart, currentEnd: virtualEnd,
+			};
+		});
+
+		// Make ghost interactive for resize handles
+		ghosts.forEach((g) => {
+			g.style.pointerEvents = "auto";
+			g.style.touchAction = "none";
 		});
 	}
 
