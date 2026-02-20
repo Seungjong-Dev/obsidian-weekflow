@@ -702,7 +702,7 @@ function hapticFeedback(): void;
 
 - **감지 기준:** 가로 이동 >50px, |가로| > |세로|*2, 시간 <300ms
 - **감지 시점:** `pointerup` 및 `pointercancel` 모두에서 판정 (브라우저가 세로 스크롤로 인해 `pointercancel`을 발생시켜도 수평 스와이프 데이터를 활용)
-- **Obsidian 사이드바 차단:** 그리드에 `touchstart`/`touchmove` 리스너로 수평 이동 >15px 감지 시 `stopPropagation()` 호출
+- **Obsidian 사이드바 차단:** WeekFlow 뷰 컨테이너(`contentEl`)에서 `touchmove` `stopPropagation()`을 무조건 호출하여 뷰 전체에서 사이드바 제스처를 차단. 네이티브 세로 스크롤은 `touch-action: pan-y`가 JS 전파와 독립적으로 브라우저에서 처리되므로 영향 없음
 - **Wide + 터치:** 스와이프 → 주 이동
 - **Medium (3일):** 스와이프 → dayOffset ±2 (고정 페이지 [0,2,4], 주 경계 넘으면 주 이동)
 - **Narrow (1일):** 스와이프 → dayOffset ±1 (주 경계 넘으면 주 이동)
@@ -743,7 +743,7 @@ Narrow 모드에서 사이드 패널 대신 하단 시트로 표시:
 
 #### touch-action 설정
 
-- **`.weekflow-grid`:** `touch-action: pan-y` — 세로 스크롤은 브라우저에 위임, 수평 제스처는 JS에서 처리 (스와이프 감지). Obsidian 사이드바 스와이프는 `touchmove` `stopPropagation()`으로 차단.
+- **`.weekflow-grid`:** `touch-action: pan-y` — 세로 스크롤은 브라우저에 위임, 수평 제스처는 JS에서 처리 (스와이프 감지).
 - **`.weekflow-resize-handle`, `.weekflow-review-resize-handle`, `.weekflow-bottom-sheet-handle`:** `touch-action: none` — 드래그 전용 요소에서 브라우저 기본 제스처 완전 차단.
 - **`.weekflow-block`, `.weekflow-panel-item`:** 기본 `touch-action: pan-y` (스크롤 허용). 이동 모드 진입 시에만 동적으로 `touch-action: none` 적용.
 - **`.weekflow-cell`:** 부모(`.weekflow-grid`)의 `pan-y`를 상속 — 셀 위에서 세로 스크롤 허용.
