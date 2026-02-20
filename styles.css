@@ -383,37 +383,37 @@
 	user-select: none;
 }
 
-/* Fold toggle button in time label area */
-.weekflow-fold-toggle {
-	font-size: 9px;
-	color: var(--text-faint);
-	cursor: pointer;
+/* Fold bar — single clickable bar for collapsed early/late hours */
+.weekflow-fold-bar {
 	display: flex;
 	align-items: center;
-	justify-content: flex-end;
-	padding-right: 6px;
+	justify-content: center;
+	gap: 6px;
+	background: var(--background-secondary);
+	border-top: 1px solid var(--background-modifier-border);
+	border-bottom: 1px solid var(--background-modifier-border);
+	cursor: pointer;
+	font-size: 10px;
+	color: var(--text-faint);
 	user-select: none;
+	z-index: 1;
 }
-.weekflow-fold-toggle:hover {
+.weekflow-fold-bar:hover {
+	background: var(--background-modifier-hover);
 	color: var(--text-muted);
 }
 
-/* Hidden time label for folded rows */
-.weekflow-time-label-folded {
-	font-size: 0;
-	padding: 0;
-	overflow: hidden;
-}
-
-/* Folded cells */
-.weekflow-cell-folded {
-	border-bottom: none;
-	pointer-events: none;
-}
-
-/* Boundary line at the end of a fold group */
-.weekflow-fold-boundary {
-	border-bottom: 1.5px solid var(--background-modifier-border);
+.weekflow-fold-bar-indicator {
+	background: var(--text-faint);
+	color: var(--background-primary);
+	font-size: 9px;
+	min-width: 14px;
+	height: 14px;
+	border-radius: 7px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	padding: 0 3px;
 }
 
 /* Cells — now horizontal 10-min slots within each hour row */
