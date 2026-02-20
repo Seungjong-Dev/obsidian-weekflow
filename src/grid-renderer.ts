@@ -132,6 +132,7 @@ export class GridRenderer {
 	// Touch block selection
 	private touchBlockSelection: TouchBlockSelection | null = null;
 	private actionBarEl: HTMLElement | null = null;
+	private actionBarHovered = false;
 
 	// Swipe detection state
 	private swipeStartX = 0;
@@ -1024,14 +1025,15 @@ export class GridRenderer {
 				if (e.pointerType === "pen"
 					&& this.touchBlockSelection?.isPenHover
 					&& !this.touchBlockSelection?.penTapConverted) {
-					// Delay clearing so a pen tap (pointerleave → click) can
-					// convert the hover to a permanent selection first
+					// Delay clearing so a pen tap (pointerleave → click) or
+					// moving to action bar can keep the selection alive
 					setTimeout(() => {
 						if (this.touchBlockSelection?.isPenHover
-							&& !this.touchBlockSelection?.penTapConverted) {
+							&& !this.touchBlockSelection?.penTapConverted
+							&& !this.actionBarHovered) {
 							this.clearTouchBlockSelection();
 						}
-					}, 100);
+					}, 150);
 				}
 				this.hideTooltip();
 			});
@@ -1755,10 +1757,7 @@ export class GridRenderer {
 			}));
 		}
 
-		document.body.appendChild(bar);
-		this.actionBarEl = bar;
-
-		this.positionActionBar(anchorEl);
+		this.mountActionBar(bar, anchorEl);
 	}
 
 	private showMoveActionBar(anchorEl: HTMLElement): void {
@@ -1783,10 +1782,7 @@ export class GridRenderer {
 		cancelBtn.addEventListener("click", (e) => { e.stopPropagation(); this.cancelMove(); });
 		bar.appendChild(cancelBtn);
 
-		document.body.appendChild(bar);
-		this.actionBarEl = bar;
-
-		this.positionActionBar(anchorEl);
+		this.mountActionBar(bar, anchorEl);
 	}
 
 	private showDeleteConfirmActionBar(anchorEl: HTMLElement): void {
@@ -1811,8 +1807,35 @@ export class GridRenderer {
 		cancelBtn.addEventListener("click", (e) => { e.stopPropagation(); this.cancelDeleteConfirm(); });
 		bar.appendChild(cancelBtn);
 
+		this.mountActionBar(bar, anchorEl);
+	}
+
+	private mountActionBar(bar: HTMLElement, anchorEl: HTMLElement): void {
 		document.body.appendChild(bar);
 		this.actionBarEl = bar;
+		this.actionBarHovered = false;
+
+		// Track pen hover on the action bar to prevent premature pen-hover dismiss
+		bar.addEventListener("pointerenter", (e) => {
+			if (e.pointerType === "pen") {
+				this.actionBarHovered = true;
+			}
+		});
+		bar.addEventListener("pointerleave", (e) => {
+			if (e.pointerType === "pen") {
+				this.actionBarHovered = false;
+				// If pen left action bar and selection is still hover-based, schedule dismiss
+				if (this.touchBlockSelection?.isPenHover && !this.touchBlockSelection?.penTapConverted) {
+					setTimeout(() => {
+						if (this.touchBlockSelection?.isPenHover
+							&& !this.touchBlockSelection?.penTapConverted
+							&& !this.actionBarHovered) {
+							this.clearTouchBlockSelection();
+						}
+					}, 150);
+				}
+			}
+		});
 
 		this.positionActionBar(anchorEl);
 	}
@@ -1854,6 +1877,7 @@ export class GridRenderer {
 			this.actionBarEl.remove();
 			this.actionBarEl = null;
 		}
+		this.actionBarHovered = false;
 	}
 
 	private enterMoveMode(): void {
