@@ -978,14 +978,9 @@ export class GridRenderer {
 				const dist = Math.sqrt(dx * dx + dy * dy);
 				if (dist >= DRAG_DISTANCE_PX) return;
 
-				if (this.lastBlockPointerType === "touch") {
+				if (this.lastBlockPointerType === "touch" || this.lastBlockPointerType === "pen") {
+					// Touch and Apple Pencil: use selection mode
 					this.handleTouchBlockTap(dayIndex, item, block);
-				} else if (this.lastBlockPointerType === "pen"
-					&& this.touchBlockSelection?.isPenHover
-					&& this.touchBlockSelection.item.id === item.id) {
-					// Apple Pencil: hover → tap converts to permanent selection
-					this.touchBlockSelection.penTapConverted = true;
-					this.touchBlockSelection.isPenHover = false;
 				} else {
 					if (this.dragMode === "none") {
 						this.callbacks.onBlockClick(dayIndex, item);
@@ -1029,7 +1024,14 @@ export class GridRenderer {
 				if (e.pointerType === "pen"
 					&& this.touchBlockSelection?.isPenHover
 					&& !this.touchBlockSelection?.penTapConverted) {
-					this.clearTouchBlockSelection();
+					// Delay clearing so a pen tap (pointerleave → click) can
+					// convert the hover to a permanent selection first
+					setTimeout(() => {
+						if (this.touchBlockSelection?.isPenHover
+							&& !this.touchBlockSelection?.penTapConverted) {
+							this.clearTouchBlockSelection();
+						}
+					}, 100);
 				}
 				this.hideTooltip();
 			});
@@ -1669,7 +1671,11 @@ export class GridRenderer {
 		this.clearSelection();
 
 		if (this.touchBlockSelection?.item.id === item.id) {
-			// Same block already selected — no-op (action bar stays)
+			// Same block: if pen hover, convert to permanent selection
+			if (this.touchBlockSelection.isPenHover) {
+				this.touchBlockSelection.isPenHover = false;
+				this.touchBlockSelection.penTapConverted = true;
+			}
 			return;
 		}
 		// Different block or no selection — (re)select
