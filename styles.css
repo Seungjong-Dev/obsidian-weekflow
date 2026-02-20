@@ -1613,6 +1613,18 @@
 	border-style: dashed !important;
 	opacity: 0.8;
 }
+.weekflow-block-move-mode > .weekflow-resize-handle {
+	width: 24px;
+	opacity: 0.6;
+	background: var(--background-modifier-border);
+	border-radius: 3px;
+}
+.weekflow-block-move-mode > .weekflow-resize-left {
+	left: -8px;
+}
+.weekflow-block-move-mode > .weekflow-resize-right {
+	right: -8px;
+}
 .weekflow-block-delete-pending {
 	opacity: 0.5;
 	border-color: var(--text-error) !important;
