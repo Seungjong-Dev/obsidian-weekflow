@@ -1960,10 +1960,13 @@ export class GridRenderer {
 		this.removeActionBar();
 		this.hideTooltip();
 
-		// Remove selection CSS classes from all blocks
+		// Remove selection CSS classes and restore touch-action from all blocks
 		if (this.gridEl) {
 			this.gridEl.querySelectorAll(".weekflow-block-touch-selected").forEach(
-				(el) => el.removeClass("weekflow-block-touch-selected")
+				(el) => {
+					el.removeClass("weekflow-block-touch-selected");
+					(el as HTMLElement).style.touchAction = "";
+				}
 			);
 			this.gridEl.querySelectorAll(".weekflow-block-move-mode").forEach(
 				(el) => el.removeClass("weekflow-block-move-mode")
@@ -1977,9 +1980,12 @@ export class GridRenderer {
 	private updateTouchBlockSelectionStyles(): void {
 		if (!this.gridEl) return;
 
-		// Remove all touch selection classes
+		// Remove all touch selection classes and restore touch-action
 		this.gridEl.querySelectorAll(".weekflow-block-touch-selected").forEach(
-			(el) => el.removeClass("weekflow-block-touch-selected")
+			(el) => {
+				el.removeClass("weekflow-block-touch-selected");
+				(el as HTMLElement).style.touchAction = "";
+			}
 		);
 		this.gridEl.querySelectorAll(".weekflow-block-move-mode").forEach(
 			(el) => el.removeClass("weekflow-block-move-mode")
@@ -1996,6 +2002,8 @@ export class GridRenderer {
 			el.addClass("weekflow-block-touch-selected");
 			if (this.touchBlockSelection!.mode === "move") {
 				el.addClass("weekflow-block-move-mode");
+				// Allow touch drag by disabling browser scroll on this block
+				(el as HTMLElement).style.touchAction = "none";
 			} else if (this.touchBlockSelection!.mode === "delete-confirm") {
 				el.addClass("weekflow-block-delete-pending");
 			}
