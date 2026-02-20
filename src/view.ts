@@ -377,8 +377,8 @@ export class WeekFlowView extends ItemView {
 				onCellDragEnd: () => this.onDragEnd(),
 				onBlockClick: (dayIndex, item) =>
 					this.onBlockClick(dayIndex, item),
-				onBlockDragEnd: (item, fromDay, toDay, newStart) =>
-					this.onBlockDragEnd(item, fromDay, toDay, newStart),
+				onBlockDragEnd: (item, fromDay, toDay, newStart, newDuration?) =>
+					this.onBlockDragEnd(item, fromDay, toDay, newStart, newDuration),
 				onBlockResize: (item, dayIndex, newStart, newEnd) =>
 					this.onBlockResize(item, dayIndex, newStart, newEnd),
 				onBlockDropOutside: (item, fromDay) =>
@@ -1142,10 +1142,11 @@ export class WeekFlowView extends ItemView {
 		item: TimelineItem,
 		fromDay: number,
 		toDay: number,
-		newStart: number
+		newStart: number,
+		newDuration?: number
 	) {
 		const dragTime = item.checkbox === "actual" && item.actualTime ? item.actualTime : item.planTime;
-		const duration = dragTime.end - dragTime.start;
+		const duration = newDuration ?? (dragTime.end - dragTime.start);
 		const newEnd = newStart + duration;
 		const fromDate = this.dates[fromDay];
 		const fromKey = fromDate.format("YYYY-MM-DD");

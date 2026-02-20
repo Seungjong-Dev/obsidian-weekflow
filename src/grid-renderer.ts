@@ -9,7 +9,7 @@ export interface GridCallbacks {
 	onCellDragMove: (dayIndex: number, minutes: number) => void;
 	onCellDragEnd: () => void;
 	onBlockClick: (dayIndex: number, item: TimelineItem) => void;
-	onBlockDragEnd: (item: TimelineItem, fromDay: number, toDay: number, newStart: number) => void;
+	onBlockDragEnd: (item: TimelineItem, fromDay: number, toDay: number, newStart: number, newDuration?: number) => void;
 	onBlockResize: (item: TimelineItem, dayIndex: number, newStart: number, newEnd: number) => void;
 	onBlockDropOutside?: (item: TimelineItem, fromDay: number) => void;
 	onBlockComplete?: (dayIndex: number, item: TimelineItem) => void;
@@ -32,6 +32,10 @@ interface TouchBlockSelection {
 	originalDayIndex: number;
 	isPenHover: boolean;
 	penTapConverted: boolean;
+	// Accumulated virtual position in move mode
+	currentStart: number;
+	currentEnd: number;
+	currentDayIndex: number;
 }
 
 interface SelectionRange {
@@ -243,10 +247,9 @@ export class GridRenderer {
 								this.resizeState = null;
 
 								const item = this.touchBlockSelection.item;
-								const fromDay = this.touchBlockSelection.dayIndex;
-								const dragTime = item.checkbox === "actual" && item.actualTime ? item.actualTime : item.planTime;
+								const fromDay = this.touchBlockSelection.currentDayIndex;
 								const cell = this.getCellFromPoint(e.clientX, e.clientY);
-								const offsetMinutes = cell ? (cell.minutes - dragTime.start) : 0;
+								const offsetMinutes = cell ? (cell.minutes - this.touchBlockSelection.currentStart) : 0;
 								this.dragMode = "block-drag";
 								this.blockDragState = {
 									item, fromDay,
@@ -972,11 +975,10 @@ export class GridRenderer {
 						this.resizeState = null;
 
 						const cell = this.getCellFromPoint(e.clientX, e.clientY);
-						const dragTime = item.checkbox === "actual" && item.actualTime ? item.actualTime : item.planTime;
-						const offsetMinutes = cell ? (cell.minutes - dragTime.start) : 0;
+						const offsetMinutes = cell ? (cell.minutes - this.touchBlockSelection.currentStart) : 0;
 						this.dragMode = "block-drag";
 						this.blockDragState = {
-							item, fromDay: dayIndex,
+							item, fromDay: this.touchBlockSelection.currentDayIndex,
 							startOffset: Math.max(0, offsetMinutes),
 							lastDay: -1, lastStart: -1,
 						};
@@ -1061,6 +1063,8 @@ export class GridRenderer {
 							originalStart: dragTime.start, originalEnd: dragTime.end,
 							originalDayIndex: dayIndex,
 							isPenHover: true, penTapConverted: false,
+							currentStart: dragTime.start, currentEnd: dragTime.end,
+							currentDayIndex: dayIndex,
 						};
 						this.updateTouchBlockSelectionStyles();
 						this.showActionBar(dayIndex, item, block);
@@ -1107,8 +1111,13 @@ export class GridRenderer {
 		if (!cell) return;
 
 		const item = this.blockDragState.item;
-		const dragTime = item.checkbox === "actual" && item.actualTime ? item.actualTime : item.planTime;
-		const duration = dragTime.end - dragTime.start;
+		let duration: number;
+		if (this.touchBlockSelection?.mode === "move") {
+			duration = this.touchBlockSelection.currentEnd - this.touchBlockSelection.currentStart;
+		} else {
+			const dragTime = item.checkbox === "actual" && item.actualTime ? item.actualTime : item.planTime;
+			duration = dragTime.end - dragTime.start;
+		}
 		const newStart = Math.max(
 			this.settings.dayStartHour * 60,
 			cell.minutes - this.blockDragState.startOffset
@@ -1188,6 +1197,13 @@ export class GridRenderer {
 				) * 10;
 				this.blockDragState.lastDay = cell.dayIndex;
 				this.blockDragState.lastStart = newStart;
+			}
+			// Update accumulated virtual position
+			if (this.blockDragState) {
+				const dur = this.touchBlockSelection.currentEnd - this.touchBlockSelection.currentStart;
+				this.touchBlockSelection.currentDayIndex = this.blockDragState.lastDay;
+				this.touchBlockSelection.currentStart = this.blockDragState.lastStart;
+				this.touchBlockSelection.currentEnd = this.blockDragState.lastStart + dur;
 			}
 			this.dragMode = "none";
 			// Add resize handles to ghost
@@ -1323,6 +1339,10 @@ export class GridRenderer {
 	private onResizeDragFinish(e: PointerEvent) {
 		if (this.touchBlockSelection?.mode === "move") {
 			// Move mode: keep resize ghost and resizeState — wait for confirm/cancel
+			if (this.resizeState) {
+				this.touchBlockSelection.currentStart = this.resizeState.currentStart;
+				this.touchBlockSelection.currentEnd = this.resizeState.currentEnd;
+			}
 			this.dragMode = "none";
 			// Add resize handles to resize ghost
 			this.addResizeGhostResizeHandles();
@@ -1760,6 +1780,9 @@ export class GridRenderer {
 			originalDayIndex: dayIndex,
 			isPenHover: false,
 			penTapConverted: false,
+			currentStart: dragTime.start,
+			currentEnd: dragTime.end,
+			currentDayIndex: dayIndex,
 		};
 		this.updateTouchBlockSelectionStyles();
 		this.showActionBar(dayIndex, item, blockEl);
@@ -1958,8 +1981,7 @@ export class GridRenderer {
 		if (!this.touchBlockSelection || this.ghostEls.length === 0 || !this.blockDragState) return;
 
 		const item = this.touchBlockSelection.item;
-		const dragTime = item.checkbox === "actual" && item.actualTime ? item.actualTime : item.planTime;
-		const duration = dragTime.end - dragTime.start;
+		const duration = this.touchBlockSelection.currentEnd - this.touchBlockSelection.currentStart;
 		const ghostDayIndex = this.blockDragState.lastDay;
 		const ghostStart = this.blockDragState.lastStart;
 		const ghostEnd = ghostStart + duration;
@@ -2082,33 +2104,35 @@ export class GridRenderer {
 
 	private confirmMove(): void {
 		if (!this.touchBlockSelection) return;
+		const sel = this.touchBlockSelection;
 
-		if (this.blockDragState) {
-			const { lastDay, lastStart } = this.blockDragState;
-			if (lastDay >= 0 && lastStart >= 0) {
-				this.callbacks.onBlockDragEnd(
-					this.blockDragState.item,
-					this.blockDragState.fromDay,
-					lastDay,
-					lastStart
-				);
-			}
-			this.blockDragState = null;
+		const dayChanged = sel.currentDayIndex !== sel.originalDayIndex;
+		const startChanged = sel.currentStart !== sel.originalStart;
+		const endChanged = sel.currentEnd !== sel.originalEnd;
+
+		if (dayChanged) {
+			// Cross-day move (possibly with resize)
+			const newDuration = sel.currentEnd - sel.currentStart;
+			const originalDuration = sel.originalEnd - sel.originalStart;
+			this.callbacks.onBlockDragEnd(
+				sel.item,
+				sel.originalDayIndex,
+				sel.currentDayIndex,
+				sel.currentStart,
+				newDuration !== originalDuration ? newDuration : undefined
+			);
+		} else if (startChanged || endChanged) {
+			// Same day: position and/or size changed
+			this.callbacks.onBlockResize(
+				sel.item,
+				sel.currentDayIndex,
+				sel.currentStart,
+				sel.currentEnd
+			);
 		}
 
-		if (this.resizeState) {
-			const { currentStart, currentEnd, originalStart, originalEnd } = this.resizeState;
-			if (currentStart !== originalStart || currentEnd !== originalEnd) {
-				this.callbacks.onBlockResize(
-					this.resizeState.item,
-					this.resizeState.dayIndex,
-					currentStart,
-					currentEnd
-				);
-			}
-			this.resizeState = null;
-		}
-
+		this.blockDragState = null;
+		this.resizeState = null;
 		this.removeGhost();
 		this.removeResizeGhost();
 		this.clearTouchBlockSelection();
