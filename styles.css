@@ -882,6 +882,25 @@
 	background: var(--background-primary-alt);
 }
 
+/* Current Time Indicator */
+.weekflow-now-line {
+	position: absolute;
+	height: 2px;
+	background: #EA4335;
+	z-index: 15;
+	pointer-events: none;
+}
+
+.weekflow-now-dot {
+	position: absolute;
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	background: #EA4335;
+	z-index: 15;
+	pointer-events: none;
+}
+
 /* Calendar Event Overlay */
 .weekflow-calendar-event {
 	z-index: 2;

@@ -110,6 +110,11 @@ export class GridRenderer {
 	private tooltipEl: HTMLElement | null = null;
 	private tooltipTimer: ReturnType<typeof setTimeout> | null = null;
 
+	// Current time indicator
+	private currentTimeEl: HTMLElement | null = null;
+	private currentTimeDotEl: HTMLElement | null = null;
+	private currentTimeInterval: ReturnType<typeof setInterval> | null = null;
+
 	// Swipe detection state
 	private swipeStartX = 0;
 	private swipeStartY = 0;
@@ -288,6 +293,13 @@ export class GridRenderer {
 
 		this.renderBlocks();
 		this.renderCalendarOverlay();
+
+		// Current time indicator
+		if (this.currentTimeInterval) {
+			clearInterval(this.currentTimeInterval);
+		}
+		requestAnimationFrame(() => this.renderCurrentTimeIndicator());
+		this.currentTimeInterval = setInterval(() => this.renderCurrentTimeIndicator(), 60000);
 	}
 
 	setCalendarEvents(events: CalendarEvent[]): void {
@@ -301,6 +313,18 @@ export class GridRenderer {
 	}
 
 	destroy(): void {
+		if (this.currentTimeInterval) {
+			clearInterval(this.currentTimeInterval);
+			this.currentTimeInterval = null;
+		}
+		if (this.currentTimeEl) {
+			this.currentTimeEl.remove();
+			this.currentTimeEl = null;
+		}
+		if (this.currentTimeDotEl) {
+			this.currentTimeDotEl.remove();
+			this.currentTimeDotEl = null;
+		}
 		if (this.boundPointerMove) {
 			document.removeEventListener("pointermove", this.boundPointerMove);
 		}
@@ -1456,6 +1480,73 @@ export class GridRenderer {
 				});
 			}
 		}
+	}
+
+	// ── Current Time Indicator ──
+
+	private renderCurrentTimeIndicator(): void {
+		// Remove existing elements
+		if (this.currentTimeEl) {
+			this.currentTimeEl.remove();
+			this.currentTimeEl = null;
+		}
+		if (this.currentTimeDotEl) {
+			this.currentTimeDotEl.remove();
+			this.currentTimeDotEl = null;
+		}
+
+		if (!this.gridEl) return;
+
+		// Find today in visible range
+		const today = window.moment();
+		let todayVisibleIndex = -1;
+		for (let i = 0; i < this.visibleDays; i++) {
+			const d = this.dayOffset + i;
+			if (this.dates[d].isSame(today, "day")) {
+				todayVisibleIndex = i;
+				break;
+			}
+		}
+		if (todayVisibleIndex === -1) return;
+
+		// Check if current time is within day range
+		const currentMinutes = today.hour() * 60 + today.minute();
+		const dayStartMin = this.settings.dayStartHour * 60;
+		const dayEndMin = this.settings.dayEndHour * 60;
+		if (currentMinutes < dayStartMin || currentMinutes >= dayEndMin) return;
+
+		// Calculate geometry (same approach as getCellFromPoint)
+		const gridRect = this.gridEl.getBoundingClientRect();
+		if (gridRect.width === 0 || gridRect.height === 0) return;
+
+		const timeLabelWidth = 60;
+		const slotsWidth = gridRect.width - timeLabelWidth;
+		const dayWidth = slotsWidth / this.visibleDays;
+
+		const headerCell = this.gridEl.querySelector(".weekflow-header-cell");
+		if (!headerCell) return;
+		const headerHeight = (headerCell as HTMLElement).getBoundingClientRect().height;
+
+		const totalMinutes = dayEndMin - dayStartMin;
+		const bodyHeight = gridRect.height - headerHeight;
+		if (bodyHeight <= 0) return;
+
+		const minutesSinceDayStart = currentMinutes - dayStartMin;
+		const topPos = headerHeight + (minutesSinceDayStart / totalMinutes) * bodyHeight;
+		const leftPos = timeLabelWidth + todayVisibleIndex * dayWidth;
+
+		// Create line
+		const line = this.gridEl.createDiv({ cls: "weekflow-now-line" });
+		line.style.top = `${topPos - 1}px`;
+		line.style.left = `${leftPos}px`;
+		line.style.width = `${dayWidth}px`;
+		this.currentTimeEl = line;
+
+		// Create dot (centered at left edge of line, protruding into time label column)
+		const dot = this.gridEl.createDiv({ cls: "weekflow-now-dot" });
+		dot.style.top = `${topPos - 4}px`;
+		dot.style.left = `${leftPos - 4}px`;
+		this.currentTimeDotEl = dot;
 	}
 
 	private getCategoryColor(tags: string[]): string {
