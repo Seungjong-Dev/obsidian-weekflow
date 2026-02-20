@@ -1665,6 +1665,9 @@ export class GridRenderer {
 	// ── Touch Block Selection ──
 
 	private handleTouchBlockTap(dayIndex: number, item: TimelineItem, blockEl: HTMLElement): void {
+		// Clear any pending cell tap-tap anchor
+		this.clearSelection();
+
 		if (this.touchBlockSelection?.item.id === item.id) {
 			// Same block already selected — no-op (action bar stays)
 			return;

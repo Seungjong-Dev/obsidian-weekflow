@@ -994,6 +994,10 @@ export class WeekFlowView extends ItemView {
 		// Past dates → actual, today/future → plan
 		const effectiveMode = isPast ? "actual" : "plan";
 
+		// Clear selection immediately so tap-tap state resets
+		// (otherwise dismissed modal leaves stale anchor)
+		this.gridRenderer.clearSelection();
+
 		new BlockModal(
 			this.app,
 			planTime,
@@ -1066,7 +1070,6 @@ export class WeekFlowView extends ItemView {
 					this.undoManager.pushExecuted(action);
 				}
 
-				this.gridRenderer?.clearSelection();
 				await this.refresh();
 			},
 			this.selectedCategory
