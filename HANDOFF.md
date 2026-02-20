@@ -1,7 +1,7 @@
 # WeekFlow 작업 핸드오프
 
 > 작성일: 2026-02-20
-> 마지막 커밋: `47367a4` feat: replace touch longpress drag with selection → action bar pattern
+> 마지막 커밋: `b4b0bd4` fix: clear tap-tap cell anchor on modal open and block selection
 
 ## 프로젝트 개요
 
@@ -94,6 +94,7 @@ WeekFlow는 Obsidian 플러그인으로, 데일리 노트의 마크다운 체크
   - `e.pointerType === "touch"` 분기: 터치는 `touchTapState`로 탭-탭, 마우스는 기존 드래그 유지
   - 첫 탭: 앵커 셀 설정 + 하이라이트, 두 번째 탭(같은 요일): 범위 확장 → 모달 열기
   - 같은 셀 재탭: 단일 셀 블록 생성, 다른 요일 탭: 기존 선택 취소 → 새 앵커
+  - 앵커 초기화: 모달 열기 직전에 `clearSelection()` 호출 (모달 취소 시에도 앵커 잔류 방지), 블록 탭 시에도 `clearSelection()` 호출
   - `pointercancel` 핸들러에서 스와이프 감지 (`touch-action: pan-y`로 인한 브라우저 `pointercancel` 대응)
 - **스와이프 네비게이션**: 가로 >50px, |dx|>|dy|×2, <300ms → 1일/3일 뷰에서 날짜 이동, Wide+터치에서 주 이동
 - **Obsidian 사이드바 차단**: 그리드 `touchstart`/`touchmove` 리스너에서 가로 이동 >15px 시 `stopPropagation()` (Obsidian 사이드바 스와이프 방지)
