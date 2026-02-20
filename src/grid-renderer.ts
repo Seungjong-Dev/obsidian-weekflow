@@ -2016,11 +2016,10 @@ export class GridRenderer {
 		leftHandle.addEventListener("pointerdown", (e) => {
 			e.preventDefault();
 			e.stopPropagation();
-			// Ghost handles live inside ghost elements — don't remove them.
-			// Document-level listeners handle pointermove/pointerup.
 			this.blockDragState = null;
 			this.resizeState = null;
 
+			try { leftHandle.setPointerCapture(e.pointerId); } catch { /* */ }
 			this.dragMode = "resize";
 			this.resizeState = {
 				item, dayIndex, edge: "left",
@@ -2035,11 +2034,10 @@ export class GridRenderer {
 		rightHandle.addEventListener("pointerdown", (e) => {
 			e.preventDefault();
 			e.stopPropagation();
-			// Ghost handles live inside ghost elements — don't remove them.
-			// Document-level listeners handle pointermove/pointerup.
 			this.blockDragState = null;
 			this.resizeState = null;
 
+			try { rightHandle.setPointerCapture(e.pointerId); } catch { /* */ }
 			this.dragMode = "resize";
 			this.resizeState = {
 				item, dayIndex, edge: "right",
