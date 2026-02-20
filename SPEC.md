@@ -842,6 +842,16 @@ Phase 1 (Core MVP)
 
 Phase 2 완료 후 Phase 3~6은 독립적으로 진행 가능하나, Phase 4는 Phase 3의 데이터(Deferred, 프로젝트 링크)를 통계에 활용하므로 Phase 3 이후가 자연스럽다.
 
+### 6. Current Time Indicator
+
+Google Calendar 스타일의 현재 시간 표시선. 오늘 컬럼에 빨간 수평선과 좌측 원형 dot으로 현재 시간 위치를 표시한다.
+
+- **표시 조건:** 오늘이 visible range에 포함되고, 현재 시간이 `dayStartHour`~`dayEndHour` 범위 내일 때만 표시
+- **위치 계산:** `getCellFromPoint()`와 동일한 그리드 geometry 기반 — `position: absolute`로 gridEl 내에 배치
+- **업데이트:** `setInterval(60000)`으로 매 분 위치 갱신. `render()` 시 이전 interval 정리 후 새로 생성
+- **스타일:** 2px 빨간 수평선 (`#EA4335`) + 8px 원형 dot, `z-index: 15` (블록 위, 오버랩 핸들 아래)
+- **반응형:** 7일/3일/1일 뷰 모드 전환 및 다른 주 이동 시 자동으로 표시/숨김
+
 ## Technical Notes
 
 - Obsidian Plugin API 사용
@@ -853,7 +863,7 @@ Phase 2 완료 후 Phase 3~6은 독립적으로 진행 가능하나, Phase 4는 
 - Pointer Events API: 모든 인터랙션을 `pointerdown`/`pointermove`/`pointerup`으로 통합 (마우스+터치+펜). `setPointerCapture()`로 리사이즈 드래그 안정화. 터치 디바이스에서는 롱프레스(300ms) 후 드래그 시작 + 햅틱 피드백
 - Statistics Panel에서 장기 범위(분기/연간) 조회 시 다수의 데일리 노트를 읽어야 하므로, 파싱 결과를 캐싱하고 변경된 파일만 재파싱하는 증분 처리(incremental parsing) 방식을 적용한다
 
-## 구현 상태 (2026-02-19)
+## 구현 상태 (2026-02-20)
 
 ### 완료
 

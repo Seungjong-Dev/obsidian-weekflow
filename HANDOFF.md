@@ -1,7 +1,7 @@
 # WeekFlow 작업 핸드오프
 
-> 작성일: 2026-02-19
-> 마지막 커밋: `92a35f6` feat: add manual view mode override (7d/3d/1d) via week label menu
+> 작성일: 2026-02-20
+> 마지막 커밋: `bbfcb8a` feat: add current time indicator line (Google Calendar style)
 
 ## 프로젝트 개요
 
@@ -153,6 +153,14 @@ WeekFlow는 Obsidian 플러그인으로, 데일리 노트의 마크다운 체크
 - **주차 라벨**: click 이벤트로 `showViewModeMenu()` 호출, override 활성 시 `(7d)`/`(3d)`/`(1d)` 인디케이터 span 표시
 - **`styles.css`**: `.weekflow-week-label`에 `cursor: pointer`, `padding: 2px 6px`, `border-radius: 4px` 추가. `.weekflow-viewmode-indicator` (muted 10px 텍스트). `@media (pointer: fine)` hover 배경
 
+### Current Time Indicator
+- **`grid-renderer.ts`**: `renderCurrentTimeIndicator()` 메서드 추가. 오늘 컬럼에 빨간 수평선(2px, `#EA4335`)과 좌측 원형 dot(8px)으로 현재 시간 위치를 표시
+  - `getCellFromPoint()`와 동일한 그리드 geometry 기반 위치 계산 (`position: absolute`)
+  - `setInterval(60000)`으로 매 분 위치 갱신, `render()` 시 이전 interval 정리 후 새로 생성
+  - 표시 조건: 오늘이 visible range에 포함 + 현재 시간이 `dayStartHour`~`dayEndHour` 범위 내
+  - `destroy()` 시 interval 및 DOM 정리
+- **`styles.css`**: `.weekflow-now-line` (2px 수평선) + `.weekflow-now-dot` (8px 원형), `z-index: 15` (블록 위, 오버랩 핸들 아래), `pointer-events: none`
+
 ## 미완료 Phase
 
 모든 Phase (1~6) 및 Inbox 리디자인 완료. SPEC.md 참조.
@@ -165,7 +173,7 @@ src/
 ├── parser.ts             # 마크다운 ↔ TimelineItem 파싱/직렬화, Review 섹션 파싱/업데이트
 ├── daily-note.ts         # 데일리 노트 읽기/쓰기, 인박스 다중 소스 I/O, 프로젝트 I/O, 리뷰 I/O
 ├── device.ts             # DeviceTier, LayoutTier, getLayoutTier(), getVisibleDays(), isTouchDevice(), hapticFeedback()
-├── grid-renderer.ts      # CSS Grid 렌더링, Pointer Events 드래그 상태머신, 리사이즈, 스와이프 감지, visibleDays/dayOffset 동적화
+├── grid-renderer.ts      # CSS Grid 렌더링, Pointer Events 드래그 상태머신, 리사이즈, 스와이프 감지, visibleDays/dayOffset 동적화, 현재 시간 표시선
 ├── view.ts               # WeekFlowView — 메인 뷰 컨트롤러, ResizeObserver + LayoutTier, 리뷰 패널, 하단 시트, 데일리 노트 네비게이션
 ├── planning-panel.ts     # PlanningPanel — overdue/inbox 섹션 렌더링, 접기/펼치기 (프로젝트 섹션 비활성화)
 ├── statistics.ts          # 통계 계산 (카테고리, 프로젝트, Plan vs Actual, Burning Rate, 시간 분포)
