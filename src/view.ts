@@ -355,6 +355,7 @@ export class WeekFlowView extends ItemView {
 			}
 			this.planningPanel = new PlanningPanel(panelEl, {
 				onItemDragStart: (item, e) => this.onPanelDragStart(item, e),
+				onItemNavigate: (item) => this.navigateToPanelItemSource(item),
 			});
 			this.planningPanel.render(this.panelSections);
 		}
@@ -388,8 +389,8 @@ export class WeekFlowView extends ItemView {
 					this.onBlockUncomplete(dayIndex, item),
 				onBlockRightClick: (dayIndex, item, event) =>
 					this.onBlockRightClick(dayIndex, item, event),
-				onHeaderDblClick: (dayIndex) =>
-					this.openDailyNote(dayIndex),
+				onBlockNavigate: (dayIndex, item) =>
+					this.openDailyNoteAtLine(dayIndex, item.lineNumber),
 				onSwipeLeft: () => this.onSwipeGesture("left"),
 				onSwipeRight: () => this.onSwipeGesture("right"),
 			}
@@ -616,6 +617,7 @@ export class WeekFlowView extends ItemView {
 		const contentEl = sheet.createDiv({ cls: "weekflow-bottom-sheet-content" });
 		this.planningPanel = new PlanningPanel(contentEl, {
 			onItemDragStart: (item, e) => this.onPanelDragStart(item, e),
+			onItemNavigate: (item) => this.navigateToPanelItemSource(item),
 		});
 		this.planningPanel.render(this.panelSections);
 	}
@@ -1505,6 +1507,7 @@ export class WeekFlowView extends ItemView {
 						dateKey,
 						planTime: { ...item.planTime },
 						originalId: item.id,
+						lineNumber: item.lineNumber,
 					},
 				});
 			}
@@ -1856,7 +1859,7 @@ export class WeekFlowView extends ItemView {
 		menu.addItem((menuItem) => {
 			menuItem
 				.setTitle("Go to daily note")
-				.setIcon("file-input")
+				.setIcon("arrow-up-right")
 				.onClick(() => {
 					this.openDailyNoteAtLine(dayIndex, item.lineNumber);
 				});
@@ -1874,25 +1877,13 @@ export class WeekFlowView extends ItemView {
 		menu.showAtMouseEvent(event);
 	}
 
-	// ── Navigate to daily note ──
+	// ── Navigate to source ──
 
-	private async openDailyNote(dayIndex: number) {
-		const date = this.dates[dayIndex];
-		const path = resolveDailyNotePath(this.plugin.settings.dailyNotePath, date);
+	private async openFileAtLine(path: string, lineNumber?: number): Promise<void> {
 		const file = this.app.vault.getAbstractFileByPath(path);
 		if (!file) return;
-		await this.app.workspace.getLeaf("tab").openFile(file as any);
-	}
-
-	private async openDailyNoteAtLine(dayIndex: number, lineNumber?: number) {
-		const date = this.dates[dayIndex];
-		const path = resolveDailyNotePath(this.plugin.settings.dailyNotePath, date);
-		const file = this.app.vault.getAbstractFileByPath(path);
-		if (!file) return;
-
 		const leaf = this.app.workspace.getLeaf("tab");
 		await leaf.openFile(file as any);
-
 		if (lineNumber != null) {
 			const view = leaf.view as any;
 			if (view?.editor) {
@@ -1903,6 +1894,23 @@ export class WeekFlowView extends ItemView {
 					true
 				);
 			}
+		}
+	}
+
+	private async openDailyNoteAtLine(dayIndex: number, lineNumber?: number) {
+		const date = this.dates[dayIndex];
+		const path = resolveDailyNotePath(this.plugin.settings.dailyNotePath, date);
+		await this.openFileAtLine(path, lineNumber);
+	}
+
+	private async navigateToPanelItemSource(item: PanelItem): Promise<void> {
+		const src = item.source;
+		if (src.type === "inbox") {
+			await this.openFileAtLine(src.notePath, src.lineNumber);
+		} else if (src.type === "overdue") {
+			const date = window.moment(src.dateKey, "YYYY-MM-DD");
+			const path = resolveDailyNotePath(this.plugin.settings.dailyNotePath, date);
+			await this.openFileAtLine(path, src.lineNumber);
 		}
 	}
 

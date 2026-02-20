@@ -1,4 +1,4 @@
-import { moment } from "obsidian";
+import { moment, setIcon } from "obsidian";
 type Moment = ReturnType<typeof moment>;
 import type { CalendarEvent, Category, TimelineItem, WeekFlowSettings } from "./types";
 import { formatTime } from "./parser";
@@ -15,7 +15,7 @@ export interface GridCallbacks {
 	onBlockComplete?: (dayIndex: number, item: TimelineItem) => void;
 	onBlockUncomplete?: (dayIndex: number, item: TimelineItem) => void;
 	onBlockRightClick?: (dayIndex: number, item: TimelineItem, event: PointerEvent) => void;
-	onHeaderDblClick?: (dayIndex: number) => void;
+	onBlockNavigate?: (dayIndex: number, item: TimelineItem) => void;
 	onSwipeLeft?: () => void;
 	onSwipeRight?: () => void;
 }
@@ -178,13 +178,6 @@ export class GridRenderer {
 			if (date.isSame(window.moment(), "day")) {
 				headerCell.addClass("weekflow-today");
 			}
-
-			// Double-click to open daily note
-			headerCell.style.cursor = "pointer";
-			const dayIdx = d;
-			headerCell.addEventListener("dblclick", () => {
-				this.callbacks.onHeaderDblClick?.(dayIdx);
-			});
 		}
 
 		// ── Hour rows with 10-min cells ──
@@ -844,6 +837,16 @@ export class GridRenderer {
 					const uncompleteCb = this.callbacks.onBlockUncomplete;
 					toggleBtn.addEventListener("pointerdown", (e) => { e.stopPropagation(); e.preventDefault(); });
 					toggleBtn.addEventListener("click", (e) => { e.stopPropagation(); uncompleteCb(dayIndex, item); });
+				}
+
+				// Navigation icon
+				if (this.callbacks.onBlockNavigate) {
+					const navBtn = block.createDiv({ cls: "weekflow-block-nav" });
+					setIcon(navBtn, "arrow-up-right");
+					navBtn.ariaLabel = "Go to daily note";
+					const navCb = this.callbacks.onBlockNavigate;
+					navBtn.addEventListener("pointerdown", (e) => { e.stopPropagation(); e.preventDefault(); });
+					navBtn.addEventListener("click", (e) => { e.stopPropagation(); navCb(dayIndex, item); });
 				}
 			}
 

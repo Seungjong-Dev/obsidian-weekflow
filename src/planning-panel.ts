@@ -1,4 +1,4 @@
-import { setIcon } from "obsidian";
+import { setIcon, Menu } from "obsidian";
 import type { PanelItem, TimeRange } from "./types";
 import { formatTime } from "./parser";
 
@@ -16,6 +16,7 @@ export interface PanelSection {
 
 export interface PlanningPanelCallbacks {
 	onItemDragStart(item: PanelItem, e: PointerEvent): void;
+	onItemNavigate?(item: PanelItem): void;
 }
 
 export class PlanningPanel {
@@ -105,6 +106,31 @@ export class PlanningPanel {
 					const srcEl = itemEl.createSpan({ cls: "weekflow-panel-item-source" });
 					const shortPath = item.source.notePath.replace(/\.md$/, "");
 					srcEl.setText(shortPath);
+				}
+
+				// Navigation icon (inbox and overdue only)
+				if (this.callbacks.onItemNavigate && (item.source.type === "inbox" || item.source.type === "overdue")) {
+					const navBtn = itemEl.createDiv({ cls: "weekflow-panel-item-nav" });
+					setIcon(navBtn, "arrow-up-right");
+					navBtn.ariaLabel = item.source.type === "inbox" ? "Go to source note" : "Go to daily note";
+					navBtn.addEventListener("pointerdown", (e) => { e.stopPropagation(); e.preventDefault(); });
+					navBtn.addEventListener("click", (e) => { e.stopPropagation(); this.callbacks.onItemNavigate!(item); });
+				}
+
+				// Context menu
+				if (this.callbacks.onItemNavigate && (item.source.type === "inbox" || item.source.type === "overdue")) {
+					itemEl.addEventListener("contextmenu", (e) => {
+						e.preventDefault();
+						e.stopPropagation();
+						const menu = new Menu();
+						const title = item.source.type === "inbox" ? "Go to source note" : "Go to daily note";
+						menu.addItem((mi) => {
+							mi.setTitle(title).setIcon("arrow-up-right").onClick(() => {
+								this.callbacks.onItemNavigate!(item);
+							});
+						});
+						menu.showAtMouseEvent(e);
+					});
 				}
 
 				// Drag via pointerdown

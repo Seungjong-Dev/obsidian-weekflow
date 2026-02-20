@@ -164,7 +164,7 @@ export interface SwipeCallbacks {
 }
 
 export type PanelItemSource =
-	| { type: "overdue"; dateKey: string; planTime: TimeRange; originalId: string }
+	| { type: "overdue"; dateKey: string; planTime: TimeRange; originalId: string; lineNumber?: number }
 	| { type: "inbox"; notePath: string; lineNumber: number }
 	| { type: "project"; projectPath: string; blockId?: string };
 

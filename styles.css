@@ -219,6 +219,7 @@
 }
 
 .weekflow-panel-item {
+	position: relative;
 	padding: 4px 8px;
 	cursor: grab;
 	font-size: 12px;
@@ -247,6 +248,28 @@
 	overflow: hidden;
 	text-overflow: ellipsis;
 	margin-top: 1px;
+}
+
+/* Panel item navigation icon */
+.weekflow-panel-item-nav {
+	position: absolute;
+	right: 4px;
+	top: 50%;
+	transform: translateY(-50%);
+	width: 16px;
+	height: 16px;
+	opacity: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	cursor: pointer;
+	color: var(--text-muted);
+	border-radius: 3px;
+}
+
+.weekflow-panel-item-nav svg {
+	width: 12px;
+	height: 12px;
 }
 
 .weekflow-panel-add-row {
@@ -533,6 +556,29 @@
 	min-height: 0;
 	white-space: nowrap;
 	text-overflow: ellipsis;
+}
+
+/* Block navigation icon (go to daily note) */
+.weekflow-block-nav {
+	position: absolute;
+	bottom: 1px;
+	right: 1px;
+	width: 16px;
+	height: 16px;
+	border-radius: 50%;
+	opacity: 0;
+	z-index: 8;
+	background: var(--background-primary);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	cursor: pointer;
+	box-shadow: 0 0 2px rgba(0, 0, 0, 0.2);
+}
+
+.weekflow-block-nav svg {
+	width: 12px;
+	height: 12px;
 }
 
 /* Block toggle button (complete/uncomplete) */
@@ -1267,6 +1313,22 @@
 	}
 
 	.weekflow-block-toggle:hover {
+		background: var(--background-modifier-hover);
+	}
+
+	.weekflow-block:hover .weekflow-block-nav {
+		opacity: 1;
+	}
+
+	.weekflow-block-nav:hover {
+		background: var(--background-modifier-hover);
+	}
+
+	.weekflow-panel-item:hover .weekflow-panel-item-nav {
+		opacity: 1;
+	}
+
+	.weekflow-panel-item-nav:hover {
 		background: var(--background-modifier-hover);
 	}
 
