@@ -1,7 +1,7 @@
 # WeekFlow 작업 핸드오프
 
 > 작성일: 2026-02-20
-> 마지막 커밋: `bbfcb8a` feat: add current time indicator line (Google Calendar style)
+> 마지막 커밋: `3ae405a` feat: add unified navigate-to-source icons on blocks and panel items
 
 ## 프로젝트 개요
 
@@ -61,9 +61,13 @@ WeekFlow는 Obsidian 플러그인으로, 데일리 노트의 마크다운 체크
   - Burning Rate 추이 차트 (스택형 바 차트, 순수 HTML/CSS)
   - 시간 분포 차트 (가로 막대)
   - 증분 파싱 캐시 (`StatsCache`, `mtime` 기반 캐시 히트)
-- **Daily Note Navigation**
-  - 날짜 헤더 더블클릭 → 데일리 노트 열기
-  - 블록 우클릭 메뉴 "Go to daily note" → 해당 라인에 커서 위치
+- **Navigate to Source (통합 네비게이션)**
+  - 블록 hover 시 우측 하단 `arrow-up-right` 아이콘 → 데일리 노트 해당 라인에 커서 위치
+  - 블록 우클릭 메뉴 "Go to daily note" (`arrow-up-right` 아이콘) → 동일 동작
+  - 패널 아이템(인박스) hover/우클릭 "Go to source note" → 소스 노트 해당 라인으로 이동
+  - 패널 아이템(오버듀) hover/우클릭 "Go to daily note" → 데일리 노트 해당 라인으로 이동
+  - 데스크톱 전용 (`@media (pointer: fine)`)
+  - 날짜 헤더 더블클릭 제거 (블록 nav 아이콘으로 대체)
 
 ### Phase 5 (External Calendar & Commands)
 - **ICS Calendar Overlay**: `ical.js` 라이브러리로 ICS 파싱, `requestUrl` (Obsidian API)로 CORS 우회 페칭
@@ -160,6 +164,13 @@ WeekFlow는 Obsidian 플러그인으로, 데일리 노트의 마크다운 체크
   - 표시 조건: 오늘이 visible range에 포함 + 현재 시간이 `dayStartHour`~`dayEndHour` 범위 내
   - `destroy()` 시 interval 및 DOM 정리
 - **`styles.css`**: `.weekflow-now-line` (2px 수평선) + `.weekflow-now-dot` (8px 원형), `z-index: 15` (블록 위, 오버랩 핸들 아래), `pointer-events: none`
+
+### Navigate to Source (통합 네비게이션)
+- **`grid-renderer.ts`**: `GridCallbacks`에서 `onHeaderDblClick` 제거, `onBlockNavigate` 추가. 헤더 셀의 `dblclick` 이벤트 및 `cursor: pointer` 제거. 블록 마지막 세그먼트에 `arrow-up-right` nav 아이콘 추가 (`setIcon()` 사용). `pointerdown`에 `stopPropagation()`/`preventDefault()`로 드래그 간섭 방지
+- **`planning-panel.ts`**: `PlanningPanelCallbacks`에 `onItemNavigate?` 추가. 인박스/오버듀 아이템에 `arrow-up-right` nav 아이콘 추가 + `contextmenu` 이벤트로 우클릭 메뉴 ("Go to source note" / "Go to daily note") 제공. `Menu` import 추가
+- **`view.ts`**: 범용 `openFileAtLine(path, lineNumber?)` 메서드 추출. `openDailyNote()` 제거 (헤더 dblclick 제거). `openDailyNoteAtLine()` → `openFileAtLine()` 호출로 단순화. `navigateToPanelItemSource()` 추가 (인박스→소스 노트, 오버듀→데일리 노트). `onBlockNavigate` 콜백 연결. 블록 우클릭 메뉴 아이콘 `file-input` → `arrow-up-right`로 통일. PlanningPanel 콜백에 `onItemNavigate` 연결 (사이드 패널 + 하단 시트 모두)
+- **`types.ts`**: `PanelItemSource` overdue 타입에 `lineNumber?: number` 추가. `collectOverdueItems()`에서 `item.lineNumber` 전달
+- **`styles.css`**: `.weekflow-block-nav` (absolute bottom-right, 16px 원형, opacity 0), `.weekflow-panel-item-nav` (absolute right, opacity 0), `.weekflow-panel-item`에 `position: relative` 추가. `@media (pointer: fine)` 블록 내에 hover 표시 규칙 추가
 
 ## 미완료 Phase
 
