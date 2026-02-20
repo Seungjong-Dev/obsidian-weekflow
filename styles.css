@@ -1277,7 +1277,7 @@
 }
 
 .weekflow-panel-item {
-	touch-action: none;
+	touch-action: pan-y;
 }
 
 .weekflow-review-resize-handle {
@@ -1550,3 +1550,94 @@
 		padding: 8px;
 	}
 }
+
+/* ═══════════════════════════════════════════════
+   TOUCH BLOCK INTERACTION (Selection → Action Bar)
+   ═══════════════════════════════════════════════ */
+
+/* Action bar */
+.weekflow-action-bar {
+	position: fixed;
+	transform: translateX(-50%);
+	display: flex;
+	gap: 4px;
+	padding: 4px 8px;
+	background: var(--background-primary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 8px;
+	box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+	z-index: 30;
+	pointer-events: auto;
+}
+
+.weekflow-action-bar-btn {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 36px;
+	min-height: 36px;
+	padding: 4px;
+	border: none;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--text-normal);
+	cursor: pointer;
+}
+.weekflow-action-bar-btn:active { background: var(--background-modifier-hover); }
+.weekflow-action-bar-btn svg { width: 16px; height: 16px; }
+
+/* Move confirm */
+.weekflow-action-bar-move .weekflow-action-bar-confirm {
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+}
+/* Delete confirm */
+.weekflow-action-bar-delete .weekflow-action-bar-delete-confirm {
+	background: var(--text-error);
+	color: white;
+}
+.weekflow-action-bar-cancel { color: var(--text-muted); }
+
+/* Mobile touch targets */
+.is-mobile .weekflow-action-bar-btn {
+	min-width: 44px;
+	min-height: 44px;
+}
+
+/* Block selection / move / delete styles */
+.weekflow-block-touch-selected {
+	z-index: 15 !important;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+.weekflow-block-move-mode {
+	border-style: dashed !important;
+	opacity: 0.8;
+}
+.weekflow-block-delete-pending {
+	opacity: 0.5;
+	border-color: var(--text-error) !important;
+}
+
+/* Panel item selection */
+.weekflow-panel-item-selected {
+	background: var(--background-modifier-hover);
+}
+.weekflow-panel-item-actions {
+	display: flex;
+	gap: 4px;
+	margin-top: 4px;
+}
+.weekflow-panel-item-action-btn {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 32px;
+	min-height: 32px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 6px;
+	background: var(--background-primary);
+	color: var(--text-normal);
+	cursor: pointer;
+}
+.weekflow-panel-item-action-btn:active { background: var(--background-modifier-hover); }
+.weekflow-panel-item-action-btn svg { width: 14px; height: 14px; }

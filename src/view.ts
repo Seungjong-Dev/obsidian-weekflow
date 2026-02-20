@@ -391,6 +391,8 @@ export class WeekFlowView extends ItemView {
 					this.onBlockRightClick(dayIndex, item, event),
 				onBlockNavigate: (dayIndex, item) =>
 					this.openDailyNoteAtLine(dayIndex, item.lineNumber),
+				onBlockDelete: (dayIndex, item) =>
+					this.deleteBlock(dayIndex, item),
 				onSwipeLeft: () => this.onSwipeGesture("left"),
 				onSwipeRight: () => this.onSwipeGesture("right"),
 			}
@@ -398,6 +400,11 @@ export class WeekFlowView extends ItemView {
 		this.gridRenderer.setVisibleRange(this.currentVisibleDays, this.currentDayOffset);
 		this.gridRenderer.setCalendarEvents(this.calendarEvents);
 		this.gridRenderer.render();
+
+		// Scroll → deselect touch block selection
+		gridWrapper.addEventListener("scroll", () => {
+			this.gridRenderer?.clearTouchSelection();
+		}, { passive: true });
 
 		// Review panel (inside content area — aligns with grid columns)
 		this.renderReviewPanel(contentArea);

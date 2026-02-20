@@ -24,6 +24,11 @@ export class PlanningPanel {
 	private callbacks: PlanningPanelCallbacks;
 	private sectionCollapseState: Map<string, boolean> = new Map();
 
+	// Touch selection state
+	private selectedItemEl: HTMLElement | null = null;
+	private selectedItem: PanelItem | null = null;
+	private lastPointerType: string = "mouse";
+
 	constructor(containerEl: HTMLElement, callbacks: PlanningPanelCallbacks) {
 		this.containerEl = containerEl;
 		this.callbacks = callbacks;
@@ -133,14 +138,87 @@ export class PlanningPanel {
 					});
 				}
 
-				// Drag via pointerdown
+				// Drag via pointerdown — touch vs mouse branching
+				let startX = 0, startY = 0;
+
 				itemEl.addEventListener("pointerdown", (e) => {
 					if (e.button !== 0) return;
+					this.lastPointerType = e.pointerType;
+					if (e.pointerType === "touch") {
+						// Touch: no preventDefault → allow scroll (pan-y)
+						startX = e.clientX;
+						startY = e.clientY;
+						return;
+					}
+					// Mouse: immediate drag
 					e.preventDefault();
 					this.callbacks.onItemDragStart(item, e);
 				});
+
+				// Touch tap → select/deselect
+				itemEl.addEventListener("click", (e) => {
+					if (this.lastPointerType !== "touch") return;
+					const dist = Math.sqrt((e.clientX - startX) ** 2 + (e.clientY - startY) ** 2);
+					if (dist > 10) return; // Was a scroll
+
+					if (this.selectedItem?.id === item.id) {
+						this.deselectItem();
+					} else {
+						this.selectItem(item, itemEl);
+					}
+				});
 			}
 		}
+	}
+
+	private selectItem(item: PanelItem, itemEl: HTMLElement): void {
+		this.deselectItem();
+		this.selectedItem = item;
+		this.selectedItemEl = itemEl;
+		itemEl.addClass("weekflow-panel-item-selected");
+
+		// Show nav icon
+		const navBtn = itemEl.querySelector(".weekflow-panel-item-nav") as HTMLElement | null;
+		if (navBtn) navBtn.style.opacity = "1";
+
+		// Add action strip
+		const actions = itemEl.createDiv({ cls: "weekflow-panel-item-actions" });
+
+		// Drag handle button
+		const dragBtn = actions.createDiv({ cls: "weekflow-panel-item-action-btn" });
+		setIcon(dragBtn, "move");
+		dragBtn.ariaLabel = "Drag to grid";
+		dragBtn.addEventListener("pointerdown", (e) => {
+			e.stopPropagation();
+			e.preventDefault();
+			this.callbacks.onItemDragStart(item, e);
+		});
+
+		// Navigate button
+		if (this.callbacks.onItemNavigate && (item.source.type === "inbox" || item.source.type === "overdue")) {
+			const navActionBtn = actions.createDiv({ cls: "weekflow-panel-item-action-btn" });
+			setIcon(navActionBtn, "arrow-up-right");
+			navActionBtn.ariaLabel = item.source.type === "inbox" ? "Go to source note" : "Go to daily note";
+			navActionBtn.addEventListener("pointerdown", (e) => { e.stopPropagation(); e.preventDefault(); });
+			navActionBtn.addEventListener("click", (e) => {
+				e.stopPropagation();
+				this.callbacks.onItemNavigate!(item);
+			});
+		}
+	}
+
+	private deselectItem(): void {
+		if (this.selectedItemEl) {
+			this.selectedItemEl.removeClass("weekflow-panel-item-selected");
+			// Remove action strip
+			const actions = this.selectedItemEl.querySelector(".weekflow-panel-item-actions");
+			if (actions) actions.remove();
+			// Restore nav icon opacity
+			const navBtn = this.selectedItemEl.querySelector(".weekflow-panel-item-nav") as HTMLElement | null;
+			if (navBtn) navBtn.style.opacity = "";
+		}
+		this.selectedItem = null;
+		this.selectedItemEl = null;
 	}
 
 	private buildItemLabel(item: PanelItem): string {

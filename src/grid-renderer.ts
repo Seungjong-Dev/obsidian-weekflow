@@ -16,8 +16,22 @@ export interface GridCallbacks {
 	onBlockUncomplete?: (dayIndex: number, item: TimelineItem) => void;
 	onBlockRightClick?: (dayIndex: number, item: TimelineItem, event: PointerEvent) => void;
 	onBlockNavigate?: (dayIndex: number, item: TimelineItem) => void;
+	onBlockDelete?: (dayIndex: number, item: TimelineItem) => void;
 	onSwipeLeft?: () => void;
 	onSwipeRight?: () => void;
+}
+
+type TouchBlockMode = "none" | "selected" | "move" | "delete-confirm";
+
+interface TouchBlockSelection {
+	mode: TouchBlockMode;
+	dayIndex: number;
+	item: TimelineItem;
+	originalStart: number;
+	originalEnd: number;
+	originalDayIndex: number;
+	isPenHover: boolean;
+	penTapConverted: boolean;
 }
 
 interface SelectionRange {
@@ -114,6 +128,10 @@ export class GridRenderer {
 	private currentTimeEl: HTMLElement | null = null;
 	private currentTimeDotEl: HTMLElement | null = null;
 	private currentTimeInterval: ReturnType<typeof setInterval> | null = null;
+
+	// Touch block selection
+	private touchBlockSelection: TouchBlockSelection | null = null;
+	private actionBarEl: HTMLElement | null = null;
 
 	// Swipe detection state
 	private swipeStartX = 0;
@@ -213,6 +231,10 @@ export class GridRenderer {
 						if (this.dragMode !== "none") return;
 
 						if (e.pointerType === "touch") {
+							// Deselect touch block selection (unless in move mode)
+							if (this.touchBlockSelection && this.touchBlockSelection.mode !== "move") {
+								this.clearTouchBlockSelection();
+							}
 							// Touch: tap-tap mode — no preventDefault() (allow scroll)
 							this.deselectOverlapBlock();
 							this.touchTapState = {
@@ -293,6 +315,17 @@ export class GridRenderer {
 		}
 		requestAnimationFrame(() => this.renderCurrentTimeIndicator());
 		this.currentTimeInterval = setInterval(() => this.renderCurrentTimeIndicator(), 60000);
+
+		// Restore touch block selection after re-render
+		if (this.touchBlockSelection) {
+			const blockEl = this.findBlockElement(this.touchBlockSelection.item.id);
+			if (blockEl) {
+				this.updateTouchBlockSelectionStyles();
+				this.showActionBar(this.touchBlockSelection.dayIndex, this.touchBlockSelection.item, blockEl);
+			} else {
+				this.clearTouchBlockSelection();
+			}
+		}
 	}
 
 	setCalendarEvents(events: CalendarEvent[]): void {
@@ -327,6 +360,7 @@ export class GridRenderer {
 		if (this.boundPointerCancel) {
 			document.removeEventListener("pointercancel", this.boundPointerCancel);
 		}
+		this.clearTouchBlockSelection();
 		this.hideTooltip();
 	}
 
@@ -758,11 +792,11 @@ export class GridRenderer {
 			block.style.gridColumn = `${dayColStart + seg.slotStart} / ${dayColStart + seg.slotEnd}`;
 			block.style.position = "absolute";
 			block.style.inset = "0";
+			block.dataset.itemId = item.id;
 
 			// Overlap styling
 			if (isOverlap) {
 				block.addClass("weekflow-block-overlap");
-				block.dataset.itemId = item.id;
 				const groupIdx = this.overlapGroupMap.get(item.id)!;
 				block.dataset.overlapGroup = String(groupIdx);
 				const selectedGroup = this.selectedBlockId !== null
@@ -855,6 +889,8 @@ export class GridRenderer {
 			if (i === 0) {
 				const leftHandle = block.createDiv({ cls: "weekflow-resize-handle weekflow-resize-left" });
 				leftHandle.addEventListener("pointerdown", (e) => {
+					// Touch: only allow resize in move mode
+					if (e.pointerType === "touch" && this.touchBlockSelection?.mode !== "move") return;
 					e.preventDefault();
 					e.stopPropagation();
 					leftHandle.setPointerCapture(e.pointerId);
@@ -866,6 +902,8 @@ export class GridRenderer {
 			if (i === segments.length - 1) {
 				const rightHandle = block.createDiv({ cls: "weekflow-resize-handle weekflow-resize-right" });
 				rightHandle.addEventListener("pointerdown", (e) => {
+					// Touch: only allow resize in move mode
+					if (e.pointerType === "touch" && this.touchBlockSelection?.mode !== "move") return;
 					e.preventDefault();
 					e.stopPropagation();
 					rightHandle.setPointerCapture(e.pointerId);
@@ -876,12 +914,32 @@ export class GridRenderer {
 			// ── Block pointerdown: click vs drag detection ──
 			block.addEventListener("pointerdown", (e) => {
 				this.lastBlockPointerType = e.pointerType;
-				if (e.pointerType !== "touch") {
-					// Mouse/pen: prevent default immediately (no scroll conflict)
-					e.preventDefault();
+
+				if (e.pointerType === "touch") {
+					e.stopPropagation();
+					this.blockDragStartX = e.clientX;
+					this.blockDragStartY = e.clientY;
+
+					// Move mode: selected block → immediate drag
+					if (this.touchBlockSelection?.mode === "move"
+						&& this.touchBlockSelection.item.id === item.id) {
+						e.preventDefault();
+						const cell = this.getCellFromPoint(e.clientX, e.clientY);
+						const dragTime = item.checkbox === "actual" && item.actualTime ? item.actualTime : item.planTime;
+						const offsetMinutes = cell ? (cell.minutes - dragTime.start) : 0;
+						this.dragMode = "block-drag";
+						this.blockDragState = {
+							item, fromDay: dayIndex,
+							startOffset: Math.max(0, offsetMinutes),
+							lastDay: -1, lastStart: -1,
+						};
+						try { block.setPointerCapture(e.pointerId); } catch { /* */ }
+					}
+					return; // Touch: handle selection in click event
 				}
-				// Touch: do NOT preventDefault — allow browser scroll (pan-y).
-				// Longpress timer will capture the pointer if user holds still.
+
+				// Mouse/pen: existing logic
+				e.preventDefault();
 				e.stopPropagation();
 
 				this.blockDragStartX = e.clientX;
@@ -891,7 +949,7 @@ export class GridRenderer {
 				const dragTime = item.checkbox === "actual" && item.actualTime ? item.actualTime : item.planTime;
 				const offsetMinutes = cell ? (cell.minutes - dragTime.start) : 0;
 
-				const delay = isTouchDevice() ? TOUCH_DRAG_DELAY_MS : DRAG_DELAY_MS;
+				const delay = DRAG_DELAY_MS;
 				const targetBlock = block;
 				const pointerId = e.pointerId;
 
@@ -907,17 +965,7 @@ export class GridRenderer {
 						lastStart: -1,
 					};
 
-					// Capture pointer to override touch-action and prevent scroll
 					try { targetBlock.setPointerCapture(pointerId); } catch { /* pointer may be gone */ }
-
-					// Longpress visual feedback for touch
-					if (isTouchDevice()) {
-						this.longpressActive = true;
-						this.longpressEl = targetBlock;
-						targetBlock.addClass("weekflow-longpress-active");
-						hapticFeedback();
-						this.showTooltip(tooltipText, targetBlock);
-					}
 
 					this.updateGhostPosition(e);
 				}, delay);
@@ -928,8 +976,20 @@ export class GridRenderer {
 				const dx = e.clientX - this.blockDragStartX;
 				const dy = e.clientY - this.blockDragStartY;
 				const dist = Math.sqrt(dx * dx + dy * dy);
-				if (this.dragMode === "none" && dist < DRAG_DISTANCE_PX) {
-					this.callbacks.onBlockClick(dayIndex, item);
+				if (dist >= DRAG_DISTANCE_PX) return;
+
+				if (this.lastBlockPointerType === "touch") {
+					this.handleTouchBlockTap(dayIndex, item, block);
+				} else if (this.lastBlockPointerType === "pen"
+					&& this.touchBlockSelection?.isPenHover
+					&& this.touchBlockSelection.item.id === item.id) {
+					// Apple Pencil: hover → tap converts to permanent selection
+					this.touchBlockSelection.penTapConverted = true;
+					this.touchBlockSelection.isPenHover = false;
+				} else {
+					if (this.dragMode === "none") {
+						this.callbacks.onBlockClick(dayIndex, item);
+					}
 				}
 			});
 
@@ -942,15 +1002,35 @@ export class GridRenderer {
 				}
 			});
 
-			// Tooltip: mouse/pen hover
+			// Tooltip: mouse/pen hover + Apple Pencil hover selection
 			block.addEventListener("pointerenter", (e) => {
 				if (e.pointerType === "touch") return;
+				if (e.pointerType === "pen") {
+					// Apple Pencil hover → transient selection
+					if (!this.touchBlockSelection || this.touchBlockSelection.item.id !== item.id) {
+						this.clearTouchBlockSelection();
+						const dragTime = item.checkbox === "actual" && item.actualTime ? item.actualTime : item.planTime;
+						this.touchBlockSelection = {
+							mode: "selected", dayIndex, item,
+							originalStart: dragTime.start, originalEnd: dragTime.end,
+							originalDayIndex: dayIndex,
+							isPenHover: true, penTapConverted: false,
+						};
+						this.updateTouchBlockSelectionStyles();
+						this.showActionBar(dayIndex, item, block);
+					}
+				}
 				this.tooltipTimer = setTimeout(() => {
 					this.showTooltip(tooltipText, block);
 				}, 300);
 			});
 			block.addEventListener("pointerleave", (e) => {
 				if (e.pointerType === "touch") return;
+				if (e.pointerType === "pen"
+					&& this.touchBlockSelection?.isPenHover
+					&& !this.touchBlockSelection?.penTapConverted) {
+					this.clearTouchBlockSelection();
+				}
 				this.hideTooltip();
 			});
 		});
@@ -1044,6 +1124,26 @@ export class GridRenderer {
 	}
 
 	private onBlockDragFinish(e: PointerEvent) {
+		if (this.touchBlockSelection?.mode === "move") {
+			// Move mode: keep ghost and blockDragState — wait for confirm/cancel
+			const cell = this.getCellFromPoint(e.clientX, e.clientY);
+			if (cell && this.blockDragState) {
+				const newStart = Math.round(
+					Math.max(this.settings.dayStartHour * 60,
+						cell.minutes - this.blockDragState.startOffset) / 10
+				) * 10;
+				this.blockDragState.lastDay = cell.dayIndex;
+				this.blockDragState.lastStart = newStart;
+			}
+			this.dragMode = "none";
+			// Re-show move action bar at updated block position
+			const blockEl = this.touchBlockSelection.item.id
+				? this.findBlockElement(this.touchBlockSelection.item.id)
+				: null;
+			if (blockEl) this.showMoveActionBar(blockEl);
+			return;
+		}
+
 		this.dragMode = "none";
 		this.removeGhost();
 
@@ -1162,6 +1262,16 @@ export class GridRenderer {
 	}
 
 	private onResizeDragFinish(e: PointerEvent) {
+		if (this.touchBlockSelection?.mode === "move") {
+			// Move mode: keep resize ghost and resizeState — wait for confirm/cancel
+			this.dragMode = "none";
+			const blockEl = this.touchBlockSelection.item.id
+				? this.findBlockElement(this.touchBlockSelection.item.id)
+				: null;
+			if (blockEl) this.showMoveActionBar(blockEl);
+			return;
+		}
+
 		this.dragMode = "none";
 		this.removeResizeGhost();
 
@@ -1550,6 +1660,348 @@ export class GridRenderer {
 		dot.style.top = `${topPos - 4}px`;
 		dot.style.left = `${leftPos - 4}px`;
 		this.currentTimeDotEl = dot;
+	}
+
+	// ── Touch Block Selection ──
+
+	private handleTouchBlockTap(dayIndex: number, item: TimelineItem, blockEl: HTMLElement): void {
+		if (this.touchBlockSelection?.item.id === item.id) {
+			// Same block already selected — no-op (action bar stays)
+			return;
+		}
+		// Different block or no selection — (re)select
+		this.clearTouchBlockSelection();
+		const dragTime = item.checkbox === "actual" && item.actualTime ? item.actualTime : item.planTime;
+		this.touchBlockSelection = {
+			mode: "selected",
+			dayIndex,
+			item,
+			originalStart: dragTime.start,
+			originalEnd: dragTime.end,
+			originalDayIndex: dayIndex,
+			isPenHover: false,
+			penTapConverted: false,
+		};
+		this.updateTouchBlockSelectionStyles();
+		this.showActionBar(dayIndex, item, blockEl);
+	}
+
+	private showActionBar(dayIndex: number, item: TimelineItem, anchorEl: HTMLElement): void {
+		this.removeActionBar();
+
+		const bar = document.createElement("div");
+		bar.className = "weekflow-action-bar";
+
+		const makeBtn = (icon: string, label: string, cls: string, onClick: () => void): HTMLElement => {
+			const btn = document.createElement("button");
+			btn.className = `weekflow-action-bar-btn ${cls}`;
+			btn.ariaLabel = label;
+			setIcon(btn, icon);
+			btn.addEventListener("click", (e) => {
+				e.stopPropagation();
+				onClick();
+			});
+			btn.addEventListener("pointerdown", (e) => { e.stopPropagation(); e.preventDefault(); });
+			return btn;
+		};
+
+		// Edit
+		bar.appendChild(makeBtn("pencil", "Edit", "", () => {
+			this.clearTouchBlockSelection();
+			this.callbacks.onBlockClick(dayIndex, item);
+		}));
+
+		// Move
+		bar.appendChild(makeBtn("move", "Move", "", () => {
+			this.enterMoveMode();
+		}));
+
+		// Delete
+		bar.appendChild(makeBtn("trash-2", "Delete", "", () => {
+			this.enterDeleteConfirmMode();
+		}));
+
+		// Navigate to note
+		if (this.callbacks.onBlockNavigate) {
+			const navCb = this.callbacks.onBlockNavigate;
+			bar.appendChild(makeBtn("arrow-up-right", "Go to daily note", "", () => {
+				this.clearTouchBlockSelection();
+				navCb(dayIndex, item);
+			}));
+		}
+
+		// More (context menu)
+		if (this.callbacks.onBlockRightClick) {
+			const menuCb = this.callbacks.onBlockRightClick;
+			bar.appendChild(makeBtn("more-horizontal", "More", "", () => {
+				// Create a synthetic pointer event at the action bar position
+				const rect = bar.getBoundingClientRect();
+				const syntheticEvent = new PointerEvent("pointerdown", {
+					clientX: rect.left,
+					clientY: rect.top,
+					bubbles: true,
+				});
+				this.clearTouchBlockSelection();
+				menuCb(dayIndex, item, syntheticEvent);
+			}));
+		}
+
+		document.body.appendChild(bar);
+		this.actionBarEl = bar;
+
+		this.positionActionBar(anchorEl);
+	}
+
+	private showMoveActionBar(anchorEl: HTMLElement): void {
+		this.removeActionBar();
+
+		const bar = document.createElement("div");
+		bar.className = "weekflow-action-bar weekflow-action-bar-move";
+
+		const confirmBtn = document.createElement("button");
+		confirmBtn.className = "weekflow-action-bar-btn weekflow-action-bar-confirm";
+		confirmBtn.ariaLabel = "Confirm move";
+		setIcon(confirmBtn, "check");
+		confirmBtn.addEventListener("pointerdown", (e) => { e.stopPropagation(); e.preventDefault(); });
+		confirmBtn.addEventListener("click", (e) => { e.stopPropagation(); this.confirmMove(); });
+		bar.appendChild(confirmBtn);
+
+		const cancelBtn = document.createElement("button");
+		cancelBtn.className = "weekflow-action-bar-btn weekflow-action-bar-cancel";
+		cancelBtn.ariaLabel = "Cancel move";
+		setIcon(cancelBtn, "x");
+		cancelBtn.addEventListener("pointerdown", (e) => { e.stopPropagation(); e.preventDefault(); });
+		cancelBtn.addEventListener("click", (e) => { e.stopPropagation(); this.cancelMove(); });
+		bar.appendChild(cancelBtn);
+
+		document.body.appendChild(bar);
+		this.actionBarEl = bar;
+
+		this.positionActionBar(anchorEl);
+	}
+
+	private showDeleteConfirmActionBar(anchorEl: HTMLElement): void {
+		this.removeActionBar();
+
+		const bar = document.createElement("div");
+		bar.className = "weekflow-action-bar weekflow-action-bar-delete";
+
+		const confirmBtn = document.createElement("button");
+		confirmBtn.className = "weekflow-action-bar-btn weekflow-action-bar-delete-confirm";
+		confirmBtn.ariaLabel = "Confirm delete";
+		setIcon(confirmBtn, "trash-2");
+		confirmBtn.addEventListener("pointerdown", (e) => { e.stopPropagation(); e.preventDefault(); });
+		confirmBtn.addEventListener("click", (e) => { e.stopPropagation(); this.confirmDelete(); });
+		bar.appendChild(confirmBtn);
+
+		const cancelBtn = document.createElement("button");
+		cancelBtn.className = "weekflow-action-bar-btn weekflow-action-bar-cancel";
+		cancelBtn.ariaLabel = "Cancel delete";
+		setIcon(cancelBtn, "x");
+		cancelBtn.addEventListener("pointerdown", (e) => { e.stopPropagation(); e.preventDefault(); });
+		cancelBtn.addEventListener("click", (e) => { e.stopPropagation(); this.cancelDeleteConfirm(); });
+		bar.appendChild(cancelBtn);
+
+		document.body.appendChild(bar);
+		this.actionBarEl = bar;
+
+		this.positionActionBar(anchorEl);
+	}
+
+	private positionActionBar(anchorEl: HTMLElement): void {
+		if (!this.actionBarEl) return;
+
+		const rect = anchorEl.getBoundingClientRect();
+		const barHeight = this.actionBarEl.offsetHeight || 44;
+		const gap = 4;
+
+		// Default: below the block
+		let top = rect.bottom + gap;
+		// If it overflows viewport bottom, place above
+		if (top + barHeight > window.innerHeight - 8) {
+			top = rect.top - barHeight - gap;
+		}
+		// Clamp top
+		top = Math.max(4, top);
+
+		let left = rect.left + rect.width / 2;
+		this.actionBarEl.style.left = `${left}px`;
+		this.actionBarEl.style.top = `${top}px`;
+
+		// After render: clamp horizontally
+		requestAnimationFrame(() => {
+			if (!this.actionBarEl) return;
+			const barRect = this.actionBarEl.getBoundingClientRect();
+			if (barRect.left < 4) {
+				this.actionBarEl.style.left = `${4 + barRect.width / 2}px`;
+			} else if (barRect.right > window.innerWidth - 4) {
+				this.actionBarEl.style.left = `${window.innerWidth - 4 - barRect.width / 2}px`;
+			}
+		});
+	}
+
+	private removeActionBar(): void {
+		if (this.actionBarEl) {
+			this.actionBarEl.remove();
+			this.actionBarEl = null;
+		}
+	}
+
+	private enterMoveMode(): void {
+		if (!this.touchBlockSelection) return;
+		this.touchBlockSelection.mode = "move";
+		this.updateTouchBlockSelectionStyles();
+		hapticFeedback();
+
+		const blockEl = this.findBlockElement(this.touchBlockSelection.item.id);
+		if (blockEl) {
+			this.showMoveActionBar(blockEl);
+		}
+	}
+
+	private confirmMove(): void {
+		if (!this.touchBlockSelection) return;
+
+		if (this.blockDragState) {
+			const { lastDay, lastStart } = this.blockDragState;
+			if (lastDay >= 0 && lastStart >= 0) {
+				this.callbacks.onBlockDragEnd(
+					this.blockDragState.item,
+					this.blockDragState.fromDay,
+					lastDay,
+					lastStart
+				);
+			}
+			this.blockDragState = null;
+		}
+
+		if (this.resizeState) {
+			const { currentStart, currentEnd, originalStart, originalEnd } = this.resizeState;
+			if (currentStart !== originalStart || currentEnd !== originalEnd) {
+				this.callbacks.onBlockResize(
+					this.resizeState.item,
+					this.resizeState.dayIndex,
+					currentStart,
+					currentEnd
+				);
+			}
+			this.resizeState = null;
+		}
+
+		this.removeGhost();
+		this.removeResizeGhost();
+		this.clearTouchBlockSelection();
+	}
+
+	private cancelMove(): void {
+		this.dragMode = "none";
+		this.blockDragState = null;
+		this.resizeState = null;
+		this.removeGhost();
+		this.removeResizeGhost();
+
+		if (!this.touchBlockSelection) return;
+		this.touchBlockSelection.mode = "selected";
+		this.updateTouchBlockSelectionStyles();
+
+		const blockEl = this.findBlockElement(this.touchBlockSelection.item.id);
+		if (blockEl) {
+			this.showActionBar(this.touchBlockSelection.dayIndex, this.touchBlockSelection.item, blockEl);
+		}
+	}
+
+	private enterDeleteConfirmMode(): void {
+		if (!this.touchBlockSelection) return;
+		this.touchBlockSelection.mode = "delete-confirm";
+		this.updateTouchBlockSelectionStyles();
+
+		const blockEl = this.findBlockElement(this.touchBlockSelection.item.id);
+		if (blockEl) {
+			this.showDeleteConfirmActionBar(blockEl);
+		}
+	}
+
+	private confirmDelete(): void {
+		if (!this.touchBlockSelection) return;
+		const { dayIndex, item } = this.touchBlockSelection;
+		this.clearTouchBlockSelection();
+		if (this.callbacks.onBlockDelete) {
+			this.callbacks.onBlockDelete(dayIndex, item);
+		}
+	}
+
+	private cancelDeleteConfirm(): void {
+		if (!this.touchBlockSelection) return;
+		this.touchBlockSelection.mode = "selected";
+		this.updateTouchBlockSelectionStyles();
+
+		const blockEl = this.findBlockElement(this.touchBlockSelection.item.id);
+		if (blockEl) {
+			this.showActionBar(this.touchBlockSelection.dayIndex, this.touchBlockSelection.item, blockEl);
+		}
+	}
+
+	public clearTouchSelection(): void {
+		this.clearTouchBlockSelection();
+	}
+
+	private clearTouchBlockSelection(): void {
+		if (this.touchBlockSelection?.mode === "move") {
+			this.dragMode = "none";
+			this.blockDragState = null;
+			this.resizeState = null;
+			this.removeGhost();
+			this.removeResizeGhost();
+		}
+		this.touchBlockSelection = null;
+		this.removeActionBar();
+		this.hideTooltip();
+
+		// Remove selection CSS classes from all blocks
+		if (this.gridEl) {
+			this.gridEl.querySelectorAll(".weekflow-block-touch-selected").forEach(
+				(el) => el.removeClass("weekflow-block-touch-selected")
+			);
+			this.gridEl.querySelectorAll(".weekflow-block-move-mode").forEach(
+				(el) => el.removeClass("weekflow-block-move-mode")
+			);
+			this.gridEl.querySelectorAll(".weekflow-block-delete-pending").forEach(
+				(el) => el.removeClass("weekflow-block-delete-pending")
+			);
+		}
+	}
+
+	private updateTouchBlockSelectionStyles(): void {
+		if (!this.gridEl) return;
+
+		// Remove all touch selection classes
+		this.gridEl.querySelectorAll(".weekflow-block-touch-selected").forEach(
+			(el) => el.removeClass("weekflow-block-touch-selected")
+		);
+		this.gridEl.querySelectorAll(".weekflow-block-move-mode").forEach(
+			(el) => el.removeClass("weekflow-block-move-mode")
+		);
+		this.gridEl.querySelectorAll(".weekflow-block-delete-pending").forEach(
+			(el) => el.removeClass("weekflow-block-delete-pending")
+		);
+
+		if (!this.touchBlockSelection) return;
+
+		const itemId = this.touchBlockSelection.item.id;
+		const blocks = this.gridEl.querySelectorAll(`.weekflow-block[data-item-id="${itemId}"]`);
+		blocks.forEach((el) => {
+			el.addClass("weekflow-block-touch-selected");
+			if (this.touchBlockSelection!.mode === "move") {
+				el.addClass("weekflow-block-move-mode");
+			} else if (this.touchBlockSelection!.mode === "delete-confirm") {
+				el.addClass("weekflow-block-delete-pending");
+			}
+		});
+	}
+
+	private findBlockElement(itemId: string): HTMLElement | null {
+		if (!this.gridEl) return null;
+		return this.gridEl.querySelector(`.weekflow-block[data-item-id="${itemId}"]`) as HTMLElement | null;
 	}
 
 	private getCategoryColor(tags: string[]): string {
