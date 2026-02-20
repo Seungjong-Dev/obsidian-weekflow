@@ -894,6 +894,13 @@ export class GridRenderer {
 					if (e.pointerType === "touch" && this.touchBlockSelection?.mode !== "move") return;
 					e.preventDefault();
 					e.stopPropagation();
+					// Clean up previous drag state for re-resize
+					if (this.touchBlockSelection?.mode === "move") {
+						this.removeGhost();
+						this.removeResizeGhost();
+						this.blockDragState = null;
+						this.resizeState = null;
+					}
 					leftHandle.setPointerCapture(e.pointerId);
 					this.startResize(item, dayIndex, "left", e);
 				});
@@ -907,6 +914,13 @@ export class GridRenderer {
 					if (e.pointerType === "touch" && this.touchBlockSelection?.mode !== "move") return;
 					e.preventDefault();
 					e.stopPropagation();
+					// Clean up previous drag state for re-resize
+					if (this.touchBlockSelection?.mode === "move") {
+						this.removeGhost();
+						this.removeResizeGhost();
+						this.blockDragState = null;
+						this.resizeState = null;
+					}
 					rightHandle.setPointerCapture(e.pointerId);
 					this.startResize(item, dayIndex, "right", e);
 				});
@@ -925,6 +939,12 @@ export class GridRenderer {
 					if (this.touchBlockSelection?.mode === "move"
 						&& this.touchBlockSelection.item.id === item.id) {
 						e.preventDefault();
+						// Clean up previous drag state/ghost for re-drag
+						this.removeGhost();
+						this.removeResizeGhost();
+						this.blockDragState = null;
+						this.resizeState = null;
+
 						const cell = this.getCellFromPoint(e.clientX, e.clientY);
 						const dragTime = item.checkbox === "actual" && item.actualTime ? item.actualTime : item.planTime;
 						const offsetMinutes = cell ? (cell.minutes - dragTime.start) : 0;

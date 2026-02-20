@@ -1625,6 +1625,9 @@
 .weekflow-block-move-mode > .weekflow-resize-right {
 	right: -8px;
 }
+.weekflow-block-move-mode > .weekflow-block-toggle {
+	display: none !important;
+}
 .weekflow-block-delete-pending {
 	opacity: 0.5;
 	border-color: var(--text-error) !important;
