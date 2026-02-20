@@ -1710,6 +1710,11 @@ export class GridRenderer {
 			setIcon(btn, icon);
 			btn.addEventListener("click", (e) => {
 				e.stopPropagation();
+				// Any action bar button click converts pen hover to permanent
+				if (this.touchBlockSelection?.isPenHover) {
+					this.touchBlockSelection.isPenHover = false;
+					this.touchBlockSelection.penTapConverted = true;
+				}
 				onClick();
 			});
 			btn.addEventListener("pointerdown", (e) => { e.stopPropagation(); e.preventDefault(); });
@@ -1882,6 +1887,9 @@ export class GridRenderer {
 
 	private enterMoveMode(): void {
 		if (!this.touchBlockSelection) return;
+		// Convert pen hover to permanent selection (explicit user action)
+		this.touchBlockSelection.isPenHover = false;
+		this.touchBlockSelection.penTapConverted = true;
 		this.touchBlockSelection.mode = "move";
 		this.updateTouchBlockSelectionStyles();
 		hapticFeedback();
@@ -1945,6 +1953,9 @@ export class GridRenderer {
 
 	private enterDeleteConfirmMode(): void {
 		if (!this.touchBlockSelection) return;
+		// Convert pen hover to permanent selection (explicit user action)
+		this.touchBlockSelection.isPenHover = false;
+		this.touchBlockSelection.penTapConverted = true;
 		this.touchBlockSelection.mode = "delete-confirm";
 		this.updateTouchBlockSelectionStyles();
 
