@@ -236,28 +236,8 @@ export class GridRenderer {
 						if (this.dragMode !== "none") return;
 
 						if (e.pointerType === "touch") {
-							// Move mode: re-drag from cell (ghost or anywhere)
+							// Move mode: ignore cell touch (only block/ghost touch moves the block)
 							if (this.touchBlockSelection?.mode === "move") {
-								e.preventDefault();
-								e.stopPropagation();
-								// Clean up previous drag state
-								this.removeGhost();
-								this.removeResizeGhost();
-								this.blockDragState = null;
-								this.resizeState = null;
-
-								const item = this.touchBlockSelection.item;
-								const fromDay = this.touchBlockSelection.currentDayIndex;
-								const cell = this.getCellFromPoint(e.clientX, e.clientY);
-								const offsetMinutes = cell ? (cell.minutes - this.touchBlockSelection.currentStart) : 0;
-								this.dragMode = "block-drag";
-								this.blockDragState = {
-									item, fromDay,
-									startOffset: Math.max(0, offsetMinutes),
-									lastDay: -1, lastStart: -1,
-								};
-								this.blockDragStartX = e.clientX;
-								this.blockDragStartY = e.clientY;
 								return;
 							}
 
@@ -275,7 +255,9 @@ export class GridRenderer {
 								startTime: Date.now(),
 							};
 						} else {
-							// Mouse: existing drag selection
+							// Pen in move mode: block cell selection
+							if (e.pointerType === "pen" && this.touchBlockSelection?.mode === "move") return;
+							// Mouse/pen: existing drag selection
 							e.preventDefault();
 							this.deselectOverlapBlock();
 							this.swipeStartX = e.clientX;
@@ -1157,6 +1139,7 @@ export class GridRenderer {
 		label: string
 	) {
 		this.removeGhost();
+		this.removeResizeGhost();
 		if (!this.gridEl) return;
 
 		const widestIdx = segments.reduce((best, seg, idx) => {
@@ -1313,6 +1296,7 @@ export class GridRenderer {
 		const endOffset = newEnd - dayStartMin;
 		const segments = this.getHourSegments(startOffset, endOffset);
 
+		this.removeGhost();
 		this.removeResizeGhost();
 		const label = `${formatTime(newStart)}-${formatTime(newEnd)}`;
 		const widestIdx = segments.reduce((best, seg, idx) => {
@@ -2050,6 +2034,7 @@ export class GridRenderer {
 		ghosts.forEach((g) => {
 			g.style.pointerEvents = "auto";
 			g.style.touchAction = "none";
+			g.style.position = "relative";
 
 			g.addEventListener("pointerdown", (e) => {
 				if (e.button !== 0) return;
@@ -2144,6 +2129,10 @@ export class GridRenderer {
 		this.removeResizeGhost();
 
 		if (!this.touchBlockSelection) return;
+		// Reset accumulated position back to original so re-entering move mode starts fresh
+		this.touchBlockSelection.currentStart = this.touchBlockSelection.originalStart;
+		this.touchBlockSelection.currentEnd = this.touchBlockSelection.originalEnd;
+		this.touchBlockSelection.currentDayIndex = this.touchBlockSelection.originalDayIndex;
 		this.touchBlockSelection.mode = "selected";
 		this.updateTouchBlockSelectionStyles();
 
