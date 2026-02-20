@@ -916,8 +916,8 @@ export class GridRenderer {
 			if (i === 0) {
 				const leftHandle = block.createDiv({ cls: "weekflow-resize-handle weekflow-resize-left" });
 				leftHandle.addEventListener("pointerdown", (e) => {
-					// Touch: only allow resize in move mode
-					if (e.pointerType === "touch" && this.touchBlockSelection?.mode !== "move") return;
+					// Touch/pen: only allow resize in move mode
+					if ((e.pointerType === "touch" || e.pointerType === "pen") && this.touchBlockSelection?.mode !== "move") return;
 					e.preventDefault();
 					e.stopPropagation();
 					// Clean up previous drag state for re-resize
@@ -936,8 +936,8 @@ export class GridRenderer {
 			if (i === segments.length - 1) {
 				const rightHandle = block.createDiv({ cls: "weekflow-resize-handle weekflow-resize-right" });
 				rightHandle.addEventListener("pointerdown", (e) => {
-					// Touch: only allow resize in move mode
-					if (e.pointerType === "touch" && this.touchBlockSelection?.mode !== "move") return;
+					// Touch/pen: only allow resize in move mode
+					if ((e.pointerType === "touch" || e.pointerType === "pen") && this.touchBlockSelection?.mode !== "move") return;
 					e.preventDefault();
 					e.stopPropagation();
 					// Clean up previous drag state for re-resize
@@ -956,7 +956,7 @@ export class GridRenderer {
 			block.addEventListener("pointerdown", (e) => {
 				this.lastBlockPointerType = e.pointerType;
 
-				if (e.pointerType === "touch") {
+				if (e.pointerType === "touch" || e.pointerType === "pen") {
 					e.stopPropagation();
 					this.blockDragStartX = e.clientX;
 					this.blockDragStartY = e.clientY;
@@ -982,10 +982,10 @@ export class GridRenderer {
 						};
 						try { block.setPointerCapture(e.pointerId); } catch { /* */ }
 					}
-					return; // Touch: handle selection in click event
+					return; // Touch/pen: handle selection in click event
 				}
 
-				// Mouse/pen: existing logic
+				// Mouse: existing logic
 				e.preventDefault();
 				e.stopPropagation();
 
