@@ -403,6 +403,22 @@
 	color: var(--text-muted);
 }
 
+/* Fold trigger — clickable time label at boundary when unfolded */
+.weekflow-fold-trigger {
+	cursor: pointer;
+	gap: 2px;
+}
+.weekflow-fold-trigger:hover {
+	color: var(--text-accent);
+}
+.weekflow-fold-trigger-icon {
+	font-size: 8px;
+	opacity: 0.5;
+}
+.weekflow-fold-trigger:hover .weekflow-fold-trigger-icon {
+	opacity: 1;
+}
+
 .weekflow-fold-bar-indicator {
 	background: var(--text-faint);
 	color: var(--background-primary);

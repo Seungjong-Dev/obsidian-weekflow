@@ -321,12 +321,24 @@ export class GridRenderer {
 			}
 
 			// Normal (unfolded) time label
+			const isEarlyFoldTrigger = !this.earlyFolded && h === this.settings.dayStartHour - 1 && this.settings.dayStartHour > 0;
+			const isLateFoldTrigger = !this.lateFolded && h === this.settings.dayEndHour && this.settings.dayEndHour < 24;
+
 			const timeLabel = this.gridEl.createDiv({
 				cls: "weekflow-time-label",
 				text: formatTime(h * 60),
 			});
 			timeLabel.style.gridColumn = "1";
 			timeLabel.style.gridRow = `${row}`;
+
+			if (isEarlyFoldTrigger || isLateFoldTrigger) {
+				timeLabel.addClass("weekflow-fold-trigger");
+				timeLabel.createSpan({ cls: "weekflow-fold-trigger-icon", text: isEarlyFoldTrigger ? "\u25B4" : "\u25BE" });
+				timeLabel.addEventListener("click", () => {
+					if (isEarlyFoldTrigger) this.toggleEarlyFold();
+					else this.toggleLateFold();
+				});
+			}
 
 			for (let i = 0; i < this.visibleDays; i++) {
 				const d = this.dayOffset + i;
