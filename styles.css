@@ -805,20 +805,32 @@
 	background: var(--background-primary);
 }
 
-.weekflow-inbox-source-dragging {
-	opacity: 0.5;
+.weekflow-inbox-source-move-btns {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	flex-shrink: 0;
 }
 
-.weekflow-inbox-source-dragover {
-	border-color: var(--interactive-accent);
-}
-
-.weekflow-inbox-source-handle {
-	cursor: grab;
-	font-size: 14px;
+.weekflow-inbox-source-move-btn {
+	background: none;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 3px;
+	cursor: pointer;
 	color: var(--text-muted);
-	padding: 0 2px;
-	user-select: none;
+	font-size: 10px;
+	line-height: 1;
+	padding: 1px 4px;
+}
+
+.weekflow-inbox-source-move-btn:hover:not([disabled]) {
+	color: var(--text-normal);
+	background: var(--background-modifier-hover);
+}
+
+.weekflow-inbox-source-move-btn[disabled] {
+	opacity: 0.3;
+	cursor: default;
 }
 
 .weekflow-inbox-source-path {

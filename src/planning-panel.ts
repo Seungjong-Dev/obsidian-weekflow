@@ -125,6 +125,7 @@ export class PlanningPanel {
 				// Context menu
 				if (this.callbacks.onItemNavigate && (item.source.type === "inbox" || item.source.type === "overdue")) {
 					itemEl.addEventListener("contextmenu", (e) => {
+						if (this.lastPointerType === "touch") return;
 						e.preventDefault();
 						e.stopPropagation();
 						const menu = new Menu();
@@ -205,6 +206,10 @@ export class PlanningPanel {
 				this.callbacks.onItemNavigate!(item);
 			});
 		}
+	}
+
+	public deselectAll(): void {
+		this.deselectItem();
 	}
 
 	private deselectItem(): void {

@@ -17,38 +17,27 @@ export class WeekFlowSettingTab extends PluginSettingTab {
 		sources.forEach((source, index) => {
 			const row = containerEl.createDiv({ cls: "weekflow-inbox-source-row" });
 
-			// Drag handle
-			const handle = row.createSpan({ cls: "weekflow-inbox-source-handle", text: "≡" });
-			handle.setAttribute("draggable", "true");
+			// Reorder buttons
+			const moveBtns = row.createDiv({ cls: "weekflow-inbox-source-move-btns" });
 
-			handle.addEventListener("dragstart", (e) => {
-				e.dataTransfer?.setData("text/plain", String(index));
-				row.addClass("weekflow-inbox-source-dragging");
+			const upBtn = moveBtns.createEl("button", { cls: "weekflow-inbox-source-move-btn", text: "▲" });
+			upBtn.ariaLabel = "Move up";
+			if (index === 0) upBtn.setAttribute("disabled", "true");
+			upBtn.addEventListener("click", async () => {
+				if (index === 0) return;
+				[sources[index - 1], sources[index]] = [sources[index], sources[index - 1]];
+				await this.plugin.saveSettings();
+				this.renderInboxSources(containerEl);
 			});
 
-			handle.addEventListener("dragend", () => {
-				row.removeClass("weekflow-inbox-source-dragging");
-			});
-
-			row.addEventListener("dragover", (e) => {
-				e.preventDefault();
-				row.addClass("weekflow-inbox-source-dragover");
-			});
-
-			row.addEventListener("dragleave", () => {
-				row.removeClass("weekflow-inbox-source-dragover");
-			});
-
-			row.addEventListener("drop", async (e) => {
-				e.preventDefault();
-				row.removeClass("weekflow-inbox-source-dragover");
-				const fromIdx = parseInt(e.dataTransfer?.getData("text/plain") || "-1");
-				if (fromIdx >= 0 && fromIdx !== index) {
-					const [moved] = sources.splice(fromIdx, 1);
-					sources.splice(index, 0, moved);
-					await this.plugin.saveSettings();
-					this.renderInboxSources(containerEl);
-				}
+			const downBtn = moveBtns.createEl("button", { cls: "weekflow-inbox-source-move-btn", text: "▼" });
+			downBtn.ariaLabel = "Move down";
+			if (index === sources.length - 1) downBtn.setAttribute("disabled", "true");
+			downBtn.addEventListener("click", async () => {
+				if (index === sources.length - 1) return;
+				[sources[index], sources[index + 1]] = [sources[index + 1], sources[index]];
+				await this.plugin.saveSettings();
+				this.renderInboxSources(containerEl);
 			});
 
 			// Path input
@@ -247,7 +236,7 @@ export class WeekFlowSettingTab extends PluginSettingTab {
 		containerEl.createEl("h4", { text: "Inbox Sources" });
 
 		const inboxDesc = containerEl.createEl("p", {
-			text: "Add note or folder paths as inbox sources. Items are read from all sources. New items are written to the first note source. Drag to reorder priority.",
+			text: "Add note or folder paths as inbox sources. Items are read from all sources. New items are written to the first note source. Use ▲/▼ to reorder priority.",
 			cls: "setting-item-description",
 		});
 

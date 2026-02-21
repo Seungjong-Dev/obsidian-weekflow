@@ -417,6 +417,11 @@ export class WeekFlowView extends ItemView {
 			this.gridRenderer?.clearTouchSelection();
 		}, { passive: true });
 
+		// Tap on grid → deselect panel item selection
+		gridWrapper.addEventListener("pointerdown", () => {
+			this.planningPanel?.deselectAll();
+		});
+
 		// Review panel (inside content area — aligns with grid columns)
 		this.renderReviewPanel(contentArea);
 
@@ -1664,6 +1669,12 @@ export class WeekFlowView extends ItemView {
 	private onPanelDragStart(item: PanelItem, e: PointerEvent): void {
 		this.panelDragItem = item;
 
+		// Narrow mode: collapse bottom sheet so grid is visible during drag
+		if (this.bottomSheetEl) {
+			this.bottomSheetEl.removeClass("expanded");
+			this.bottomSheetEl.addClass("collapsed");
+		}
+
 		this.boundPanelDragMove = (ev: PointerEvent) => this.onPanelDragMove(ev);
 		this.boundPanelDragUp = (ev: PointerEvent) => this.onPanelDragEnd(ev);
 		document.addEventListener("pointermove", this.boundPanelDragMove);
@@ -1953,6 +1964,14 @@ export class WeekFlowView extends ItemView {
 			this.isSelfWriting = false;
 		}
 
+		// Track the added inbox item for undo
+		const freshInbox = await getInboxItems(this.app.vault, this.plugin.settings);
+		const addedItem = freshInbox.find(i =>
+			serializeCheckboxItem(i.content, i.tags, i.rawSuffix) === inboxLine
+		);
+		const addedPath = addedItem?.sourcePath;
+		const addedLine = addedItem?.lineNumber;
+
 		const fromItems = this.weekData.get(fromKey) || [];
 		const oldCheckbox = item.checkbox;
 
@@ -1974,7 +1993,15 @@ export class WeekFlowView extends ItemView {
 			description: "Return block to inbox",
 			execute: async () => { /* already executed */ },
 			undo: async () => {
-				// TODO: Remove from inbox (would need to track the line)
+				// Remove from inbox
+				if (addedPath != null && addedLine != null) {
+					this.isSelfWriting = true;
+					try {
+						await removeFromInboxFile(this.app.vault, addedPath, addedLine);
+					} finally {
+						this.isSelfWriting = false;
+					}
+				}
 				// Restore block
 				const fi = this.weekData.get(fromKey) || [];
 				if (fromDate.isBefore(today, "day")) {
@@ -2063,6 +2090,15 @@ export class WeekFlowView extends ItemView {
 				.setIcon("arrow-up-right")
 				.onClick(() => {
 					this.openDailyNoteAtLine(dayIndex, item.lineNumber);
+				});
+		});
+
+		menu.addItem((menuItem) => {
+			menuItem
+				.setTitle("Return to inbox")
+				.setIcon("inbox")
+				.onClick(() => {
+					this.onBlockReturnToInbox(item, dayIndex);
 				});
 		});
 
