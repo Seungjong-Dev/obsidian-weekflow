@@ -239,6 +239,7 @@ export class GridRenderer {
 					}
 				}
 				if (dayHiddenCount > 0) {
+					dayCell.createSpan({ text: arrow + " " });
 					dayCell.createSpan({ cls: "weekflow-fold-bar-indicator", text: `${dayHiddenCount}` });
 				}
 			}
