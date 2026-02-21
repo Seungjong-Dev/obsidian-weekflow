@@ -403,6 +403,18 @@
 	color: var(--text-muted);
 }
 
+/* Label cell: time label area */
+.weekflow-fold-bar-label {
+	justify-content: flex-end;
+	padding-right: 6px;
+	border-right: 1px solid var(--background-modifier-border);
+}
+
+/* Per-day cell: day-start border */
+.weekflow-fold-bar-day {
+	border-left: 1px solid var(--background-modifier-border);
+}
+
 .weekflow-fold-bar-indicator {
 	background: var(--text-faint);
 	color: var(--background-primary);

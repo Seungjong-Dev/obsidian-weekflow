@@ -200,40 +200,51 @@ export class GridRenderer {
 	private renderFoldBar(placementHour: number, foldStart: number, foldEnd: number, isEarly: boolean, isFolded: boolean): void {
 		if (!this.gridEl) return;
 		const startRow = placementHour + 2;
-		const bar = this.gridEl.createDiv({ cls: "weekflow-fold-bar" });
-		bar.style.gridRow = `${startRow}`;
-		bar.style.gridColumn = `1 / -1`;
 
 		// Arrow direction: folded = point outward (unfold), unfolded = point inward (fold)
 		const arrow = isFolded
 			? (isEarly ? "\u25B4" : "\u25BE")
 			: (isEarly ? "\u25BE" : "\u25B4");
-		bar.setText(`${arrow} ${formatTime(foldStart * 60)}\u2013${formatTime(foldEnd * 60)}`);
 
-		// Count hidden blocks only when folded
-		if (isFolded) {
-			let hiddenCount = 0;
-			for (let i = 0; i < this.visibleDays; i++) {
-				const d = this.dayOffset + i;
+		const toggleFold = () => {
+			if (isEarly) this.toggleEarlyFold();
+			else this.toggleLateFold();
+		};
+
+		// Label cell (column 1, time label area)
+		const labelCell = this.gridEl.createDiv({ cls: "weekflow-fold-bar weekflow-fold-bar-label" });
+		labelCell.style.gridRow = `${startRow}`;
+		labelCell.style.gridColumn = `1`;
+		labelCell.setText(`${arrow} ${formatTime(foldStart * 60)}\u2013${formatTime(foldEnd * 60)}`);
+		labelCell.addEventListener("click", toggleFold);
+
+		// Per-day cells (each spanning 6 columns)
+		for (let i = 0; i < this.visibleDays; i++) {
+			const d = this.dayOffset + i;
+			const colStart = i * 6 + 2;
+
+			const dayCell = this.gridEl.createDiv({ cls: "weekflow-fold-bar weekflow-fold-bar-day" });
+			dayCell.style.gridRow = `${startRow}`;
+			dayCell.style.gridColumn = `${colStart} / span 6`;
+
+			if (isFolded) {
 				const dateKey = this.dates[d].format("YYYY-MM-DD");
 				const items = this.weekData.get(dateKey) || [];
+				let dayHiddenCount = 0;
 				for (const item of items) {
 					const displayTime = item.checkbox === "actual" && item.actualTime
 						? item.actualTime : item.planTime;
 					if (displayTime.start < foldEnd * 60 && displayTime.end > foldStart * 60) {
-						hiddenCount++;
+						dayHiddenCount++;
 					}
 				}
+				if (dayHiddenCount > 0) {
+					dayCell.createSpan({ cls: "weekflow-fold-bar-indicator", text: `${dayHiddenCount}` });
+				}
 			}
-			if (hiddenCount > 0) {
-				bar.createSpan({ cls: "weekflow-fold-bar-indicator", text: `${hiddenCount}` });
-			}
-		}
 
-		bar.addEventListener("click", () => {
-			if (isEarly) this.toggleEarlyFold();
-			else this.toggleLateFold();
-		});
+			dayCell.addEventListener("click", toggleFold);
+		}
 	}
 
 	private getNormalRowHeight(bodyHeight: number): number {
