@@ -362,6 +362,11 @@ export class WeekFlowView extends ItemView {
 	}
 
 	private renderView() {
+		// Save scroll position before destroying the DOM
+		const prevGridWrapper = this.contentEl.querySelector(".weekflow-grid-wrapper") as HTMLElement | null;
+		const savedScrollTop = prevGridWrapper?.scrollTop ?? 0;
+		const savedScrollLeft = prevGridWrapper?.scrollLeft ?? 0;
+
 		// Clean up old grid renderer listeners before rebuilding
 		if (this.gridRenderer) {
 			this.gridRenderer.destroy();
@@ -457,6 +462,10 @@ export class WeekFlowView extends ItemView {
 		gridWrapper.addEventListener("pointerdown", () => {
 			this.planningPanel?.deselectAll();
 		});
+
+		// Restore scroll position after grid rebuild
+		gridWrapper.scrollTop = savedScrollTop;
+		gridWrapper.scrollLeft = savedScrollLeft;
 
 		// Review panel (inside content area — aligns with grid columns)
 		if (this.reviewController) {
