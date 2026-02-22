@@ -4,19 +4,19 @@ import type WeekFlowPlugin from "./main";
 import { VIEW_TYPE_WEEKFLOW } from "./types";
 import type { CalendarEvent, PanelItem, ParseWarning, TimelineItem, WeekFlowSettings } from "./types";
 import { getCalendarEventsForWeek, clearCalendarCache } from "./calendar";
-import { getWeekDates, getWeekNotePaths, loadWeekData, saveDailyNoteItems, resolveDailyNotePath, getInboxItems, getInboxWatchPaths, addToInbox, removeFromInboxFile, getPrimaryInboxNoteSource, getActiveProjects, getProjectTasks, appendBlockIdToLine, completeProjectTask, loadWeekReviewData } from "./daily-note";
+import { getWeekDates, getWeekNotePaths, loadWeekData, saveDailyNoteItems, resolveDailyNotePath, getInboxItems, getInboxWatchPaths, addToInbox, getPrimaryInboxNoteSource, getActiveProjects, getProjectTasks, loadWeekReviewData } from "./daily-note";
 import type { ProjectInfo, InboxCheckboxItem } from "./daily-note";
 import { GridRenderer } from "./grid-renderer";
 import { BlockModal } from "./block-modal";
 import { EditBlockModal } from "./edit-block-modal";
-import { ConfirmModal } from "./confirm-modal";
-import { generateItemId, serializeCheckboxItem, extractBlockId, generateBlockId, formatTime } from "./parser";
+import { generateItemId, extractBlockId } from "./parser";
 import { UndoManager, type UndoableAction } from "./undo-manager";
 import { PlanningPanel, type PanelSection } from "./planning-panel";
 import type { CheckboxItem } from "./parser";
 import { getLayoutTier, getVisibleDays, isTouchDevice, type LayoutTier } from "./device";
 import { ReviewPanelController } from "./review-panel";
 import { showPresetMenu } from "./preset-manager";
+import { BlockActions } from "./block-actions";
 
 export class WeekFlowView extends ItemView {
 	plugin: WeekFlowPlugin;
@@ -44,6 +44,9 @@ export class WeekFlowView extends ItemView {
 
 	// Review panel
 	private reviewController: ReviewPanelController | null = null;
+
+	// Block actions
+	private blockActions: BlockActions | null = null;
 
 	// Responsive layout
 	private resizeObserver: ResizeObserver | null = null;
@@ -276,6 +279,24 @@ export class WeekFlowView extends ItemView {
 			this.reviewController.updateDeps(reviewDeps);
 		}
 		this.reviewController.loadData(reviewData);
+
+		// Initialize or update block actions
+		const blockActionsCtx = {
+			app: this.app,
+			settings: this.plugin.settings,
+			dates: this.dates,
+			weekData: this.weekData,
+			undoManager: this.undoManager,
+			guardedSave: (date: ReturnType<typeof moment>, items: TimelineItem[]) => this.guardedSave(date, items),
+			withSelfWriteGuard: <T>(fn: () => Promise<T>) => this.withSelfWriteGuard(fn),
+			refresh: () => this.refresh(),
+			projectData: this.projectData,
+		};
+		if (!this.blockActions) {
+			this.blockActions = new BlockActions(blockActionsCtx);
+		} else {
+			this.blockActions.updateCtx(blockActionsCtx);
+		}
 
 		this.renderView();
 
@@ -849,7 +870,7 @@ export class WeekFlowView extends ItemView {
 				const dateKey = date.format("YYYY-MM-DD");
 
 				// Check for overnight split
-				const splitResult = this.splitOvernightItem(newItem, dayIndex);
+				const splitResult = this.blockActions!.splitOvernightItem(newItem, dayIndex);
 				if (splitResult) {
 					// Save today portion
 					const todayItems = [...(this.weekData.get(splitResult.todayKey) || []), splitResult.today];
@@ -962,7 +983,7 @@ export class WeekFlowView extends ItemView {
 		).open();
 	}
 
-	// ── Block Drag Move ──
+	// ── Block Drag/Resize/Split (delegated to BlockActions) ──
 
 	private async onBlockDragEnd(
 		item: TimelineItem,
@@ -971,273 +992,8 @@ export class WeekFlowView extends ItemView {
 		newStart: number,
 		newDuration?: number
 	) {
-		const dragTime = item.checkbox === "actual" && item.actualTime ? item.actualTime : item.planTime;
-		const duration = newDuration ?? (dragTime.end - dragTime.start);
-		// Sunday clamping: can't overflow past last day of week
-		const newEnd = toDay >= 6 ? Math.min(newStart + duration, 1440) : newStart + duration;
-		const fromDate = this.dates[fromDay];
-		const fromKey = fromDate.format("YYYY-MM-DD");
-		const toDate = this.dates[toDay];
-		const toKey = toDate.format("YYYY-MM-DD");
-
-		const oldStart = item.planTime.start;
-		const oldEnd = item.planTime.end;
-
-		if (fromDay === toDay) {
-			// Same-day move
-			const items = this.weekData.get(fromKey) || [];
-			const idx = items.findIndex(i => i.id === item.id);
-			if (idx === -1) return;
-
-			if (items[idx].checkbox === "actual") {
-				// Actual block: move actualTime only, preserve planTime
-				const oldActualTime = items[idx].actualTime ? { ...items[idx].actualTime! } : undefined;
-				items[idx].actualTime = { start: newStart, end: newEnd };
-
-				await this.guardedSave(fromDate, items);
-
-				const action: UndoableAction = {
-					description: "Move actual block",
-					execute: async () => { /* already executed */ },
-					undo: async () => {
-						const items = this.weekData.get(fromKey) || [];
-						const idx = items.findIndex(i => i.id === item.id);
-						if (idx !== -1) {
-							items[idx].actualTime = oldActualTime;
-							await this.guardedSave(fromDate, items);
-						}
-					},
-				};
-				this.undoManager.pushExecuted(action);
-			} else {
-				items[idx].planTime = { start: newStart, end: newEnd };
-				if (items[idx].actualTime) {
-					const actDuration = items[idx].actualTime!.end - items[idx].actualTime!.start;
-					items[idx].actualTime = { start: newStart, end: newStart + actDuration };
-				}
-
-				// Check overnight split
-				const splitResult = this.splitOvernightItem(items[idx], fromDay);
-				if (splitResult) {
-					// Replace original with today portion
-					items[idx] = splitResult.today;
-					await this.guardedSave(fromDate, items);
-
-					// Add tomorrow portion
-					const tomorrowItems = [...(this.weekData.get(splitResult.tomorrowKey) || []), splitResult.tomorrow];
-					this.weekData.set(splitResult.tomorrowKey, tomorrowItems);
-					await this.guardedSave(this.dates[splitResult.tomorrowDayIndex], tomorrowItems);
-
-					const action: UndoableAction = {
-						description: "Move block (overnight split)",
-						execute: async () => { /* already executed */ },
-						undo: async () => {
-							// Restore original planTime
-							const items = this.weekData.get(fromKey) || [];
-							const idx = items.findIndex(i => i.id === splitResult.today.id);
-							if (idx !== -1) {
-								items[idx].planTime = { start: oldStart, end: oldEnd };
-								items[idx].id = item.id;
-								await this.guardedSave(fromDate, items);
-							}
-							// Remove tomorrow portion
-							const tmr = this.weekData.get(splitResult.tomorrowKey) || [];
-							this.weekData.set(splitResult.tomorrowKey, tmr.filter(i => i.id !== splitResult.tomorrow.id));
-							await this.guardedSave(this.dates[splitResult.tomorrowDayIndex], this.weekData.get(splitResult.tomorrowKey)!);
-						},
-					};
-					this.undoManager.pushExecuted(action);
-				} else {
-					await this.guardedSave(fromDate, items);
-
-					const action: UndoableAction = {
-						description: "Move block",
-						execute: async () => { /* already executed */ },
-						undo: async () => {
-							const items = this.weekData.get(fromKey) || [];
-							const idx = items.findIndex(i => i.id === item.id);
-							if (idx !== -1) {
-								items[idx].planTime = { start: oldStart, end: oldEnd };
-								if (items[idx].actualTime) {
-									const actDuration = items[idx].actualTime!.end - items[idx].actualTime!.start;
-									items[idx].actualTime = { start: oldStart, end: oldStart + actDuration };
-								}
-								await this.guardedSave(fromDate, items);
-							}
-						},
-					};
-					this.undoManager.pushExecuted(action);
-				}
-			}
-		} else {
-			// Cross-day move
-			const today = window.moment().startOf("day");
-			const isPastDay = fromDate.isBefore(today, "day");
-
-			const fromItems = this.weekData.get(fromKey) || [];
-			const movedItem = fromItems.find(i => i.id === item.id);
-			if (!movedItem) return;
-
-			const oldCheckbox = movedItem.checkbox;
-
-			if (isPastDay && movedItem.checkbox === "plan") {
-				// Deferred logic: mark original as deferred, create new plan on target day
-				movedItem.checkbox = "deferred";
-				await this.guardedSave(fromDate, fromItems);
-
-				const newItem: TimelineItem = {
-					id: generateItemId(),
-					checkbox: "plan",
-					planTime: { start: newStart, end: newEnd },
-					content: movedItem.content,
-					tags: [...movedItem.tags],
-					rawSuffix: movedItem.rawSuffix,
-				};
-
-				// Check overnight split for deferred item
-				const splitResult = this.splitOvernightItem(newItem, toDay);
-				if (splitResult) {
-					const toItems = this.weekData.get(splitResult.todayKey) || [];
-					toItems.push(splitResult.today);
-					this.weekData.set(splitResult.todayKey, toItems);
-					await this.guardedSave(this.dates[splitResult.todayDayIndex], toItems);
-
-					const tomorrowItems = [...(this.weekData.get(splitResult.tomorrowKey) || []), splitResult.tomorrow];
-					this.weekData.set(splitResult.tomorrowKey, tomorrowItems);
-					await this.guardedSave(this.dates[splitResult.tomorrowDayIndex], tomorrowItems);
-
-					const action: UndoableAction = {
-						description: "Defer block (overnight split)",
-						execute: async () => { /* already executed */ },
-						undo: async () => {
-							const fi = this.weekData.get(fromKey) || [];
-							const idx = fi.findIndex(i => i.id === item.id);
-							if (idx !== -1) {
-								fi[idx].checkbox = oldCheckbox;
-								await this.guardedSave(fromDate, fi);
-							}
-							const ti = this.weekData.get(splitResult.todayKey) || [];
-							this.weekData.set(splitResult.todayKey, ti.filter(i => i.id !== splitResult.today.id));
-							await this.guardedSave(this.dates[splitResult.todayDayIndex], this.weekData.get(splitResult.todayKey)!);
-							const tmr = this.weekData.get(splitResult.tomorrowKey) || [];
-							this.weekData.set(splitResult.tomorrowKey, tmr.filter(i => i.id !== splitResult.tomorrow.id));
-							await this.guardedSave(this.dates[splitResult.tomorrowDayIndex], this.weekData.get(splitResult.tomorrowKey)!);
-						},
-					};
-					this.undoManager.pushExecuted(action);
-				} else {
-					const toItems = this.weekData.get(toKey) || [];
-					toItems.push(newItem);
-					this.weekData.set(toKey, toItems);
-					await this.guardedSave(toDate, toItems);
-
-					const action: UndoableAction = {
-						description: "Defer block to another day",
-						execute: async () => { /* already executed */ },
-						undo: async () => {
-							const fi = this.weekData.get(fromKey) || [];
-							const idx = fi.findIndex(i => i.id === item.id);
-							if (idx !== -1) {
-								fi[idx].checkbox = oldCheckbox;
-								await this.guardedSave(fromDate, fi);
-							}
-							const ti = this.weekData.get(toKey) || [];
-							this.weekData.set(toKey, ti.filter(i => i.id !== newItem.id));
-							await this.guardedSave(toDate, this.weekData.get(toKey)!);
-						},
-					};
-					this.undoManager.pushExecuted(action);
-				}
-			} else {
-				// Simple move: remove from original day, add to new day
-				this.weekData.set(fromKey, fromItems.filter(i => i.id !== item.id));
-
-				movedItem.planTime = { start: newStart, end: newEnd };
-				if (movedItem.actualTime) {
-					const actDuration = movedItem.actualTime.end - movedItem.actualTime.start;
-					movedItem.actualTime = { start: newStart, end: newStart + actDuration };
-				}
-
-				// Check overnight split for moved item
-				const splitResult = this.splitOvernightItem(movedItem, toDay);
-				if (splitResult) {
-					const toItems = this.weekData.get(splitResult.todayKey) || [];
-					toItems.push(splitResult.today);
-					this.weekData.set(splitResult.todayKey, toItems);
-
-					const tomorrowItems = [...(this.weekData.get(splitResult.tomorrowKey) || []), splitResult.tomorrow];
-					this.weekData.set(splitResult.tomorrowKey, tomorrowItems);
-
-					await this.guardedSave(fromDate, this.weekData.get(fromKey)!);
-					await this.guardedSave(this.dates[splitResult.todayDayIndex], toItems);
-					await this.guardedSave(this.dates[splitResult.tomorrowDayIndex], tomorrowItems);
-
-					const action: UndoableAction = {
-						description: "Move block (overnight split)",
-						execute: async () => { /* already executed */ },
-						undo: async () => {
-							// Remove split items
-							const ti = this.weekData.get(splitResult.todayKey) || [];
-							this.weekData.set(splitResult.todayKey, ti.filter(i => i.id !== splitResult.today.id));
-							await this.guardedSave(this.dates[splitResult.todayDayIndex], this.weekData.get(splitResult.todayKey)!);
-
-							const tmr = this.weekData.get(splitResult.tomorrowKey) || [];
-							this.weekData.set(splitResult.tomorrowKey, tmr.filter(i => i.id !== splitResult.tomorrow.id));
-							await this.guardedSave(this.dates[splitResult.tomorrowDayIndex], this.weekData.get(splitResult.tomorrowKey)!);
-
-							// Restore original
-							movedItem.planTime = { start: oldStart, end: oldEnd };
-							if (movedItem.actualTime) {
-								const actDuration = movedItem.actualTime.end - movedItem.actualTime.start;
-								movedItem.actualTime = { start: oldStart, end: oldStart + actDuration };
-							}
-							const fromItems = this.weekData.get(fromKey) || [];
-							fromItems.push(movedItem);
-							this.weekData.set(fromKey, fromItems);
-							await this.guardedSave(fromDate, fromItems);
-						},
-					};
-					this.undoManager.pushExecuted(action);
-				} else {
-					const toItems = this.weekData.get(toKey) || [];
-					toItems.push(movedItem);
-					this.weekData.set(toKey, toItems);
-
-					await this.guardedSave(fromDate, this.weekData.get(fromKey)!);
-					await this.guardedSave(toDate, toItems);
-
-					const action: UndoableAction = {
-						description: "Move block to another day",
-						execute: async () => { /* already executed */ },
-						undo: async () => {
-							const toItems = this.weekData.get(toKey) || [];
-							const itemBack = toItems.find(i => i.id === item.id);
-							if (!itemBack) return;
-
-							this.weekData.set(toKey, toItems.filter(i => i.id !== item.id));
-							itemBack.planTime = { start: oldStart, end: oldEnd };
-							if (itemBack.actualTime) {
-								const actDuration = itemBack.actualTime.end - itemBack.actualTime.start;
-								itemBack.actualTime = { start: oldStart, end: oldStart + actDuration };
-							}
-
-							const fromItems = this.weekData.get(fromKey) || [];
-							fromItems.push(itemBack);
-							this.weekData.set(fromKey, fromItems);
-
-							await this.guardedSave(toDate, this.weekData.get(toKey)!);
-							await this.guardedSave(fromDate, fromItems);
-						},
-					};
-					this.undoManager.pushExecuted(action);
-				}
-			}
-		}
-
-		await this.refresh();
+		await this.blockActions!.onBlockDragEnd(item, fromDay, toDay, newStart, newDuration);
 	}
-
-	// ── Block Resize ──
 
 	private async onBlockResize(
 		item: TimelineItem,
@@ -1245,97 +1001,7 @@ export class WeekFlowView extends ItemView {
 		newStart: number,
 		newEnd: number
 	) {
-		const date = this.dates[dayIndex];
-		const dateKey = date.format("YYYY-MM-DD");
-		const items = this.weekData.get(dateKey) || [];
-		const idx = items.findIndex(i => i.id === item.id);
-		if (idx === -1) return;
-
-		if (items[idx].checkbox === "actual") {
-			// Actual block: change actualTime, preserve planTime
-			const oldActualTime = items[idx].actualTime ? { ...items[idx].actualTime! } : undefined;
-			items[idx].actualTime = { start: newStart, end: newEnd };
-
-			await this.guardedSave(date, items);
-
-			const action: UndoableAction = {
-				description: "Resize actual block",
-				execute: async () => { /* already executed */ },
-				undo: async () => {
-					const items = this.weekData.get(dateKey) || [];
-					const idx = items.findIndex(i => i.id === item.id);
-					if (idx !== -1) {
-						items[idx].actualTime = oldActualTime;
-						await this.guardedSave(date, items);
-					}
-				},
-			};
-			this.undoManager.pushExecuted(action);
-		} else {
-			const oldStart = items[idx].planTime.start;
-			const oldEnd = items[idx].planTime.end;
-
-			items[idx].planTime = { start: newStart, end: newEnd };
-
-			await this.guardedSave(date, items);
-
-			const action: UndoableAction = {
-				description: "Resize block",
-				execute: async () => { /* already executed */ },
-				undo: async () => {
-					const items = this.weekData.get(dateKey) || [];
-					const idx = items.findIndex(i => i.id === item.id);
-					if (idx !== -1) {
-						items[idx].planTime = { start: oldStart, end: oldEnd };
-						await this.guardedSave(date, items);
-					}
-				},
-			};
-			this.undoManager.pushExecuted(action);
-		}
-
-		await this.refresh();
-	}
-
-	// ── Overnight Split Helper ──
-
-	private splitOvernightItem(
-		item: TimelineItem,
-		dayIndex: number
-	): {
-		today: TimelineItem;
-		tomorrow: TimelineItem;
-		todayKey: string;
-		tomorrowKey: string;
-		todayDayIndex: number;
-		tomorrowDayIndex: number;
-	} | null {
-		const MIDNIGHT = 1440;
-		if (item.planTime.end <= MIDNIGHT) return null;
-		if (dayIndex >= 6) return null; // Can't split past last day of week
-
-		const todayDayIndex = dayIndex;
-		const tomorrowDayIndex = dayIndex + 1;
-		const todayKey = this.dates[todayDayIndex].format("YYYY-MM-DD");
-		const tomorrowKey = this.dates[tomorrowDayIndex].format("YYYY-MM-DD");
-
-		// Today portion: start ~ 24:00
-		const today: TimelineItem = {
-			...item,
-			id: generateItemId(),
-			planTime: { start: item.planTime.start, end: MIDNIGHT },
-		};
-
-		// Tomorrow portion: 00:00 ~ overflow
-		const overflowMinutes = item.planTime.end - MIDNIGHT;
-		const tomorrow: TimelineItem = {
-			...item,
-			id: generateItemId(),
-			tags: [...item.tags],
-			planTime: { start: 0, end: overflowMinutes },
-		};
-
-		return { today, tomorrow, todayKey, tomorrowKey, todayDayIndex, tomorrowDayIndex };
+		await this.blockActions!.onBlockResize(item, dayIndex, newStart, newEnd);
 	}
 
 	// ── Planning Panel ──
@@ -1529,205 +1195,7 @@ export class WeekFlowView extends ItemView {
 		const item = this.panelDragItem;
 		this.panelDragItem = null;
 
-		const src = item.source;
-		const duration = src.type === "overdue"
-			? (src.planTime.end - src.planTime.start)
-			: this.plugin.settings.defaultBlockDuration;
-
-		const snappedStart = Math.round(cell.minutes / 10) * 10;
-		const snappedEnd = snappedStart + duration;
-
-		const date = this.dates[cell.dayIndex];
-		const dateKey = date.format("YYYY-MM-DD");
-		const today = window.moment().startOf("day");
-		const isPast = date.isBefore(today, "day");
-
-		// For project source: ensure block ID and create linked content
-		let contentForTimeline = item.content;
-		if (src.type === "project") {
-			let blockId = src.blockId;
-			if (!blockId) {
-				// Auto-assign block ID to project note line
-				blockId = generateBlockId();
-				// Find the matching task's line number
-				const pd = this.projectData.find(
-					(d) => d.project.path === src.projectPath
-				);
-				if (pd) {
-					const taskIdx = pd.tasks.findIndex(
-						(t) => t.content === item.content
-					);
-					if (taskIdx !== -1) {
-						await this.withSelfWriteGuard(() =>
-							appendBlockIdToLine(
-								this.app.vault,
-								src.projectPath,
-								pd.tasks[taskIdx].lineNumber,
-								blockId
-							)
-						);
-					}
-				}
-			}
-			// Build the project link for the timeline item
-			const projectFile = this.app.vault.getAbstractFileByPath(src.projectPath);
-			const projectName = projectFile
-				? projectFile.name.replace(/\.md$/, "")
-				: src.projectPath.replace(/\.md$/, "");
-			contentForTimeline = `${item.content} [[${projectName}#^${blockId}]]`;
-		}
-
-		// Sunday clamping
-		const finalEnd = cell.dayIndex >= 6 ? Math.min(snappedEnd, 1440) : snappedEnd;
-
-		const newItem: TimelineItem = {
-			id: generateItemId(),
-			checkbox: isPast ? "actual" : "plan",
-			planTime: { start: snappedStart, end: finalEnd },
-			content: contentForTimeline,
-			tags: [...item.tags],
-			rawSuffix: item.rawSuffix,
-		};
-
-		// Check overnight split
-		const splitResult = this.splitOvernightItem(newItem, cell.dayIndex);
-		if (splitResult) {
-			// Save today portion
-			const todayItems = [...(this.weekData.get(splitResult.todayKey) || []), splitResult.today];
-			this.weekData.set(splitResult.todayKey, todayItems);
-			await this.guardedSave(this.dates[splitResult.todayDayIndex], todayItems);
-
-			// Save tomorrow portion
-			const tomorrowItems = [...(this.weekData.get(splitResult.tomorrowKey) || []), splitResult.tomorrow];
-			this.weekData.set(splitResult.tomorrowKey, tomorrowItems);
-			await this.guardedSave(this.dates[splitResult.tomorrowDayIndex], tomorrowItems);
-
-			// Build undo that removes both split items and undoes source side-effect
-			const undoSplitItems = async () => {
-				const ti = this.weekData.get(splitResult.todayKey) || [];
-				this.weekData.set(splitResult.todayKey, ti.filter(i => i.id !== splitResult.today.id));
-				await this.guardedSave(this.dates[splitResult.todayDayIndex], this.weekData.get(splitResult.todayKey)!);
-
-				const tmr = this.weekData.get(splitResult.tomorrowKey) || [];
-				this.weekData.set(splitResult.tomorrowKey, tmr.filter(i => i.id !== splitResult.tomorrow.id));
-				await this.guardedSave(this.dates[splitResult.tomorrowDayIndex], this.weekData.get(splitResult.tomorrowKey)!);
-			};
-
-			// Handle source-specific side effects
-			if (src.type === "overdue") {
-				const origDate = this.dates.find(d => d.format("YYYY-MM-DD") === src.dateKey);
-				if (origDate) {
-					const origItems = this.weekData.get(src.dateKey) || [];
-					const origIdx = origItems.findIndex(i => i.id === src.originalId);
-					if (origIdx !== -1) {
-						const oldCheckbox = origItems[origIdx].checkbox;
-						origItems[origIdx].checkbox = "deferred";
-						await this.guardedSave(origDate, origItems);
-
-						const action: UndoableAction = {
-							description: "Schedule overdue item (overnight split)",
-							execute: async () => { /* already executed */ },
-							undo: async () => {
-								const oi = this.weekData.get(src.dateKey) || [];
-								const idx = oi.findIndex(i => i.id === src.originalId);
-								if (idx !== -1) {
-									oi[idx].checkbox = oldCheckbox;
-									await this.guardedSave(origDate, oi);
-								}
-								await undoSplitItems();
-							},
-						};
-						this.undoManager.pushExecuted(action);
-					}
-				}
-			} else if (src.type === "inbox") {
-				const inboxLine = serializeCheckboxItem(item.content, item.tags, item.rawSuffix);
-				await this.removeFromInbox(src.notePath, src.lineNumber);
-
-				const action: UndoableAction = {
-					description: "Schedule inbox item (overnight split)",
-					execute: async () => { /* already executed */ },
-					undo: async () => {
-						await undoSplitItems();
-						await addToInbox(this.app.vault, this.plugin.settings, inboxLine);
-					},
-				};
-				this.undoManager.pushExecuted(action);
-			} else {
-				const action: UndoableAction = {
-					description: "Schedule project task (overnight split)",
-					execute: async () => { /* already executed */ },
-					undo: undoSplitItems,
-				};
-				this.undoManager.pushExecuted(action);
-			}
-		} else {
-			const existing = this.weekData.get(dateKey) || [];
-			existing.push(newItem);
-			this.weekData.set(dateKey, existing);
-
-			await this.guardedSave(date, existing);
-
-			// Handle source-specific side effects
-			if (src.type === "overdue") {
-				// Mark original as deferred
-				const origDate = this.dates.find(d => d.format("YYYY-MM-DD") === src.dateKey);
-				if (origDate) {
-					const origItems = this.weekData.get(src.dateKey) || [];
-					const origIdx = origItems.findIndex(i => i.id === src.originalId);
-					if (origIdx !== -1) {
-						const oldCheckbox = origItems[origIdx].checkbox;
-						origItems[origIdx].checkbox = "deferred";
-						await this.guardedSave(origDate, origItems);
-
-						const action: UndoableAction = {
-							description: "Schedule overdue item",
-							execute: async () => { /* already executed */ },
-							undo: async () => {
-								const oi = this.weekData.get(src.dateKey) || [];
-								const idx = oi.findIndex(i => i.id === src.originalId);
-								if (idx !== -1) {
-									oi[idx].checkbox = oldCheckbox;
-									await this.guardedSave(origDate, oi);
-								}
-								const ni = this.weekData.get(dateKey) || [];
-								this.weekData.set(dateKey, ni.filter(i => i.id !== newItem.id));
-								await this.guardedSave(date, this.weekData.get(dateKey)!);
-							},
-						};
-						this.undoManager.pushExecuted(action);
-					}
-				}
-			} else if (src.type === "inbox") {
-				const inboxLine = serializeCheckboxItem(item.content, item.tags, item.rawSuffix);
-				await this.removeFromInbox(src.notePath, src.lineNumber);
-
-				const action: UndoableAction = {
-					description: "Schedule inbox item",
-					execute: async () => { /* already executed */ },
-					undo: async () => {
-						const ni = this.weekData.get(dateKey) || [];
-						this.weekData.set(dateKey, ni.filter(i => i.id !== newItem.id));
-						await this.guardedSave(date, this.weekData.get(dateKey)!);
-						await addToInbox(this.app.vault, this.plugin.settings, inboxLine);
-					},
-				};
-				this.undoManager.pushExecuted(action);
-			} else {
-				const action: UndoableAction = {
-					description: "Schedule project task",
-					execute: async () => { /* already executed */ },
-					undo: async () => {
-						const ni = this.weekData.get(dateKey) || [];
-						this.weekData.set(dateKey, ni.filter(i => i.id !== newItem.id));
-						await this.guardedSave(date, this.weekData.get(dateKey)!);
-					},
-				};
-				this.undoManager.pushExecuted(action);
-			}
-		}
-
-		await this.refresh();
+		await this.blockActions!.onPanelDragEnd(item, cell);
 	}
 
 	private cleanupPanelDrag(): void {
@@ -1741,106 +1209,12 @@ export class WeekFlowView extends ItemView {
 		}
 	}
 
-	private async removeFromInbox(filePath: string, lineNumber: number): Promise<void> {
-		await this.withSelfWriteGuard(() =>
-			removeFromInboxFile(this.app.vault, filePath, lineNumber)
-		);
-	}
-
-	// ── Block Return to Inbox ──
-
 	private async onBlockReturnToInbox(item: TimelineItem, fromDay: number): Promise<void> {
-		const fromDate = this.dates[fromDay];
-		const fromKey = fromDate.format("YYYY-MM-DD");
-		const today = window.moment().startOf("day");
-
-		// Serialize as inbox checkbox line
-		const inboxLine = serializeCheckboxItem(item.content, item.tags, item.rawSuffix);
-
-		// Add to inbox
-		await this.withSelfWriteGuard(() =>
-			addToInbox(this.app.vault, this.plugin.settings, inboxLine)
-		);
-
-		// Track the added inbox item for undo
-		const freshInbox = await getInboxItems(this.app.vault, this.plugin.settings);
-		const addedItem = freshInbox.find(i =>
-			serializeCheckboxItem(i.content, i.tags, i.rawSuffix) === inboxLine
-		);
-		const addedPath = addedItem?.sourcePath;
-		const addedLine = addedItem?.lineNumber;
-
-		const fromItems = this.weekData.get(fromKey) || [];
-		const oldCheckbox = item.checkbox;
-
-		if (fromDate.isBefore(today, "day")) {
-			// Past day: mark as deferred
-			const idx = fromItems.findIndex(i => i.id === item.id);
-			if (idx !== -1) {
-				fromItems[idx].checkbox = "deferred";
-				await this.guardedSave(fromDate, fromItems);
-			}
-		} else {
-			// Today or future: delete
-			this.weekData.set(fromKey, fromItems.filter(i => i.id !== item.id));
-			await this.guardedSave(fromDate, this.weekData.get(fromKey)!);
-		}
-
-		// Undo
-		const action: UndoableAction = {
-			description: "Return block to inbox",
-			execute: async () => { /* already executed */ },
-			undo: async () => {
-				// Remove from inbox
-				if (addedPath != null && addedLine != null) {
-					await this.withSelfWriteGuard(() =>
-						removeFromInboxFile(this.app.vault, addedPath, addedLine)
-					);
-				}
-				// Restore block
-				const fi = this.weekData.get(fromKey) || [];
-				if (fromDate.isBefore(today, "day")) {
-					const idx = fi.findIndex(i => i.id === item.id);
-					if (idx !== -1) {
-						fi[idx].checkbox = oldCheckbox;
-						await this.guardedSave(fromDate, fi);
-					}
-				} else {
-					item.checkbox = oldCheckbox;
-					fi.push(item);
-					this.weekData.set(fromKey, fi);
-					await this.guardedSave(fromDate, fi);
-				}
-			},
-		};
-		this.undoManager.pushExecuted(action);
-
-		await this.refresh();
+		await this.blockActions!.onBlockReturnToInbox(item, fromDay);
 	}
-
-	// ── Block Delete (extracted for reuse) ──
 
 	private async deleteBlock(dayIndex: number, item: TimelineItem) {
-		const date = this.dates[dayIndex];
-		const dateKey = date.format("YYYY-MM-DD");
-		const items = this.weekData.get(dateKey) || [];
-		const oldItem = { ...item, planTime: { ...item.planTime }, actualTime: item.actualTime ? { ...item.actualTime } : undefined, tags: [...item.tags] };
-		this.weekData.set(dateKey, items.filter(i => i.id !== item.id));
-
-		await this.guardedSave(date, this.weekData.get(dateKey)!);
-
-		const action: UndoableAction = {
-			description: "Delete block",
-			execute: async () => { /* already executed */ },
-			undo: async () => {
-				const items = this.weekData.get(dateKey) || [];
-				items.push(oldItem);
-				this.weekData.set(dateKey, items);
-				await this.guardedSave(date, items);
-			},
-		};
-		this.undoManager.pushExecuted(action);
-		await this.refresh();
+		await this.blockActions!.deleteBlock(dayIndex, item);
 	}
 
 	// ── Block Right-Click Context Menu ──
@@ -1946,147 +1320,18 @@ export class WeekFlowView extends ItemView {
 		}
 	}
 
-	// ── Block Complete/Uncomplete ──
+	// ── Block Complete/Uncomplete/Sort (delegated to BlockActions) ──
 
 	private async onBlockComplete(dayIndex: number, item: TimelineItem) {
-		const date = this.dates[dayIndex];
-		const dateKey = date.format("YYYY-MM-DD");
-		const items = this.weekData.get(dateKey) || [];
-		const idx = items.findIndex(i => i.id === item.id);
-		if (idx === -1) return;
-
-		const oldCheckbox = items[idx].checkbox;
-		items[idx].checkbox = "actual";
-
-		await this.guardedSave(date, items);
-
-		const action: UndoableAction = {
-			description: "Complete block",
-			execute: async () => { /* already executed */ },
-			undo: async () => {
-				const items = this.weekData.get(dateKey) || [];
-				const idx = items.findIndex(i => i.id === item.id);
-				if (idx !== -1) {
-					items[idx].checkbox = oldCheckbox;
-					await this.guardedSave(date, items);
-				}
-			},
-		};
-		this.undoManager.pushExecuted(action);
-
-		// Check for project task link: [[...#^...]]
-		const linkMatch = item.content.match(/\[\[([^#\]]+)#\^([a-zA-Z0-9-]+)\]\]/);
-		if (linkMatch) {
-			const projectNoteName = linkMatch[1];
-			const blockId = linkMatch[2];
-			// Find the project file path
-			const projectFile = this.app.vault.getMarkdownFiles().find(
-				(f) => f.basename === projectNoteName
-			);
-			if (projectFile) {
-				new ConfirmModal(
-					this.app,
-					"Mark the original project task as complete too?",
-					async () => {
-						await this.withSelfWriteGuard(() =>
-							completeProjectTask(this.app.vault, projectFile.path, blockId)
-						);
-					}
-				).open();
-			}
-		}
-
-		await this.refresh();
+		await this.blockActions!.onBlockComplete(dayIndex, item);
 	}
 
 	private async onBlockUncomplete(dayIndex: number, item: TimelineItem) {
-		const date = this.dates[dayIndex];
-		const dateKey = date.format("YYYY-MM-DD");
-		const items = this.weekData.get(dateKey) || [];
-		const idx = items.findIndex(i => i.id === item.id);
-		if (idx === -1) return;
-
-		const oldCheckbox = items[idx].checkbox;
-		const oldActualTime = items[idx].actualTime ? { ...items[idx].actualTime! } : undefined;
-		items[idx].checkbox = "plan";
-		items[idx].actualTime = undefined;
-
-		await this.guardedSave(date, items);
-
-		const action: UndoableAction = {
-			description: "Uncomplete block",
-			execute: async () => { /* already executed */ },
-			undo: async () => {
-				const items = this.weekData.get(dateKey) || [];
-				const idx = items.findIndex(i => i.id === item.id);
-				if (idx !== -1) {
-					items[idx].checkbox = oldCheckbox;
-					items[idx].actualTime = oldActualTime;
-					await this.guardedSave(date, items);
-				}
-			},
-		};
-		this.undoManager.pushExecuted(action);
-		await this.refresh();
+		await this.blockActions!.onBlockUncomplete(dayIndex, item);
 	}
 
-	// ── Block Sorting (Compact) ──
-
 	private async sortBlocksCompact() {
-		const settings = this.plugin.settings;
-		const dayStartMinutes = settings.dayStartHour * 60;
-
-		// Save old state for undo
-		const oldWeekData = new Map<string, TimelineItem[]>();
-		for (const [key, items] of this.weekData) {
-			oldWeekData.set(
-				key,
-				items.map((i) => ({
-					...i,
-					planTime: { ...i.planTime },
-					actualTime: i.actualTime ? { ...i.actualTime } : undefined,
-					tags: [...i.tags],
-				}))
-			);
-		}
-
-		// Compact each day
-		for (let d = 0; d < 7; d++) {
-			const dateKey = this.dates[d].format("YYYY-MM-DD");
-			const items = this.weekData.get(dateKey) || [];
-
-			const plans = items
-				.filter((i) => i.checkbox === "plan")
-				.sort((a, b) => a.planTime.start - b.planTime.start);
-			const others = items.filter((i) => i.checkbox !== "plan");
-
-			let cursor = dayStartMinutes;
-			for (const item of plans) {
-				const duration = item.planTime.end - item.planTime.start;
-				item.planTime = { start: cursor, end: cursor + duration };
-				cursor += duration;
-			}
-
-			this.weekData.set(dateKey, [...plans, ...others]);
-			await this.guardedSave(this.dates[d], this.weekData.get(dateKey)!);
-		}
-
-		const action: UndoableAction = {
-			description: "Compact plan blocks",
-			execute: async () => {
-				/* already executed */
-			},
-			undo: async () => {
-				for (let d = 0; d < 7; d++) {
-					const dateKey = this.dates[d].format("YYYY-MM-DD");
-					const oldItems = oldWeekData.get(dateKey) || [];
-					this.weekData.set(dateKey, oldItems);
-					await this.guardedSave(this.dates[d], oldItems);
-				}
-			},
-		};
-		this.undoManager.pushExecuted(action);
-		await this.refresh();
+		await this.blockActions!.sortBlocksCompact();
 	}
 
 	// ── Preset Menu ──
