@@ -735,6 +735,10 @@ export class GridRenderer {
 
 	private externalGhostEls: HTMLElement[] = [];
 
+	public updateCurrentTimeIndicator(): void {
+		this.renderCurrentTimeIndicator();
+	}
+
 	public renderExternalGhost(dayIndex: number, startMin: number, endMin: number, color: string, label: string): void {
 		this.removeExternalGhost();
 		if (!this.gridEl) return;
@@ -1760,10 +1764,6 @@ export class GridRenderer {
 		const gridRect = this.gridEl.getBoundingClientRect();
 		if (gridRect.width === 0 || gridRect.height === 0) return;
 
-		const timeLabelWidth = 60;
-		const slotsWidth = gridRect.width - timeLabelWidth;
-		const dayWidth = slotsWidth / this.visibleDays;
-
 		const headerCell = this.gridEl.querySelector(".weekflow-header-cell");
 		if (!headerCell) return;
 		const headerHeight = (headerCell as HTMLElement).getBoundingClientRect().height;
@@ -1772,19 +1772,19 @@ export class GridRenderer {
 		if (bodyHeight <= 0) return;
 
 		const topPos = headerHeight + this.minutesToPixelY(currentMinutes, bodyHeight);
-		const leftPos = timeLabelWidth + todayVisibleIndex * dayWidth;
+		const frac = todayVisibleIndex / this.visibleDays;
 
 		// Create line
 		const line = this.gridEl.createDiv({ cls: "weekflow-now-line" });
 		line.style.top = `${topPos - 1}px`;
-		line.style.left = `${leftPos}px`;
-		line.style.width = `${dayWidth}px`;
+		line.style.left = `calc(${60 * (1 - frac)}px + ${frac * 100}%)`;
+		line.style.width = `calc(${100 / this.visibleDays}% - ${60 / this.visibleDays}px)`;
 		this.currentTimeEl = line;
 
 		// Create dot (centered at left edge of line, protruding into time label column)
 		const dot = this.gridEl.createDiv({ cls: "weekflow-now-dot" });
 		dot.style.top = `${topPos - 4}px`;
-		dot.style.left = `${leftPos - 4}px`;
+		dot.style.left = `calc(${60 * (1 - frac) - 4}px + ${frac * 100}%)`;
 		this.currentTimeDotEl = dot;
 	}
 

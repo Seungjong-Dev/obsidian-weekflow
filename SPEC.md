@@ -934,7 +934,7 @@ Phase 2 완료 후 Phase 3~6은 독립적으로 진행 가능하나, Phase 4는 
 Google Calendar 스타일의 현재 시간 표시선. 오늘 컬럼에 빨간 수평선과 좌측 원형 dot으로 현재 시간 위치를 표시한다.
 
 - **표시 조건:** 오늘이 visible range에 포함되고, 현재 시간이 `dayStartHour`~`dayEndHour` 범위 내일 때만 표시
-- **위치 계산:** `getCellFromPoint()`와 동일한 그리드 geometry 기반 — `position: absolute`로 gridEl 내에 배치
+- **위치 계산:** `position: absolute`로 gridEl 내에 배치. 수평 위치(`left`, `width`)는 CSS `calc()`로 그리드 열 구조(`60px repeat(N, 1fr)`)에 대응하는 상대 좌표로 설정하여, 사이드바/패널 토글 등 컨테이너 너비 변화 시 재렌더링 없이 자동 추적. 수직 위치(`top`)는 그리드 높이 기반 절대 픽셀
 - **업데이트:** `setInterval(60000)`으로 매 분 위치 갱신. `render()` 시 이전 interval 정리 후 새로 생성
 - **스타일:** 2px 빨간 수평선 (`#EA4335`) + 8px 원형 dot, `z-index: 15` (블록 위, 오버랩 핸들 아래)
 - **반응형:** 7일/3일/1일 뷰 모드 전환 및 다른 주 이동 시 자동으로 표시/숨김
