@@ -967,20 +967,25 @@
 /* Current Time Indicator */
 .weekflow-now-line {
 	position: absolute;
+	left: 0;
+	right: 0;
 	height: 2px;
 	background: #EA4335;
 	z-index: 15;
 	pointer-events: none;
+	transform: translateY(-1px);
 }
 
 .weekflow-now-dot {
 	position: absolute;
+	left: 0;
 	width: 8px;
 	height: 8px;
 	border-radius: 50%;
 	background: #EA4335;
 	z-index: 15;
 	pointer-events: none;
+	transform: translate(-50%, -50%);
 }
 
 /* Calendar Event Overlay */
