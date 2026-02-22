@@ -546,17 +546,9 @@ export class WeekFlowView extends ItemView {
 		);
 		if (dateIndex === -1) return;
 
-		this.isSelfWriting = true;
-		try {
-			await saveDailyReviewContent(
-				this.app.vault,
-				this.dates[dateIndex],
-				this.plugin.settings,
-				text
-			);
-		} finally {
-			this.isSelfWriting = false;
-		}
+		await this.withSelfWriteGuard(() =>
+			saveDailyReviewContent(this.app.vault, this.dates[dateIndex], this.plugin.settings, text)
+		);
 	}
 
 	private toggleReviewPanel() {
@@ -952,41 +944,32 @@ export class WeekFlowView extends ItemView {
 
 	// ── Save helper with self-writing guard ──
 
-	private async guardedSave(date: Moment, items: TimelineItem[]) {
+	private async withSelfWriteGuard<T>(fn: () => Promise<T>): Promise<T> {
 		this.isSelfWriting = true;
 		try {
-			await saveDailyNoteItems(
-				this.app.vault,
-				date,
-				this.plugin.settings,
-				items
-			);
+			return await fn();
 		} finally {
 			this.isSelfWriting = false;
 		}
+	}
+
+	private async guardedSave(date: Moment, items: TimelineItem[]) {
+		await this.withSelfWriteGuard(() =>
+			saveDailyNoteItems(this.app.vault, date, this.plugin.settings, items)
+		);
 	}
 
 	// ── Undo/Redo ──
 
 	async undo() {
 		if (!this.undoManager.canUndo()) return;
-		this.isSelfWriting = true;
-		try {
-			await this.undoManager.undo();
-		} finally {
-			this.isSelfWriting = false;
-		}
+		await this.withSelfWriteGuard(() => this.undoManager.undo());
 		await this.refresh();
 	}
 
 	async redo() {
 		if (!this.undoManager.canRedo()) return;
-		this.isSelfWriting = true;
-		try {
-			await this.undoManager.redo();
-		} finally {
-			this.isSelfWriting = false;
-		}
+		await this.withSelfWriteGuard(() => this.undoManager.redo());
 		await this.refresh();
 	}
 
@@ -1586,12 +1569,9 @@ export class WeekFlowView extends ItemView {
 
 	private async onInboxAddItem(text: string): Promise<void> {
 		const line = `- [ ] ${text}`;
-		this.isSelfWriting = true;
-		try {
-			await addToInbox(this.app.vault, this.plugin.settings, line);
-		} finally {
-			this.isSelfWriting = false;
-		}
+		await this.withSelfWriteGuard(() =>
+			addToInbox(this.app.vault, this.plugin.settings, line)
+		);
 		await this.refresh();
 	}
 
@@ -1752,17 +1732,14 @@ export class WeekFlowView extends ItemView {
 						(t) => t.content === item.content
 					);
 					if (taskIdx !== -1) {
-						this.isSelfWriting = true;
-						try {
-							await appendBlockIdToLine(
+						await this.withSelfWriteGuard(() =>
+							appendBlockIdToLine(
 								this.app.vault,
 								src.projectPath,
 								pd.tasks[taskIdx].lineNumber,
 								blockId
-							);
-						} finally {
-							this.isSelfWriting = false;
-						}
+							)
+						);
 					}
 				}
 			}
@@ -1939,12 +1916,9 @@ export class WeekFlowView extends ItemView {
 	}
 
 	private async removeFromInbox(filePath: string, lineNumber: number): Promise<void> {
-		this.isSelfWriting = true;
-		try {
-			await removeFromInboxFile(this.app.vault, filePath, lineNumber);
-		} finally {
-			this.isSelfWriting = false;
-		}
+		await this.withSelfWriteGuard(() =>
+			removeFromInboxFile(this.app.vault, filePath, lineNumber)
+		);
 	}
 
 	// ── Block Return to Inbox ──
@@ -1958,12 +1932,9 @@ export class WeekFlowView extends ItemView {
 		const inboxLine = serializeCheckboxItem(item.content, item.tags, item.rawSuffix);
 
 		// Add to inbox
-		this.isSelfWriting = true;
-		try {
-			await addToInbox(this.app.vault, this.plugin.settings, inboxLine);
-		} finally {
-			this.isSelfWriting = false;
-		}
+		await this.withSelfWriteGuard(() =>
+			addToInbox(this.app.vault, this.plugin.settings, inboxLine)
+		);
 
 		// Track the added inbox item for undo
 		const freshInbox = await getInboxItems(this.app.vault, this.plugin.settings);
@@ -1996,12 +1967,9 @@ export class WeekFlowView extends ItemView {
 			undo: async () => {
 				// Remove from inbox
 				if (addedPath != null && addedLine != null) {
-					this.isSelfWriting = true;
-					try {
-						await removeFromInboxFile(this.app.vault, addedPath, addedLine);
-					} finally {
-						this.isSelfWriting = false;
-					}
+					await this.withSelfWriteGuard(() =>
+						removeFromInboxFile(this.app.vault, addedPath, addedLine)
+					);
 				}
 				// Restore block
 				const fi = this.weekData.get(fromKey) || [];
@@ -2194,16 +2162,9 @@ export class WeekFlowView extends ItemView {
 					this.app,
 					"Mark the original project task as complete too?",
 					async () => {
-						this.isSelfWriting = true;
-						try {
-							await completeProjectTask(
-								this.app.vault,
-								projectFile.path,
-								blockId
-							);
-						} finally {
-							this.isSelfWriting = false;
-						}
+						await this.withSelfWriteGuard(() =>
+							completeProjectTask(this.app.vault, projectFile.path, blockId)
+						);
 					}
 				).open();
 			}
