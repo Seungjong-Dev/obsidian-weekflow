@@ -463,10 +463,6 @@ export class WeekFlowView extends ItemView {
 			this.planningPanel?.deselectAll();
 		});
 
-		// Restore scroll position after grid rebuild
-		gridWrapper.scrollTop = savedScrollTop;
-		gridWrapper.scrollLeft = savedScrollLeft;
-
 		// Review panel (inside content area — aligns with grid columns)
 		if (this.reviewController) {
 			this.reviewController.render(contentArea, this.currentVisibleDays, this.currentDayOffset);
@@ -476,6 +472,16 @@ export class WeekFlowView extends ItemView {
 		if (this.currentLayoutTier === "narrow") {
 			this.renderBottomSheet(body);
 		}
+
+		// Restore scroll position after ALL siblings (review panel, bottom sheet)
+		// are in the DOM, so gridWrapper's flex height is final.
+		// requestAnimationFrame ensures layout is fully resolved before we set
+		// scrollTop (synchronous reflow alone is insufficient when flex ancestors
+		// depend on sibling sizes).
+		requestAnimationFrame(() => {
+			gridWrapper.scrollTop = savedScrollTop;
+			gridWrapper.scrollLeft = savedScrollLeft;
+		});
 	}
 
 	private toggleReviewPanel() {
