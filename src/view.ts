@@ -9,7 +9,7 @@ import type { ProjectInfo, InboxCheckboxItem } from "./daily-note";
 import { GridRenderer } from "./grid-renderer";
 import { BlockModal } from "./block-modal";
 import { EditBlockModal } from "./edit-block-modal";
-import { generateItemId, extractBlockId } from "./parser";
+import { generateItemId } from "./parser";
 import { UndoManager, type UndoableAction } from "./undo-manager";
 import { PlanningPanel, type PanelSection } from "./planning-panel";
 import type { CheckboxItem } from "./parser";
@@ -17,6 +17,7 @@ import { getLayoutTier, getVisibleDays, isTouchDevice, type LayoutTier } from ".
 import { ReviewPanelController } from "./review-panel";
 import { showPresetMenu } from "./preset-manager";
 import { BlockActions } from "./block-actions";
+import { collectOverdueItems, collectInboxPanelItems } from "./panel-data";
 
 export class WeekFlowView extends ItemView {
 	plugin: WeekFlowPlugin;
@@ -1040,14 +1041,14 @@ export class WeekFlowView extends ItemView {
 				type: "overdue",
 				title: "Overdue",
 				icon: "alert-triangle",
-				items: this.collectOverdueItems(),
+				items: collectOverdueItems(this.dates, this.weekData),
 				collapsed: false,
 			},
 			{
 				type: "inbox",
 				title: "Inbox",
 				icon: "inbox",
-				items: this.collectInboxPanelItems(),
+				items: collectInboxPanelItems(this.inboxItems),
 				collapsed: false,
 				canAddItem: hasPrimaryNoteSource,
 				showSourcePath: hasMultipleSources,
@@ -1065,76 +1066,6 @@ export class WeekFlowView extends ItemView {
 			addToInbox(this.app.vault, this.plugin.settings, line)
 		);
 		await this.refresh();
-	}
-
-	private collectProjectSections(): PanelSection[] {
-		return this.projectData.filter(({ tasks }) => tasks.length > 0).map(({ project, tasks }) => ({
-			type: "project" as const,
-			title: project.title,
-			icon: "folder",
-			key: `project:${project.path}`,
-			items: tasks.map((task) => ({
-				id: generateItemId(),
-				content: task.content,
-				tags: [...task.tags],
-				rawSuffix: task.rawSuffix,
-				source: {
-					type: "project" as const,
-					projectPath: project.path,
-					blockId: this.extractBlockIdFromRaw(task),
-				},
-			})),
-			collapsed: false,
-		}));
-	}
-
-	private extractBlockIdFromRaw(task: CheckboxItem): string | undefined {
-		// Reconstruct the raw line and extract block ID
-		const parts = [task.content];
-		for (const tag of task.tags) parts.push(`#${tag}`);
-		if (task.rawSuffix) parts.push(task.rawSuffix);
-		const line = `- [ ] ${parts.join(" ")}`;
-		return extractBlockId(line);
-	}
-
-	private collectOverdueItems(): PanelItem[] {
-		const today = window.moment().startOf("day");
-		const items: PanelItem[] = [];
-		for (let i = 0; i < 7; i++) {
-			if (this.dates[i].isSameOrAfter(today, "day")) continue;
-			const dateKey = this.dates[i].format("YYYY-MM-DD");
-			for (const item of (this.weekData.get(dateKey) || [])) {
-				if (item.checkbox !== "plan") continue;
-				items.push({
-					id: generateItemId(),
-					content: item.content,
-					tags: [...item.tags],
-					rawSuffix: item.rawSuffix,
-					source: {
-						type: "overdue",
-						dateKey,
-						planTime: { ...item.planTime },
-						originalId: item.id,
-						lineNumber: item.lineNumber,
-					},
-				});
-			}
-		}
-		return items;
-	}
-
-	private collectInboxPanelItems(): PanelItem[] {
-		return this.inboxItems.map((ci) => ({
-			id: generateItemId(),
-			content: ci.content,
-			tags: [...ci.tags],
-			rawSuffix: ci.rawSuffix,
-			source: {
-				type: "inbox" as const,
-				notePath: ci.sourcePath,
-				lineNumber: ci.lineNumber,
-			},
-		}));
 	}
 
 	// ── Panel Drag → Grid ──
