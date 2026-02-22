@@ -16,6 +16,68 @@ export function resolveDailyNotePath(
 }
 
 /**
+ * Convert a moment.js daily-note path pattern into a RegExp that matches
+ * any resolved daily-note file path (with .md extension).
+ *
+ * Strategy: replace moment tokens with placeholder strings, escape regex
+ * literals, then restore placeholders as capture patterns.
+ */
+function buildDailyNotePathRegex(pattern: string): RegExp {
+	// Moment tokens sorted longest-first to avoid partial matches
+	const tokenMap: [string, string][] = [
+		["YYYY", "\\d{4}"],
+		["YY", "\\d{2}"],
+		["MMMM", "[^\\\\/]+"],  // Full month name (locale-dependent)
+		["MMM", "[^\\\\/]+"],   // Abbreviated month name
+		["MM", "\\d{2}"],
+		["Mo", "\\d{1,2}(?:st|nd|rd|th)"],
+		["M", "\\d{1,2}"],
+		["DDDD", "\\d{3}"],     // Day of year
+		["DDD", "\\d{1,3}"],
+		["DD", "\\d{2}"],
+		["Do", "\\d{1,2}(?:st|nd|rd|th)"],
+		["D", "\\d{1,2}"],
+		["dddd", "[^\\\\/]+"],  // Full day name
+		["ddd", "[^\\\\/]+"],   // Abbreviated day name
+		["dd", "[^\\\\/]+"],    // Min day name
+		["d", "\\d"],
+		["Wo", "\\d{1,2}(?:st|nd|rd|th)"],
+		["WW", "\\d{2}"],
+		["W", "\\d{1,2}"],
+		["ww", "\\d{2}"],
+		["w", "\\d{1,2}"],
+		["gggg", "\\d{4}"],
+		["gg", "\\d{2}"],
+		["GGGG", "\\d{4}"],
+		["GG", "\\d{2}"],
+	];
+
+	// Phase 1: replace tokens with unique placeholders
+	let work = pattern;
+	const replacements: { placeholder: string; regex: string }[] = [];
+	let idx = 0;
+
+	for (const [token, regex] of tokenMap) {
+		while (work.includes(token)) {
+			const placeholder = `\x00${idx++}\x00`;
+			work = work.replace(token, placeholder);
+			replacements.push({ placeholder, regex });
+		}
+	}
+
+	// Phase 2: escape remaining literal characters for regex
+	work = work.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+	// Phase 3: restore placeholders → regex patterns
+	for (const { placeholder, regex } of replacements) {
+		work = work.replace(placeholder, regex);
+	}
+
+	// Match the full path with .md extension
+	return new RegExp("^" + work + "\\.md$");
+}
+
+/**
  * Read timeline items from a daily note for a given date.
  */
 export async function getDailyNoteItems(
@@ -275,7 +337,7 @@ function isFolder(vault: Vault, path: string): boolean {
 /**
  * Collect all .md files under a folder recursively.
  */
-function collectMarkdownFiles(vault: Vault, folderPath: string): TFile[] {
+function collectMarkdownFiles(vault: Vault, folderPath: string, exclude?: RegExp): TFile[] {
 	const folder = vault.getAbstractFileByPath(normalizePath(folderPath));
 	if (!folder || !(folder instanceof TFolder)) return [];
 
@@ -283,6 +345,7 @@ function collectMarkdownFiles(vault: Vault, folderPath: string): TFile[] {
 	const recurse = (f: TFolder) => {
 		for (const child of f.children) {
 			if (child instanceof TFile && child.extension === "md") {
+				if (exclude && exclude.test(child.path)) continue;
 				files.push(child);
 			} else if (child instanceof TFolder) {
 				recurse(child);
@@ -296,12 +359,13 @@ function collectMarkdownFiles(vault: Vault, folderPath: string): TFile[] {
 /**
  * Get all file paths that inbox sources reference (for file-change watching).
  */
-export function getInboxWatchPaths(vault: Vault, sources: InboxSource[]): string[] {
+export function getInboxWatchPaths(vault: Vault, sources: InboxSource[], dailyNotePath: string): string[] {
+	const exclude = buildDailyNotePathRegex(dailyNotePath);
 	const paths: string[] = [];
 	for (const src of sources) {
 		const p = normalizePath(src.path);
 		if (isFolder(vault, p)) {
-			for (const f of collectMarkdownFiles(vault, p)) {
+			for (const f of collectMarkdownFiles(vault, p, exclude)) {
 				paths.push(f.path);
 			}
 		} else {
@@ -321,6 +385,7 @@ export async function getInboxItems(
 	vault: Vault,
 	settings: WeekFlowSettings
 ): Promise<InboxCheckboxItem[]> {
+	const exclude = buildDailyNotePathRegex(settings.dailyNotePath);
 	const allItems: InboxCheckboxItem[] = [];
 
 	for (const source of settings.inboxSources) {
@@ -328,7 +393,7 @@ export async function getInboxItems(
 
 		if (isFolder(vault, p)) {
 			// Folder source: read all .md files recursively
-			const files = collectMarkdownFiles(vault, p);
+			const files = collectMarkdownFiles(vault, p, exclude);
 			for (const file of files) {
 				const content = await vault.read(file);
 				const items = parseCheckboxItems(content, ""); // No heading: parse entire file

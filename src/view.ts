@@ -245,7 +245,7 @@ export class WeekFlowView extends ItemView {
 		}
 
 		// Add inbox source paths to watched files
-		const inboxPaths = getInboxWatchPaths(this.app.vault, settings.inboxSources);
+		const inboxPaths = getInboxWatchPaths(this.app.vault, settings.inboxSources, settings.dailyNotePath);
 		for (const ip of inboxPaths) {
 			if (!this.weekNotePaths.includes(ip)) {
 				this.weekNotePaths.push(ip);
