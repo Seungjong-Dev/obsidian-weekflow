@@ -362,6 +362,11 @@ export class WeekFlowView extends ItemView {
 	}
 
 	private renderView() {
+		// Save scroll position before destroying the DOM
+		const prevGridWrapper = this.contentEl.querySelector(".weekflow-grid-wrapper") as HTMLElement | null;
+		const savedScrollTop = prevGridWrapper?.scrollTop ?? 0;
+		const savedScrollLeft = prevGridWrapper?.scrollLeft ?? 0;
+
 		// Clean up old grid renderer listeners before rebuilding
 		if (this.gridRenderer) {
 			this.gridRenderer.destroy();
@@ -467,6 +472,16 @@ export class WeekFlowView extends ItemView {
 		if (this.currentLayoutTier === "narrow") {
 			this.renderBottomSheet(body);
 		}
+
+		// Restore scroll position after ALL siblings (review panel, bottom sheet)
+		// are in the DOM, so gridWrapper's flex height is final.
+		// requestAnimationFrame ensures layout is fully resolved before we set
+		// scrollTop (synchronous reflow alone is insufficient when flex ancestors
+		// depend on sibling sizes).
+		requestAnimationFrame(() => {
+			gridWrapper.scrollTop = savedScrollTop;
+			gridWrapper.scrollLeft = savedScrollLeft;
+		});
 	}
 
 	private toggleReviewPanel() {
@@ -1221,6 +1236,7 @@ export class WeekFlowView extends ItemView {
 		if (!file) return;
 		const leaf = this.app.workspace.getLeaf("tab");
 		await leaf.openFile(file as any);
+		this.app.workspace.revealLeaf(leaf);
 		if (lineNumber != null) {
 			const view = leaf.view as any;
 			if (view?.editor) {
