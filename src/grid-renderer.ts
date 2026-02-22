@@ -30,8 +30,6 @@ interface TouchBlockSelection {
 	originalStart: number;
 	originalEnd: number;
 	originalDayIndex: number;
-	isPenHover: boolean;
-	penTapConverted: boolean;
 	// Accumulated virtual position in move mode
 	currentStart: number;
 	currentEnd: number;
@@ -133,7 +131,6 @@ export class GridRenderer {
 	// Touch block selection
 	private touchBlockSelection: TouchBlockSelection | null = null;
 	private actionBarEl: HTMLElement | null = null;
-	private actionBarHovered = false;
 
 	// Swipe detection state
 	private swipeStartX = 0;
@@ -1816,8 +1813,6 @@ export class GridRenderer {
 			originalStart: dragTime.start,
 			originalEnd: dragTime.end,
 			originalDayIndex: dayIndex,
-			isPenHover: false,
-			penTapConverted: false,
 			currentStart: dragTime.start,
 			currentEnd: dragTime.end,
 			currentDayIndex: dayIndex,
@@ -1839,11 +1834,6 @@ export class GridRenderer {
 			setIcon(btn, icon);
 			btn.addEventListener("click", (e) => {
 				e.stopPropagation();
-				// Any action bar button click converts pen hover to permanent
-				if (this.touchBlockSelection?.isPenHover) {
-					this.touchBlockSelection.isPenHover = false;
-					this.touchBlockSelection.penTapConverted = true;
-				}
 				onClick();
 			});
 			btn.addEventListener("pointerdown", (e) => { e.stopPropagation(); e.preventDefault(); });
@@ -1947,29 +1937,6 @@ export class GridRenderer {
 	private mountActionBar(bar: HTMLElement, anchorEl: HTMLElement): void {
 		document.body.appendChild(bar);
 		this.actionBarEl = bar;
-		this.actionBarHovered = false;
-
-		// Track pen hover on the action bar to prevent premature pen-hover dismiss
-		bar.addEventListener("pointerenter", (e) => {
-			if (e.pointerType === "pen") {
-				this.actionBarHovered = true;
-			}
-		});
-		bar.addEventListener("pointerleave", (e) => {
-			if (e.pointerType === "pen") {
-				this.actionBarHovered = false;
-				// If pen left action bar and selection is still hover-based, schedule dismiss
-				if (this.touchBlockSelection?.isPenHover && !this.touchBlockSelection?.penTapConverted) {
-					setTimeout(() => {
-						if (this.touchBlockSelection?.isPenHover
-							&& !this.touchBlockSelection?.penTapConverted
-							&& !this.actionBarHovered) {
-							this.clearTouchBlockSelection();
-						}
-					}, 150);
-				}
-			}
-		});
 
 		this.positionActionBar(anchorEl);
 	}
@@ -2121,14 +2088,10 @@ export class GridRenderer {
 			this.actionBarEl.remove();
 			this.actionBarEl = null;
 		}
-		this.actionBarHovered = false;
 	}
 
 	private enterMoveMode(): void {
 		if (!this.touchBlockSelection) return;
-		// Convert pen hover to permanent selection (explicit user action)
-		this.touchBlockSelection.isPenHover = false;
-		this.touchBlockSelection.penTapConverted = true;
 		this.touchBlockSelection.mode = "move";
 		this.updateTouchBlockSelectionStyles();
 		hapticFeedback();
@@ -2198,9 +2161,6 @@ export class GridRenderer {
 
 	private enterDeleteConfirmMode(): void {
 		if (!this.touchBlockSelection) return;
-		// Convert pen hover to permanent selection (explicit user action)
-		this.touchBlockSelection.isPenHover = false;
-		this.touchBlockSelection.penTapConverted = true;
 		this.touchBlockSelection.mode = "delete-confirm";
 		this.updateTouchBlockSelectionStyles();
 
