@@ -10,13 +10,13 @@ import { GridRenderer } from "./grid-renderer";
 import { BlockModal } from "./block-modal";
 import { EditBlockModal } from "./edit-block-modal";
 import { ConfirmModal } from "./confirm-modal";
-import { PresetModal, ApplyPresetModal, CreatePresetModal } from "./preset-modal";
 import { generateItemId, serializeCheckboxItem, extractBlockId, generateBlockId, formatTime } from "./parser";
 import { UndoManager, type UndoableAction } from "./undo-manager";
 import { PlanningPanel, type PanelSection } from "./planning-panel";
 import type { CheckboxItem } from "./parser";
 import { getLayoutTier, getVisibleDays, isTouchDevice, type LayoutTier } from "./device";
 import { ReviewPanelController } from "./review-panel";
+import { showPresetMenu } from "./preset-manager";
 
 export class WeekFlowView extends ItemView {
 	plugin: WeekFlowPlugin;
@@ -2092,148 +2092,17 @@ export class WeekFlowView extends ItemView {
 	// ── Preset Menu ──
 
 	private showPresetMenu(e: MouseEvent | PointerEvent) {
-		const menu = document.createElement("div");
-		menu.className = "weekflow-preset-menu";
-		menu.style.position = "fixed";
-		menu.style.left = `${e.clientX}px`;
-		menu.style.top = `${e.clientY}px`;
-		menu.style.zIndex = "1000";
-		menu.style.background = "var(--background-primary)";
-		menu.style.border = "1px solid var(--background-modifier-border)";
-		menu.style.borderRadius = "6px";
-		menu.style.padding = "4px";
-		menu.style.boxShadow = "0 2px 8px rgba(0,0,0,0.15)";
-		menu.style.minWidth = "180px";
-
-		// "Create preset from today" option
-		const createItem = document.createElement("div");
-		createItem.className = "weekflow-preset-menu-item";
-		createItem.textContent = "Save current day as preset...";
-		createItem.addEventListener("click", () => {
-			menu.remove();
-			this.createPresetFromToday();
+		showPresetMenu({
+			app: this.app,
+			settings: this.plugin.settings,
+			dates: this.dates,
+			weekData: this.weekData,
+			event: e,
+			guardedSave: (date, items) => this.guardedSave(date, items),
+			undoManager: this.undoManager,
+			refresh: () => this.refresh(),
+			saveSettings: () => this.plugin.saveSettings(),
 		});
-		menu.appendChild(createItem);
-
-		// Saved presets
-		for (const preset of this.plugin.settings.presets) {
-			const item = document.createElement("div");
-			item.className = "weekflow-preset-menu-item";
-			item.textContent = `${preset.name} (${preset.slots.length})`;
-			item.addEventListener("click", () => {
-				menu.remove();
-				this.applyPreset(preset);
-			});
-			menu.appendChild(item);
-		}
-
-		if (this.plugin.settings.presets.length === 0) {
-			const empty = document.createElement("div");
-			empty.className = "weekflow-preset-menu-item";
-			empty.style.color = "var(--text-muted)";
-			empty.textContent = "No presets saved";
-			menu.appendChild(empty);
-		}
-
-		document.body.appendChild(menu);
-		const closeMenu = (ev: PointerEvent) => {
-			if (!menu.contains(ev.target as Node)) {
-				menu.remove();
-				document.removeEventListener("pointerdown", closeMenu);
-			}
-		};
-		setTimeout(() => document.addEventListener("pointerdown", closeMenu), 0);
-	}
-
-	private createPresetFromToday() {
-		const todayKey = window.moment().format("YYYY-MM-DD");
-		const items = this.weekData.get(todayKey) || [];
-		const planItems = items.filter((i) => i.checkbox === "plan");
-		const slots = planItems.map((i) => ({
-			start: i.planTime.start,
-			end: i.planTime.end,
-			content: i.content,
-			tag: i.tags[0] || "",
-		}));
-		new CreatePresetModal(this.app, slots, async (preset) => {
-			this.plugin.settings.presets.push(preset);
-			await this.plugin.saveSettings();
-		}).open();
-	}
-
-	private applyPreset(preset: import("./types").TimeSlotPreset) {
-		new ApplyPresetModal(
-			this.app,
-			preset,
-			this.dates,
-			async (selectedDays, overwrite) => {
-				// Save old state for undo
-				const oldData = new Map<string, TimelineItem[]>();
-				for (const d of selectedDays) {
-					const dateKey = this.dates[d].format("YYYY-MM-DD");
-					const items = this.weekData.get(dateKey) || [];
-					oldData.set(
-						dateKey,
-						items.map((i) => ({
-							...i,
-							planTime: { ...i.planTime },
-							actualTime: i.actualTime
-								? { ...i.actualTime }
-								: undefined,
-							tags: [...i.tags],
-						}))
-					);
-				}
-
-				for (const d of selectedDays) {
-					const date = this.dates[d];
-					const dateKey = date.format("YYYY-MM-DD");
-					let existing = this.weekData.get(dateKey) || [];
-
-					if (overwrite) {
-						existing = existing.filter(
-							(i) => i.checkbox !== "plan"
-						);
-					}
-
-					for (const slot of preset.slots) {
-						existing.push({
-							id: generateItemId(),
-							checkbox: "plan",
-							planTime: { start: slot.start, end: slot.end },
-							content: slot.content,
-							tags: slot.tag ? [slot.tag] : [],
-							rawSuffix: "",
-						});
-					}
-
-					this.weekData.set(dateKey, existing);
-					await this.guardedSave(date, existing);
-				}
-
-				const action: UndoableAction = {
-					description: "Apply preset",
-					execute: async () => {
-						/* already executed */
-					},
-					undo: async () => {
-						for (const [dateKey, items] of oldData) {
-							this.weekData.set(dateKey, items);
-							const d = selectedDays.find(
-								(i) =>
-									this.dates[i].format("YYYY-MM-DD") ===
-									dateKey
-							);
-							if (d !== undefined) {
-								await this.guardedSave(this.dates[d], items);
-							}
-						}
-					},
-				};
-				this.undoManager.pushExecuted(action);
-				await this.refresh();
-			}
-		).open();
 	}
 
 	private getCategoryColorForTags(tags: string[]): string {
