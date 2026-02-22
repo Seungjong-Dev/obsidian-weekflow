@@ -250,27 +250,6 @@
 	margin-top: 1px;
 }
 
-/* Panel item navigation icon */
-.weekflow-panel-item-nav {
-	position: absolute;
-	right: 4px;
-	top: 50%;
-	transform: translateY(-50%);
-	width: 16px;
-	height: 16px;
-	opacity: 0;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	cursor: pointer;
-	color: var(--text-muted);
-	border-radius: 3px;
-}
-
-.weekflow-panel-item-nav svg {
-	width: 12px;
-	height: 12px;
-}
 
 .weekflow-panel-add-row {
 	padding: 4px 8px;
@@ -1381,14 +1360,6 @@
 		background: var(--background-modifier-hover);
 	}
 
-	.weekflow-panel-item:hover .weekflow-panel-item-nav {
-		opacity: 1;
-	}
-
-	.weekflow-panel-item-nav:hover {
-		background: var(--background-modifier-hover);
-	}
-
 	.weekflow-resize-handle:hover {
 		background: var(--interactive-accent-hover);
 		opacity: 0.4;
@@ -1400,6 +1371,10 @@
 
 	.weekflow-panel-item:hover {
 		background: var(--background-modifier-hover);
+	}
+
+	.weekflow-panel-item:hover .weekflow-panel-item-nav {
+		opacity: 1;
 	}
 
 	.weekflow-overlap-handle:hover {
@@ -1697,22 +1672,38 @@
 .weekflow-panel-item-selected {
 	background: var(--background-modifier-hover);
 }
-.weekflow-panel-item-actions {
-	display: flex;
-	gap: 4px;
-	margin-top: 4px;
-}
-.weekflow-panel-item-action-btn {
+
+/* Panel hover nav icon */
+.weekflow-panel-item-nav {
+	position: absolute;
+	right: 4px;
+	top: 50%;
+	transform: translateY(-50%);
+	width: 18px;
+	height: 18px;
+	border-radius: 4px;
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	min-width: 32px;
-	min-height: 32px;
-	border: 1px solid var(--background-modifier-border);
-	border-radius: 6px;
-	background: var(--background-primary);
-	color: var(--text-normal);
 	cursor: pointer;
+	opacity: 0;
+	color: var(--text-muted);
+	z-index: 2;
 }
-.weekflow-panel-item-action-btn:active { background: var(--background-modifier-hover); }
-.weekflow-panel-item-action-btn svg { width: 14px; height: 14px; }
+.weekflow-panel-item-nav svg { width: 12px; height: 12px; }
+.weekflow-panel-item-nav:hover { color: var(--text-normal); background: var(--background-modifier-hover); }
+
+/* Panel touch action bar (fixed, body-mounted) */
+.weekflow-panel-action-bar {
+	position: fixed;
+	transform: translateX(-50%);
+	display: flex;
+	gap: 4px;
+	padding: 4px 8px;
+	background: var(--background-primary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 8px;
+	box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+	z-index: 30;
+	pointer-events: auto;
+}

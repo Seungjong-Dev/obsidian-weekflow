@@ -27,7 +27,9 @@ export class PlanningPanel {
 	// Touch selection state
 	private selectedItemEl: HTMLElement | null = null;
 	private selectedItem: PanelItem | null = null;
+	private actionBarEl: HTMLElement | null = null;
 	private lastPointerType: string = "mouse";
+	private scrollListener: (() => void) | null = null;
 
 	constructor(containerEl: HTMLElement, callbacks: PlanningPanelCallbacks) {
 		this.containerEl = containerEl;
@@ -113,7 +115,7 @@ export class PlanningPanel {
 					srcEl.setText(shortPath);
 				}
 
-				// Navigation icon (inbox and overdue only)
+				// Navigation icon (mouse hover only — inbox and overdue)
 				if (this.callbacks.onItemNavigate && (item.source.type === "inbox" || item.source.type === "overdue")) {
 					const navBtn = itemEl.createDiv({ cls: "weekflow-panel-item-nav" });
 					setIcon(navBtn, "arrow-up-right");
@@ -122,10 +124,10 @@ export class PlanningPanel {
 					navBtn.addEventListener("click", (e) => { e.stopPropagation(); this.callbacks.onItemNavigate!(item); });
 				}
 
-				// Context menu
+				// Context menu (mouse only — touch guarded)
 				if (this.callbacks.onItemNavigate && (item.source.type === "inbox" || item.source.type === "overdue")) {
 					itemEl.addEventListener("contextmenu", (e) => {
-						if (this.lastPointerType === "touch") return;
+						if (this.lastPointerType === "touch" || this.lastPointerType === "pen") return;
 						e.preventDefault();
 						e.stopPropagation();
 						const menu = new Menu();
@@ -139,14 +141,14 @@ export class PlanningPanel {
 					});
 				}
 
-				// Drag via pointerdown — touch vs mouse branching
+				// Drag via pointerdown — touch/pen vs mouse branching
 				let startX = 0, startY = 0;
 
 				itemEl.addEventListener("pointerdown", (e) => {
 					if (e.button !== 0) return;
 					this.lastPointerType = e.pointerType;
-					if (e.pointerType === "touch") {
-						// Touch: no preventDefault → allow scroll (pan-y)
+					if (e.pointerType === "touch" || e.pointerType === "pen") {
+						// Touch/Pen: no preventDefault → allow scroll (pan-y)
 						startX = e.clientX;
 						startY = e.clientY;
 						return;
@@ -156,9 +158,9 @@ export class PlanningPanel {
 					this.callbacks.onItemDragStart(item, e);
 				});
 
-				// Touch tap → select/deselect
+				// Touch/pen tap → select/deselect
 				itemEl.addEventListener("click", (e) => {
-					if (this.lastPointerType !== "touch") return;
+					if (this.lastPointerType !== "touch" && this.lastPointerType !== "pen") return;
 					const dist = Math.sqrt((e.clientX - startX) ** 2 + (e.clientY - startY) ** 2);
 					if (dist > 10) return; // Was a scroll
 
@@ -178,15 +180,16 @@ export class PlanningPanel {
 		this.selectedItemEl = itemEl;
 		itemEl.addClass("weekflow-panel-item-selected");
 
-		// Show nav icon
+		// Hide hover nav icon while selected
 		const navBtn = itemEl.querySelector(".weekflow-panel-item-nav") as HTMLElement | null;
-		if (navBtn) navBtn.style.opacity = "1";
+		if (navBtn) navBtn.style.display = "none";
 
-		// Add action strip
-		const actions = itemEl.createDiv({ cls: "weekflow-panel-item-actions" });
+		// Mount action bar on document.body (fixed positioning, same pattern as grid)
+		const bar = document.body.createDiv({ cls: "weekflow-panel-action-bar" });
+		this.actionBarEl = bar;
 
 		// Drag handle button
-		const dragBtn = actions.createDiv({ cls: "weekflow-panel-item-action-btn" });
+		const dragBtn = bar.createDiv({ cls: "weekflow-action-bar-btn" });
 		setIcon(dragBtn, "move");
 		dragBtn.ariaLabel = "Drag to grid";
 		dragBtn.addEventListener("pointerdown", (e) => {
@@ -197,7 +200,7 @@ export class PlanningPanel {
 
 		// Navigate button
 		if (this.callbacks.onItemNavigate && (item.source.type === "inbox" || item.source.type === "overdue")) {
-			const navActionBtn = actions.createDiv({ cls: "weekflow-panel-item-action-btn" });
+			const navActionBtn = bar.createDiv({ cls: "weekflow-action-bar-btn" });
 			setIcon(navActionBtn, "arrow-up-right");
 			navActionBtn.ariaLabel = item.source.type === "inbox" ? "Go to source note" : "Go to daily note";
 			navActionBtn.addEventListener("pointerdown", (e) => { e.stopPropagation(); e.preventDefault(); });
@@ -206,6 +209,12 @@ export class PlanningPanel {
 				this.callbacks.onItemNavigate!(item);
 			});
 		}
+
+		this.positionActionBar(itemEl);
+
+		// Deselect on panel scroll
+		this.scrollListener = () => { this.deselectItem(); };
+		this.containerEl.addEventListener("scroll", this.scrollListener, { passive: true });
 	}
 
 	public deselectAll(): void {
@@ -215,15 +224,47 @@ export class PlanningPanel {
 	private deselectItem(): void {
 		if (this.selectedItemEl) {
 			this.selectedItemEl.removeClass("weekflow-panel-item-selected");
-			// Remove action strip
-			const actions = this.selectedItemEl.querySelector(".weekflow-panel-item-actions");
-			if (actions) actions.remove();
-			// Restore nav icon opacity
+			// Restore hover nav icon
 			const navBtn = this.selectedItemEl.querySelector(".weekflow-panel-item-nav") as HTMLElement | null;
-			if (navBtn) navBtn.style.opacity = "";
+			if (navBtn) navBtn.style.display = "";
+		}
+		if (this.actionBarEl) {
+			this.actionBarEl.remove();
+			this.actionBarEl = null;
+		}
+		if (this.scrollListener) {
+			this.containerEl.removeEventListener("scroll", this.scrollListener);
+			this.scrollListener = null;
 		}
 		this.selectedItem = null;
 		this.selectedItemEl = null;
+	}
+
+	private positionActionBar(anchorEl: HTMLElement): void {
+		if (!this.actionBarEl) return;
+		const rect = anchorEl.getBoundingClientRect();
+		const barHeight = this.actionBarEl.offsetHeight || 44;
+		const gap = 4;
+
+		// Below the item, clamped to viewport
+		let top = rect.bottom + gap;
+		top = Math.min(top, window.innerHeight - barHeight - 4);
+		top = Math.max(4, top);
+
+		const left = rect.left + rect.width / 2;
+		this.actionBarEl.style.left = `${left}px`;
+		this.actionBarEl.style.top = `${top}px`;
+
+		// After render: clamp horizontally
+		requestAnimationFrame(() => {
+			if (!this.actionBarEl) return;
+			const barRect = this.actionBarEl.getBoundingClientRect();
+			if (barRect.left < 4) {
+				this.actionBarEl.style.left = `${4 + barRect.width / 2}px`;
+			} else if (barRect.right > window.innerWidth - 4) {
+				this.actionBarEl.style.left = `${window.innerWidth - 4 - barRect.width / 2}px`;
+			}
+		});
 	}
 
 	private buildItemLabel(item: PanelItem): string {
@@ -237,6 +278,7 @@ export class PlanningPanel {
 	}
 
 	destroy(): void {
+		this.deselectItem();
 		this.containerEl.empty();
 	}
 }
