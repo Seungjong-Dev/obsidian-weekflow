@@ -1017,7 +1017,7 @@ export class GridRenderer {
 				const leftHandle = block.createDiv({ cls: "weekflow-resize-handle weekflow-resize-left" });
 				leftHandle.addEventListener("pointerdown", (e) => {
 					// Touch/pen: only allow resize in move mode
-					if ((e.pointerType === "touch" || e.pointerType === "pen") && this.touchBlockSelection?.mode !== "move") return;
+					if (e.pointerType === "touch" && this.touchBlockSelection?.mode !== "move") return;
 					e.preventDefault();
 					e.stopPropagation();
 					// Clean up previous drag state for re-resize
@@ -1037,7 +1037,7 @@ export class GridRenderer {
 				const rightHandle = block.createDiv({ cls: "weekflow-resize-handle weekflow-resize-right" });
 				rightHandle.addEventListener("pointerdown", (e) => {
 					// Touch/pen: only allow resize in move mode
-					if ((e.pointerType === "touch" || e.pointerType === "pen") && this.touchBlockSelection?.mode !== "move") return;
+					if (e.pointerType === "touch" && this.touchBlockSelection?.mode !== "move") return;
 					e.preventDefault();
 					e.stopPropagation();
 					// Clean up previous drag state for re-resize
@@ -1056,7 +1056,7 @@ export class GridRenderer {
 			block.addEventListener("pointerdown", (e) => {
 				this.lastBlockPointerType = e.pointerType;
 
-				if (e.pointerType === "touch" || e.pointerType === "pen") {
+				if (e.pointerType === "touch") {
 					e.stopPropagation();
 					this.blockDragStartX = e.clientX;
 					this.blockDragStartY = e.clientY;
@@ -1081,7 +1081,7 @@ export class GridRenderer {
 						};
 						try { block.setPointerCapture(e.pointerId); } catch { /* */ }
 					}
-					return; // Touch/pen: handle selection in click event
+					return; // Touch: handle selection in click event
 				}
 
 				// Mouse: existing logic
@@ -1147,25 +1147,7 @@ export class GridRenderer {
 			block.addEventListener("pointerenter", (e) => {
 				if (e.pointerType === "touch") return;
 				if (e.pointerType === "pen") {
-					// Don't allow pen hover to interrupt move or delete-confirm mode
-					if (this.touchBlockSelection?.mode === "move" || this.touchBlockSelection?.mode === "delete-confirm") {
-						return;
-					}
-					// Apple Pencil hover → transient selection
-					if (!this.touchBlockSelection || this.touchBlockSelection.item.id !== item.id) {
-						this.clearTouchBlockSelection();
-						const dragTime = item.checkbox === "actual" && item.actualTime ? item.actualTime : item.planTime;
-						this.touchBlockSelection = {
-							mode: "selected", dayIndex, item,
-							originalStart: dragTime.start, originalEnd: dragTime.end,
-							originalDayIndex: dayIndex,
-							isPenHover: true, penTapConverted: false,
-							currentStart: dragTime.start, currentEnd: dragTime.end,
-							currentDayIndex: dayIndex,
-						};
-						this.updateTouchBlockSelectionStyles();
-						this.showActionBar(dayIndex, item, block);
-					}
+					// Apple Pencil hover: tooltip only (like mouse), no action bar
 				}
 				this.tooltipTimer = setTimeout(() => {
 					this.showTooltip(tooltipText, block);
@@ -1173,19 +1155,6 @@ export class GridRenderer {
 			});
 			block.addEventListener("pointerleave", (e) => {
 				if (e.pointerType === "touch") return;
-				if (e.pointerType === "pen"
-					&& this.touchBlockSelection?.isPenHover
-					&& !this.touchBlockSelection?.penTapConverted) {
-					// Delay clearing so a pen tap (pointerleave → click) or
-					// moving to action bar can keep the selection alive
-					setTimeout(() => {
-						if (this.touchBlockSelection?.isPenHover
-							&& !this.touchBlockSelection?.penTapConverted
-							&& !this.actionBarHovered) {
-							this.clearTouchBlockSelection();
-						}
-					}, 150);
-				}
 				this.hideTooltip();
 			});
 		});
@@ -1835,11 +1804,6 @@ export class GridRenderer {
 		this.clearSelection();
 
 		if (this.touchBlockSelection?.item.id === item.id) {
-			// Same block: if pen hover, convert to permanent selection
-			if (this.touchBlockSelection.isPenHover) {
-				this.touchBlockSelection.isPenHover = false;
-				this.touchBlockSelection.penTapConverted = true;
-			}
 			return;
 		}
 		// Different block or no selection — (re)select
