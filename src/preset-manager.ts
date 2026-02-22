@@ -1,5 +1,5 @@
 import type { App } from "obsidian";
-import type { moment } from "obsidian";
+import { moment } from "obsidian";
 type Moment = ReturnType<typeof moment>;
 import type { TimelineItem, TimeSlotPreset, WeekFlowSettings } from "./types";
 import { CreatePresetModal, ApplyPresetModal } from "./preset-modal";

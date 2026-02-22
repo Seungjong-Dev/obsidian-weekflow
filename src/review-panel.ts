@@ -1,5 +1,5 @@
 import type { App } from "obsidian";
-import type { moment } from "obsidian";
+import { moment } from "obsidian";
 type Moment = ReturnType<typeof moment>;
 import type { WeekFlowSettings } from "./types";
 import { saveDailyReviewContent } from "./daily-note";
@@ -10,7 +10,7 @@ export interface ReviewPanelDeps {
 	dates: Moment[];
 	contentEl: HTMLElement;
 	withSelfWriteGuard: <T>(fn: () => Promise<T>) => Promise<T>;
-	saveSettings: () => void;
+	saveSettings: () => void | Promise<void>;
 }
 
 export class ReviewPanelController {
