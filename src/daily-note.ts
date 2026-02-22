@@ -78,14 +78,15 @@ function buildDailyNotePathRegex(pattern: string): RegExp {
 	work = work.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 	// Phase 3: restore bracket-escape placeholders → regex-escaped literal text
+	// Use replacer function to avoid String.replace $-special interpretation
 	for (let i = 0; i < literals.length; i++) {
 		const escaped = literals[i].replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-		work = work.replace(`\x01${i}\x01`, escaped);
+		work = work.replace(`\x01${i}\x01`, () => escaped);
 	}
 
 	// Phase 4: restore token placeholders → regex patterns
 	for (const { placeholder, regex } of replacements) {
-		work = work.replace(placeholder, regex);
+		work = work.replace(placeholder, () => regex);
 	}
 
 	// Match the full path with .md extension
