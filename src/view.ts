@@ -4,7 +4,7 @@ import type WeekFlowPlugin from "./main";
 import { VIEW_TYPE_WEEKFLOW } from "./types";
 import type { CalendarEvent, PanelItem, ParseWarning, TimelineItem, WeekFlowSettings } from "./types";
 import { getCalendarEventsForWeek, clearCalendarCache } from "./calendar";
-import { getWeekDates, getWeekNotePaths, loadWeekData, saveDailyNoteItems, resolveDailyNotePath, getInboxItems, getInboxWatchPaths, addToInbox, removeFromInboxFile, getPrimaryInboxNoteSource, getActiveProjects, getProjectTasks, appendBlockIdToLine, completeProjectTask, loadWeekReviewData, saveDailyReviewContent } from "./daily-note";
+import { getWeekDates, getWeekNotePaths, loadWeekData, saveDailyNoteItems, resolveDailyNotePath, getInboxItems, getInboxWatchPaths, addToInbox, removeFromInboxFile, getPrimaryInboxNoteSource, getActiveProjects, getProjectTasks, appendBlockIdToLine, completeProjectTask, loadWeekReviewData } from "./daily-note";
 import type { ProjectInfo, InboxCheckboxItem } from "./daily-note";
 import { GridRenderer } from "./grid-renderer";
 import { BlockModal } from "./block-modal";
@@ -16,6 +16,7 @@ import { UndoManager, type UndoableAction } from "./undo-manager";
 import { PlanningPanel, type PanelSection } from "./planning-panel";
 import type { CheckboxItem } from "./parser";
 import { getLayoutTier, getVisibleDays, isTouchDevice, type LayoutTier } from "./device";
+import { ReviewPanelController } from "./review-panel";
 
 export class WeekFlowView extends ItemView {
 	plugin: WeekFlowPlugin;
@@ -42,8 +43,7 @@ export class WeekFlowView extends ItemView {
 	private calendarEvents: CalendarEvent[] = [];
 
 	// Review panel
-	private reviewData: Map<string, string> = new Map();
-	private reviewDebounceTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
+	private reviewController: ReviewPanelController | null = null;
 
 	// Responsive layout
 	private resizeObserver: ResizeObserver | null = null;
@@ -132,10 +132,9 @@ export class WeekFlowView extends ItemView {
 		if (this.syncDebounceTimer) {
 			clearTimeout(this.syncDebounceTimer);
 		}
-		for (const timer of this.reviewDebounceTimers.values()) {
-			clearTimeout(timer);
+		if (this.reviewController) {
+			this.reviewController.destroy();
 		}
-		this.reviewDebounceTimers.clear();
 	}
 
 	private onFileModify(file: TAbstractFile) {
@@ -261,7 +260,22 @@ export class WeekFlowView extends ItemView {
 		this.weekData = result.weekData;
 		this.weekWarnings = result.warnings;
 		this.inboxItems = inbox;
-		this.reviewData = reviewData;
+
+		// Initialize or update review controller
+		const reviewDeps = {
+			app: this.app,
+			settings: this.plugin.settings,
+			dates: this.dates,
+			contentEl: this.contentEl,
+			withSelfWriteGuard: <T>(fn: () => Promise<T>) => this.withSelfWriteGuard(fn),
+			saveSettings: () => this.plugin.saveSettings(),
+		};
+		if (!this.reviewController) {
+			this.reviewController = new ReviewPanelController(reviewDeps);
+		} else {
+			this.reviewController.updateDeps(reviewDeps);
+		}
+		this.reviewController.loadData(reviewData);
 
 		this.renderView();
 
@@ -423,7 +437,9 @@ export class WeekFlowView extends ItemView {
 		});
 
 		// Review panel (inside content area — aligns with grid columns)
-		this.renderReviewPanel(contentArea);
+		if (this.reviewController) {
+			this.reviewController.render(contentArea, this.currentVisibleDays, this.currentDayOffset);
+		}
 
 		// Bottom sheet (narrow mode only)
 		if (this.currentLayoutTier === "narrow") {
@@ -431,167 +447,9 @@ export class WeekFlowView extends ItemView {
 		}
 	}
 
-	private renderReviewPanel(container: HTMLElement) {
-		// Resize handle (between grid and review panel)
-		const handle = container.createDiv({ cls: "weekflow-review-resize-handle" });
-		if (!this.plugin.settings.reviewPanelOpen) {
-			handle.style.display = "none";
-		}
-		this.initReviewResize(handle);
-
-		const panel = container.createDiv({ cls: "weekflow-review-panel" });
-		if (!this.plugin.settings.reviewPanelOpen) {
-			panel.addClass("collapsed");
-		} else if (this.plugin.settings.reviewPanelHeight > 0) {
-			panel.style.height = `${this.plugin.settings.reviewPanelHeight}px`;
-			panel.style.minHeight = "0";
-			panel.style.maxHeight = "none";
-		}
-
-		// Content: CSS Grid aligned with timetable columns (60px time label + N equal day columns)
-		const content = panel.createDiv({ cls: "weekflow-review-content" });
-		content.style.gridTemplateColumns = `60px repeat(${this.currentVisibleDays}, 1fr)`;
-
-		// Time label spacer (matches grid's 60px time column)
-		const spacer = content.createDiv({ cls: "weekflow-review-spacer" });
-		spacer.createSpan({ text: "Review", cls: "weekflow-review-spacer-label" });
-
-		for (let i = 0; i < this.currentVisibleDays; i++) {
-			const date = this.dates[this.currentDayOffset + i];
-			const dateKey = date.format("YYYY-MM-DD");
-			const isToday = date.isSame(window.moment(), "day");
-
-			const cell = content.createDiv({ cls: "weekflow-review-cell" });
-			if (isToday) cell.addClass("weekflow-review-cell-today");
-
-			const textarea = cell.createEl("textarea", {
-				cls: "weekflow-review-textarea",
-			});
-			textarea.value = this.reviewData.get(dateKey) || "";
-			textarea.placeholder = "Write review...";
-
-			textarea.addEventListener("input", () => {
-				this.debouncedSaveReview(dateKey, textarea.value);
-			});
-
-			textarea.addEventListener("blur", () => {
-				this.saveReviewImmediate(dateKey, textarea.value);
-			});
-		}
-	}
-
-	private initReviewResize(handle: HTMLElement) {
-		let startY = 0;
-		let startHeight = 0;
-		let panelEl: HTMLElement | null = null;
-
-		const onPointerMove = (e: PointerEvent) => {
-			if (!panelEl) return;
-			const delta = startY - e.clientY;
-			const newHeight = Math.max(60, Math.min(startHeight + delta, 500));
-			panelEl.style.height = `${newHeight}px`;
-			panelEl.style.minHeight = "0";
-			panelEl.style.maxHeight = "none";
-		};
-
-		const onPointerUp = () => {
-			document.removeEventListener("pointermove", onPointerMove);
-			document.removeEventListener("pointerup", onPointerUp);
-			document.body.style.cursor = "";
-			document.body.style.userSelect = "";
-
-			if (panelEl) {
-				const height = panelEl.offsetHeight;
-				this.plugin.settings.reviewPanelHeight = height;
-				this.plugin.saveSettings();
-			}
-		};
-
-		handle.addEventListener("pointerdown", (e) => {
-			panelEl = handle.nextElementSibling as HTMLElement | null;
-			if (!panelEl || panelEl.hasClass("collapsed")) return;
-
-			e.preventDefault();
-			handle.setPointerCapture(e.pointerId);
-			startY = e.clientY;
-			startHeight = panelEl.offsetHeight;
-			document.body.style.cursor = "ns-resize";
-			document.body.style.userSelect = "none";
-			document.addEventListener("pointermove", onPointerMove);
-			document.addEventListener("pointerup", onPointerUp);
-		});
-	}
-
-	private debouncedSaveReview(dateKey: string, text: string) {
-		this.reviewData.set(dateKey, text);
-		const existing = this.reviewDebounceTimers.get(dateKey);
-		if (existing) clearTimeout(existing);
-		const timer = setTimeout(() => {
-			this.reviewDebounceTimers.delete(dateKey);
-			this.saveReviewImmediate(dateKey, text);
-		}, 300);
-		this.reviewDebounceTimers.set(dateKey, timer);
-	}
-
-	private async saveReviewImmediate(dateKey: string, text: string) {
-		// Cancel pending debounce for this key
-		const pending = this.reviewDebounceTimers.get(dateKey);
-		if (pending) {
-			clearTimeout(pending);
-			this.reviewDebounceTimers.delete(dateKey);
-		}
-
-		const dateIndex = this.dates.findIndex(
-			(d) => d.format("YYYY-MM-DD") === dateKey
-		);
-		if (dateIndex === -1) return;
-
-		await this.withSelfWriteGuard(() =>
-			saveDailyReviewContent(this.app.vault, this.dates[dateIndex], this.plugin.settings, text)
-		);
-	}
-
 	private toggleReviewPanel() {
-		this.plugin.settings.reviewPanelOpen = !this.plugin.settings.reviewPanelOpen;
-		this.plugin.saveSettings();
-		const open = this.plugin.settings.reviewPanelOpen;
-
-		const panelEl = this.contentEl.querySelector(
-			".weekflow-review-panel"
-		) as HTMLElement | null;
-		const handleEl = this.contentEl.querySelector(
-			".weekflow-review-resize-handle"
-		) as HTMLElement | null;
-
-		if (panelEl) {
-			if (open) {
-				panelEl.removeClass("collapsed");
-				const h = this.plugin.settings.reviewPanelHeight;
-				if (h > 0) {
-					panelEl.style.height = `${h}px`;
-					panelEl.style.minHeight = "0";
-					panelEl.style.maxHeight = "none";
-				} else {
-					panelEl.style.removeProperty("height");
-					panelEl.style.removeProperty("min-height");
-					panelEl.style.removeProperty("max-height");
-				}
-			} else {
-				panelEl.style.removeProperty("height");
-				panelEl.style.removeProperty("min-height");
-				panelEl.style.removeProperty("max-height");
-				panelEl.addClass("collapsed");
-			}
-		}
-		if (handleEl) {
-			handleEl.style.display = open ? "" : "none";
-		}
-
-		const toggleBtn = this.contentEl.querySelector(
-			".weekflow-review-toggle-btn"
-		) as HTMLElement | null;
-		if (toggleBtn) {
-			toggleBtn.toggleClass("active", open);
+		if (this.reviewController) {
+			this.reviewController.toggle();
 		}
 	}
 
@@ -849,40 +707,8 @@ export class WeekFlowView extends ItemView {
 
 	/** Update review panel columns for new dayOffset without full rebuild */
 	private updateReviewPanel(): void {
-		const panel = this.contentEl.querySelector(".weekflow-review-panel");
-		if (!panel || panel.hasClass("collapsed")) return;
-
-		const content = panel.querySelector(".weekflow-review-content") as HTMLElement | null;
-		if (!content) return;
-
-		// Rebuild review content for new offset
-		content.empty();
-		content.style.gridTemplateColumns = `60px repeat(${this.currentVisibleDays}, 1fr)`;
-
-		const spacer = content.createDiv({ cls: "weekflow-review-spacer" });
-		spacer.createSpan({ text: "Review", cls: "weekflow-review-spacer-label" });
-
-		for (let i = 0; i < this.currentVisibleDays; i++) {
-			const date = this.dates[this.currentDayOffset + i];
-			const dateKey = date.format("YYYY-MM-DD");
-			const isToday = date.isSame(window.moment(), "day");
-
-			const cell = content.createDiv({ cls: "weekflow-review-cell" });
-			if (isToday) cell.addClass("weekflow-review-cell-today");
-
-			const textarea = cell.createEl("textarea", {
-				cls: "weekflow-review-textarea",
-			});
-			textarea.value = this.reviewData.get(dateKey) || "";
-			textarea.placeholder = "Write review...";
-
-			textarea.addEventListener("input", () => {
-				this.debouncedSaveReview(dateKey, textarea.value);
-			});
-
-			textarea.addEventListener("blur", () => {
-				this.saveReviewImmediate(dateKey, textarea.value);
-			});
+		if (this.reviewController) {
+			this.reviewController.update(this.currentVisibleDays, this.currentDayOffset);
 		}
 	}
 
