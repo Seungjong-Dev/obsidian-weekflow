@@ -52,8 +52,17 @@ function buildDailyNotePathRegex(pattern: string): RegExp {
 		["GG", "\\d{2}"],
 	];
 
-	// Phase 1: replace tokens with unique placeholders
+	// Phase 0: extract moment.js [...] bracket escapes as literal text
+	// e.g. "[5. Periodic Notes]" → literal "5. Periodic Notes"
 	let work = pattern;
+	const literals: string[] = [];
+	work = work.replace(/\[([^\]]*)\]/g, (_match, inner: string) => {
+		const id = literals.length;
+		literals.push(inner);
+		return `\x01${id}\x01`;
+	});
+
+	// Phase 1: replace moment tokens with unique placeholders
 	const replacements: { placeholder: string; regex: string }[] = [];
 	let idx = 0;
 
@@ -68,7 +77,13 @@ function buildDailyNotePathRegex(pattern: string): RegExp {
 	// Phase 2: escape remaining literal characters for regex
 	work = work.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-	// Phase 3: restore placeholders → regex patterns
+	// Phase 3: restore bracket-escape placeholders → regex-escaped literal text
+	for (let i = 0; i < literals.length; i++) {
+		const escaped = literals[i].replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+		work = work.replace(`\x01${i}\x01`, escaped);
+	}
+
+	// Phase 4: restore token placeholders → regex patterns
 	for (const { placeholder, regex } of replacements) {
 		work = work.replace(placeholder, regex);
 	}
