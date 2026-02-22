@@ -693,7 +693,7 @@ function hapticFeedback(): void;
 - 리사이즈 핸들에 `setPointerCapture()`를 적용하여 요소 밖으로 드래그해도 이벤트 유지
 - **데스크톱 블록 드래그:** 150ms 딜레이 후 시작
 - **터치 블록 드래그:** 롱프레스 대신 선택 모드 → 이동 모드 진입 방식 (터치 블록 인터랙션 참조). 이동 모드에서만 `preventDefault()` + `touch-action: none` 적용
-- **Apple Pencil 블록 드래그:** 마우스와 동일하게 150ms 홀드 후 직접 드래그. 리사이즈 핸들도 직접 드래그 가능. 탭 시에는 터치와 동일하게 액션 바 표시
+- **Apple Pencil 블록 드래그:** 마우스와 동일하게 150ms 홀드 후 직접 드래그. 리사이즈 핸들도 직접 드래그 가능. 탭 시에는 터치와 동일하게 액션 바 표시. 패널에서 펜 탭 감지는 `click`이 아닌 `pointerup`으로 처리 — `pointerdown`에서 `preventDefault()` 호출 시 iPadOS Safari가 `click`을 suppress하므로 `pointerup`이 150ms 타이머를 확실히 취소할 수 있음
 - **블록 툴팁:** 작은 블록에서 잘리는 타이틀을 확인할 수 있는 커스텀 툴팁. 시간과 내용을 `HH:MM-HH:MM content` 형식으로 표시. 입력 방식별 트리거:
   - **마우스/Apple Pencil:** `pointerenter` 후 300ms 딜레이로 표시, `pointerleave` 시 즉시 숨김
   - **터치(손가락):** 액션 바가 툴팁 역할을 대체 (별도 툴팁 미표시)
@@ -897,7 +897,7 @@ Narrow 모드에서 사이드 패널 대신 하단 시트로 표시:
 - 스와이프 네비게이션: `pointerup`/`pointercancel` 양쪽에서 감지. `touchmove` `stopPropagation()`으로 Obsidian 사이드바 차단
 - 3일 뷰 고정 페이지: [0,2,4] (1일 오버랩), 2일 단위 스텝으로 예측 가능한 네비게이션
 - 터치 블록 인터랙션: 선택 모드(액션 바) → 이동 모드(드래그/리사이즈) → 확인/취소. 롱프레스 제거, 명시적 버튼 기반. 이동 모드에서 고스트 블록에 리사이즈 핸들 자동 추가, 여러 번 드래그/리사이즈 반복 가능. 취소 시 누적 위치 원래 값으로 리셋
-- Apple Pencil은 마우스 경로로 처리: 150ms 홀드 후 직접 드래그, 리사이즈 핸들 직접 드래그, 호버 시 툴팁만 표시. 탭 시에만 터치와 동일하게 액션 바 표시
+- Apple Pencil은 마우스 경로로 처리: 150ms 홀드 후 직접 드래그, 리사이즈 핸들 직접 드래그, 호버 시 툴팁만 표시. 탭 시에만 터치와 동일하게 액션 바 표시. 패널 펜 탭은 `pointerup`으로 감지 (`preventDefault()`가 `click`을 suppress하는 iPadOS Safari 대응)
 - Narrow 모드: 하단 시트 Planning Panel (collapsed/expanded, 스와이프 핸들, 툴바 패널 토글과 연동, 드래그 시 자동 접기)
 - 툴바 2줄 구조: Row 1 (nav + tools + `⋯` 오버플로 메뉴), Row 2 (카테고리 팔레트, 가로 스크롤). ◀/▶ 버튼이 뷰 모드별 역할 변경
 - `@media (pointer: fine)`: hover 효과를 마우스 전용으로 격리
