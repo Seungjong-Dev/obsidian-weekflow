@@ -1,4 +1,4 @@
-import type { moment } from "obsidian";
+import { moment } from "obsidian";
 type Moment = ReturnType<typeof moment>;
 import type { PanelItem, TimelineItem } from "./types";
 import type { PanelSection } from "./planning-panel";
