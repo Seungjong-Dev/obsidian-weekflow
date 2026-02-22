@@ -1236,6 +1236,7 @@ export class WeekFlowView extends ItemView {
 		if (!file) return;
 		const leaf = this.app.workspace.getLeaf("tab");
 		await leaf.openFile(file as any);
+		this.app.workspace.revealLeaf(leaf);
 		if (lineNumber != null) {
 			const view = leaf.view as any;
 			if (view?.editor) {
