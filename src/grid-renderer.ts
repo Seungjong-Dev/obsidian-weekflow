@@ -1734,19 +1734,16 @@ export class GridRenderer {
 	// ── Current Time Indicator ──
 
 	private renderCurrentTimeIndicator(): void {
-		// Remove existing elements
-		if (this.currentTimeEl) {
-			this.currentTimeEl.remove();
+		if (!this.gridEl) return;
+
+		// Stale element check (after full re-render via containerEl.empty())
+		if (this.currentTimeEl && !this.currentTimeEl.isConnected) {
 			this.currentTimeEl = null;
 		}
-		if (this.currentTimeDotEl) {
-			this.currentTimeDotEl.remove();
+		if (this.currentTimeDotEl && !this.currentTimeDotEl.isConnected) {
 			this.currentTimeDotEl = null;
 		}
 
-		if (!this.gridEl) return;
-
-		// Find today in visible range
 		const today = window.moment();
 		let todayVisibleIndex = -1;
 		for (let i = 0; i < this.visibleDays; i++) {
@@ -1756,36 +1753,48 @@ export class GridRenderer {
 				break;
 			}
 		}
-		if (todayVisibleIndex === -1) return;
 
-		const currentMinutes = today.hour() * 60 + today.minute();
+		// Today not visible → remove
+		if (todayVisibleIndex === -1) {
+			this.currentTimeEl?.remove(); this.currentTimeEl = null;
+			this.currentTimeDotEl?.remove(); this.currentTimeDotEl = null;
+			return;
+		}
 
-		// Calculate geometry using variable row heights
-		const gridRect = this.gridEl.getBoundingClientRect();
-		if (gridRect.width === 0 || gridRect.height === 0) return;
+		const currentHour = today.hour();
+		const currentMinute = today.minute();
+		const row = currentHour + 2;
 
-		const headerCell = this.gridEl.querySelector(".weekflow-header-cell");
-		if (!headerCell) return;
-		const headerHeight = (headerCell as HTMLElement).getBoundingClientRect().height;
+		// Folded/boundary hour → hide
+		if (this.isHourFolded(currentHour) || this.isBoundaryHour(currentHour)) {
+			if (this.currentTimeEl) this.currentTimeEl.style.display = "none";
+			if (this.currentTimeDotEl) this.currentTimeDotEl.style.display = "none";
+			return;
+		}
 
-		const bodyHeight = gridRect.height - headerHeight;
-		if (bodyHeight <= 0) return;
+		const dayColStart = todayVisibleIndex * 6 + 2;
+		const dayColEnd = dayColStart + 6;
+		const topPct = `${(currentMinute / 60) * 100}%`;
 
-		const topPos = headerHeight + this.minutesToPixelY(currentMinutes, bodyHeight);
-		const frac = todayVisibleIndex / this.visibleDays;
+		// Line — reuse or create
+		if (!this.currentTimeEl) {
+			this.currentTimeEl = this.gridEl.createDiv({ cls: "weekflow-now-line" });
+		}
+		const line = this.currentTimeEl;
+		line.style.display = "";
+		line.style.gridRow = `${row} / ${row + 1}`;
+		line.style.gridColumn = `${dayColStart} / ${dayColEnd}`;
+		line.style.top = topPct;
 
-		// Create line
-		const line = this.gridEl.createDiv({ cls: "weekflow-now-line" });
-		line.style.top = `${topPos - 1}px`;
-		line.style.left = `calc(${60 * (1 - frac)}px + ${frac * 100}%)`;
-		line.style.width = `calc(${100 / this.visibleDays}% - ${60 / this.visibleDays}px)`;
-		this.currentTimeEl = line;
-
-		// Create dot (centered at left edge of line, protruding into time label column)
-		const dot = this.gridEl.createDiv({ cls: "weekflow-now-dot" });
-		dot.style.top = `${topPos - 4}px`;
-		dot.style.left = `calc(${60 * (1 - frac) - 4}px + ${frac * 100}%)`;
-		this.currentTimeDotEl = dot;
+		// Dot — reuse or create, same grid area as line
+		if (!this.currentTimeDotEl) {
+			this.currentTimeDotEl = this.gridEl.createDiv({ cls: "weekflow-now-dot" });
+		}
+		const dot = this.currentTimeDotEl;
+		dot.style.display = "";
+		dot.style.gridRow = `${row} / ${row + 1}`;
+		dot.style.gridColumn = `${dayColStart} / ${dayColEnd}`;
+		dot.style.top = topPct;
 	}
 
 	// ── Touch Block Selection ──
