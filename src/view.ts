@@ -722,6 +722,7 @@ export class WeekFlowView extends ItemView {
 		if (!todayVisible) todayBtn.addClass("weekflow-nav-today-hint");
 		todayBtn.addEventListener("click", () => {
 			this.currentDate = window.moment();
+			this.pendingDayOffset = this.calculateDayOffset(this.currentVisibleDays);
 			this.refresh();
 		});
 
