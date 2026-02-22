@@ -30,6 +30,7 @@ export class PlanningPanel {
 	private actionBarEl: HTMLElement | null = null;
 	private lastPointerType: string = "mouse";
 	private scrollListener: (() => void) | null = null;
+	private penDragTimer: ReturnType<typeof setTimeout> | null = null;
 
 	constructor(containerEl: HTMLElement, callbacks: PlanningPanelCallbacks) {
 		this.containerEl = containerEl;
@@ -124,10 +125,10 @@ export class PlanningPanel {
 					navBtn.addEventListener("click", (e) => { e.stopPropagation(); this.callbacks.onItemNavigate!(item); });
 				}
 
-				// Context menu (mouse only — touch guarded)
+				// Context menu (mouse and pen — touch guarded)
 				if (this.callbacks.onItemNavigate && (item.source.type === "inbox" || item.source.type === "overdue")) {
 					itemEl.addEventListener("contextmenu", (e) => {
-						if (this.lastPointerType === "touch" || this.lastPointerType === "pen") return;
+						if (this.lastPointerType === "touch") return;
 						e.preventDefault();
 						e.stopPropagation();
 						const menu = new Menu();
@@ -141,29 +142,55 @@ export class PlanningPanel {
 					});
 				}
 
-				// Drag via pointerdown — touch/pen vs mouse branching
+				// Drag via pointerdown — touch vs mouse/pen branching
 				let startX = 0, startY = 0;
 
 				itemEl.addEventListener("pointerdown", (e) => {
 					if (e.button !== 0) return;
 					this.lastPointerType = e.pointerType;
-					if (e.pointerType === "touch" || e.pointerType === "pen") {
-						// Touch/Pen: no preventDefault → allow scroll (pan-y)
+					if (e.pointerType === "touch") {
+						// Touch: no preventDefault → allow scroll (pan-y)
 						startX = e.clientX;
 						startY = e.clientY;
 						return;
 					}
-					// Mouse: immediate drag
+					// Mouse and Pen
 					e.preventDefault();
-					this.callbacks.onItemDragStart(item, e);
+					startX = e.clientX;
+					startY = e.clientY;
+					if (e.pointerType === "pen") {
+						// Pen: delayed drag (150ms hold like grid mouse path)
+						this.penDragTimer = setTimeout(() => {
+							this.penDragTimer = null;
+							this.callbacks.onItemDragStart(item, e);
+						}, 150);
+					} else {
+						// Mouse: immediate drag
+						this.callbacks.onItemDragStart(item, e);
+					}
 				});
 
-				// Touch/pen tap → select/deselect
-				itemEl.addEventListener("click", (e) => {
-					if (this.lastPointerType !== "touch" && this.lastPointerType !== "pen") return;
-					const dist = Math.sqrt((e.clientX - startX) ** 2 + (e.clientY - startY) ** 2);
-					if (dist > 10) return; // Was a scroll
+				// Pen tap → cancel drag timer, show action bar
+				itemEl.addEventListener("pointerup", (e) => {
+					if (e.pointerType !== "pen") return;
+					if (this.penDragTimer) {
+						clearTimeout(this.penDragTimer);
+						this.penDragTimer = null;
+						const dist = Math.sqrt((e.clientX - startX) ** 2 + (e.clientY - startY) ** 2);
+						if (dist > 10) return;
+						if (this.selectedItem?.id === item.id) {
+							this.deselectItem();
+						} else {
+							this.selectItem(item, itemEl);
+						}
+					}
+				});
 
+				// Touch tap → select/deselect
+				itemEl.addEventListener("click", (e) => {
+					if (this.lastPointerType !== "touch") return;
+					const dist = Math.sqrt((e.clientX - startX) ** 2 + (e.clientY - startY) ** 2);
+					if (dist > 10) return;
 					if (this.selectedItem?.id === item.id) {
 						this.deselectItem();
 					} else {
