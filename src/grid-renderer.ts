@@ -376,7 +376,7 @@ export class GridRenderer {
 							if (this.touchBlockSelection) {
 								this.clearTouchBlockSelection();
 							}
-							// Touch: tap-tap mode — no preventDefault() (allow scroll)
+							// Touch: tap-tap mode — no preventDefault() (allow scroll on first tap)
 							this.deselectOverlapBlock();
 							this.touchTapState = {
 								dayIndex: d,
@@ -385,6 +385,12 @@ export class GridRenderer {
 								startY: e.clientY,
 								startTime: Date.now(),
 							};
+
+							// Second tap on same day: suppress compatibility mouse events
+							// to prevent ghost click from closing the modal on Android
+							if (this.selectionRange && this.selectionRange.dayIndex === d) {
+								e.preventDefault();
+							}
 						} else {
 							// Pen in move mode: block cell selection
 							if (e.pointerType === "pen" && this.touchBlockSelection?.mode === "move") return;
@@ -658,6 +664,20 @@ export class GridRenderer {
 			this.selectionRange.startMinutes = lo;
 			this.selectionRange.endMinutes = hi;
 			this.updateSelectionHighlight();
+
+			// Suppress ghost click that Android/Chromium fires after pointerup.
+			// Without this, the compatibility click event re-targets to the modal
+			// backdrop and immediately closes the modal.
+			const suppressGhostClick = (ev: MouseEvent) => {
+				ev.stopPropagation();
+				ev.preventDefault();
+				clearTimeout(safetyTimer);
+			};
+			document.addEventListener("click", suppressGhostClick, { once: true, capture: true });
+			const safetyTimer = setTimeout(() => {
+				document.removeEventListener("click", suppressGhostClick, { capture: true });
+			}, 400);
+
 			this.callbacks.onCellDragEnd();
 		} else {
 			// First tap (or different day): set anchor
