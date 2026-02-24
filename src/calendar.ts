@@ -55,6 +55,10 @@ function parseICSEvents(
 	const rangeEndMs = rangeEnd.getTime();
 
 	for (const vevent of vevents) {
+		// Skip recurrence exceptions — they are handled by parent event's
+		// getOccurrenceDetails() which automatically substitutes modified data
+		if (vevent.hasProperty('recurrence-id')) continue;
+
 		try {
 			const event = new ICAL.Event(vevent);
 			const summary = event.summary || "(No title)";
@@ -69,25 +73,27 @@ function parseICSEvents(
 				while (next && !iter.complete && count < MAX_EXPANSIONS) {
 					count++;
 
-					const occStart = next.toJSDate();
+					const details = event.getOccurrenceDetails(next);
+					const occStart = details.startDate.toJSDate();
 					if (occStart.getTime() >= rangeEndMs) break;
 
-					const duration = event.endDate.toJSDate().getTime() - event.startDate.toJSDate().getTime();
-					const occEnd = new Date(occStart.getTime() + duration);
+					const occEnd = details.endDate.toJSDate();
 
 					if (occEnd.getTime() <= rangeStartMs) {
 						next = iter.next();
 						continue;
 					}
 
-					if (event.startDate.isDate) {
+					if (details.startDate.isDate) {
 						next = iter.next();
 						continue; // Skip all-day events
 					}
 
+					const occSummary = details.item.summary || "(No title)";
+
 					events.push({
 						uid: event.uid + "_" + occStart.toISOString(),
-						summary,
+						summary: occSummary,
 						start: occStart,
 						end: occEnd,
 						allDay: false,
