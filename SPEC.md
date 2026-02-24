@@ -651,7 +651,7 @@ Sun ████           4h
 |---------|-------------|----------|----------------|--------------|
 | **≥ 900px** | `wide` | 7일 | 사이드 패널 | 7칸 |
 | **500~899px** | `medium` | 3일 | 사이드 패널 (220px, 접힘 가능) | 표시 일수만큼 |
-| **< 500px** | `narrow` | 1일 | 하단 시트 (bottom sheet) | 1칸 |
+| **< 500px** | `narrow` | 1일 | 드롭다운 패널 (top-anchored) | 1칸 |
 
 - 데스크톱에서 창을 줄이면 자연스럽게 7일→3일→1일로 전환, 넓히면 복원
 - iPad 가로=Wide, iPad Split View=Medium, iPhone 세로=Narrow, iPhone 가로=Medium
@@ -711,16 +711,27 @@ function hapticFeedback(): void;
 - **Narrow (1일):** 스와이프 → dayOffset ±1 (주 경계 넘으면 주 이동)
 - **7일 뷰 + 데스크톱:** 제스처 스와이프 비활성화 (마우스 드래그와 충돌 방지). 단, ◀/▶ 버튼은 동작. override로 3일 뷰를 넓은 화면에서 사용할 때는 스와이프 동작
 
-### 하단 시트 (Narrow 모드 Planning Panel)
+### 드롭다운 패널 (Narrow 모드 Planning Panel)
 
-Narrow 모드에서 사이드 패널 대신 하단 시트로 표시:
+Narrow 모드에서 사이드 패널 대신 상단 고정(top-anchored) 드롭다운 패널로 표시:
 
-- `collapsed` 상태: 핸들 바만 표시 (~40px)
-- `expanded` 상태: 최대 60vh
-- 핸들 스와이프 업/다운 또는 탭으로 토글
-- 툴바의 패널 토글 버튼도 하단 시트를 제어 (Wide/Medium에서는 사이드 패널, Narrow에서는 하단 시트)
+- `collapsed` 상태: 패널 숨김
+- `expanded` 상태: 최대 높이 60% (`.weekflow-body` 기준)
+- 툴바의 패널 토글 버튼으로 열기/닫기 (Wide/Medium에서는 사이드 패널, Narrow에서는 드롭다운 패널)
+- 배경 백드롭(`.weekflow-dropdown-backdrop`) 탭으로 닫기
 - 내부에 PlanningPanel 컴포넌트를 재사용
-- **패널 아이템 드래그 시 자동 접기:** 인박스/오버듀 아이템의 드래그가 시작되면 바텀 시트를 자동으로 `collapsed` 상태로 전환하여 그리드가 보이도록 함
+- **패널 아이템 드래그 시 자동 접기:** 인박스/오버듀 아이템의 드래그가 시작되면 드롭다운 패널을 자동으로 `collapsed` 상태로 전환하여 그리드가 보이도록 함
+
+#### 모바일 키보드 회피 (Mobile Keyboard Avoidance)
+
+모바일에서 드롭다운 패널 내 입력 필드(Add item...)를 탭하면 가상 키보드가 올라오면서 패널이 이중 축소되는 문제를 방지:
+
+- **문제:** 키보드 → Obsidian 웹뷰 리사이즈 → `.weekflow-body` 축소 → `max-height: 60%` 재계산으로 패널이 이중으로 줄어듦
+- **해결:** `visualViewport` API로 키보드 출현을 감지하고, 패널의 `max-height`를 CSS `60%` 대신 **실제 가용 높이**(패널 top ~ 키보드 top)로 오버라이드
+- `isMobileDevice()` 가드로 모바일에서만 활성화 (데스크톱 영향 없음)
+- `focusin` 시 `visualViewport.resize` 리스너 등록, `focusout` 시 해제 (패널 내 다른 input으로 포커스 이동 시 깜빡임 방지를 위해 100ms 딜레이)
+- `requestAnimationFrame` + `scrollIntoView({ block: "nearest" })`로 포커스된 입력 필드가 패널 스크롤 영역 내에서 항상 보이도록 보장
+- 키보드 닫히면 `style.maxHeight = ""`로 CSS 기본값 복원
 
 ### dayOffset 로직
 
@@ -780,6 +791,7 @@ Narrow 모드에서 사이드 패널 대신 하단 시트로 표시:
 - **햅틱 피드백:** 이동 모드 진입 시 `navigator.vibrate(10)` 호출.
 - **오프라인 동작:** 데이터가 로컬 마크다운 파일이므로 오프라인에서도 완전히 동작. 캘린더 오버레이만 캐시 기반으로 제한적 표시.
 - **Split View / Stage Manager (iPad):** `ResizeObserver`로 실제 뷰 영역 크기를 감시하여 레이아웃을 동적으로 적응. 디바이스 타입이 아닌 실제 가용 너비를 기준으로 컬럼 수를 결정하므로, Stage Manager에서 창 크기를 자유롭게 변경해도 자연스럽게 대응.
+- **키보드 회피 (드롭다운 패널):** 모바일에서 드롭다운 패널 내 입력 필드 포커스 시 `visualViewport` API로 키보드 제외 가용 높이를 계산하여 `max-height`를 오버라이드. 키보드 닫히면 CSS 기본값 복원. `isMobileDevice()` 가드로 데스크톱 미영향.
 
 ## Implementation Phases
 
@@ -898,13 +910,13 @@ Narrow 모드에서 사이드 패널 대신 하단 시트로 표시:
 - 3일 뷰 고정 페이지: [0,2,4] (1일 오버랩), 2일 단위 스텝으로 예측 가능한 네비게이션
 - 터치 블록 인터랙션: 선택 모드(액션 바) → 이동 모드(드래그/리사이즈) → 확인/취소. 롱프레스 제거, 명시적 버튼 기반. 이동 모드에서 고스트 블록에 리사이즈 핸들 자동 추가, 여러 번 드래그/리사이즈 반복 가능. 취소 시 누적 위치 원래 값으로 리셋
 - Apple Pencil은 마우스 경로로 처리: 150ms 홀드 후 직접 드래그, 리사이즈 핸들 직접 드래그, 호버 시 툴팁만 표시. 탭 시에만 터치와 동일하게 액션 바 표시. 패널 펜 탭은 `pointerup`으로 감지 (`preventDefault()`가 `click`을 suppress하는 iPadOS Safari 대응)
-- Narrow 모드: 하단 시트 Planning Panel (collapsed/expanded, 스와이프 핸들, 툴바 패널 토글과 연동, 드래그 시 자동 접기)
+- Narrow 모드: 상단 고정 드롭다운 패널 Planning Panel (collapsed/expanded, 백드롭 탭 닫기, 툴바 패널 토글과 연동, 드래그 시 자동 접기, 모바일 키보드 회피: `visualViewport` API로 실제 가용 높이 계산)
 - 툴바 2줄 구조: Row 1 (nav + tools + `⋯` 오버플로 메뉴), Row 2 (카테고리 팔레트, 가로 스크롤). ◀/▶ 버튼이 뷰 모드별 역할 변경
 - `@media (pointer: fine)`: hover 효과를 마우스 전용으로 격리
 - `@media (pointer: coarse)`: 항상 표시 토글/리사이즈 핸들, 터치 타겟 보장
 - `.weekflow-grid`와 `.weekflow-block`에 `touch-action: pan-y` (세로 스크롤 허용), 리사이즈 핸들은 `touch-action: none`
 - 모바일 하단 네비 바 대응: `.is-mobile .weekflow-container`에 `env(safe-area-inset-bottom)`, `.is-mobile .weekflow-grid-wrapper`에 `padding-bottom: 48px`
-- 모바일 바텀 시트 오프셋: `.is-mobile .weekflow-bottom-sheet { bottom: 48px }` (네비 바 위로 배치), narrow+mobile 그리드 패딩 96px
+- 모바일 드롭다운 패널: 상단 고정 배치, `max-height: 60%`, 백드롭 탭으로 닫기
 - `pointercancel` 시 `dragMode` 리셋 (Apple Pencil 리프트/팜 리젝션 대응)
 - `getCellFromPoint()`: `getBoundingClientRect()`가 스크롤 반영하므로 `scrollLeft/Top` 미가산
 - 같은 주 내 페이지 이동: `updatePage()`로 그리드+툴바+리뷰만 업데이트 (전체 재렌더 안 함)
