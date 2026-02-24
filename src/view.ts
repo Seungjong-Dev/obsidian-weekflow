@@ -13,7 +13,7 @@ import { generateItemId } from "./parser";
 import { UndoManager, type UndoableAction } from "./undo-manager";
 import { PlanningPanel, type PanelSection } from "./planning-panel";
 import type { CheckboxItem } from "./parser";
-import { getLayoutTier, getVisibleDays, isTouchDevice, type LayoutTier } from "./device";
+import { getLayoutTier, getVisibleDays, isTouchDevice, isMobileDevice, type LayoutTier } from "./device";
 import { ReviewPanelController } from "./review-panel";
 import { showPresetMenu } from "./preset-manager";
 import { BlockActions } from "./block-actions";
@@ -60,6 +60,9 @@ export class WeekFlowView extends ItemView {
 	// Dropdown panel (narrow mode)
 	private dropdownPanelEl: HTMLElement | null = null;
 	private dropdownBackdropEl: HTMLElement | null = null;
+
+	// Dropdown keyboard avoidance (mobile)
+	private dropdownKeyboardCleanup: (() => void) | null = null;
 
 	// Panel drag state
 	private panelDragItem: PanelItem | null = null;
@@ -140,6 +143,7 @@ export class WeekFlowView extends ItemView {
 		if (this.reviewController) {
 			this.reviewController.destroy();
 		}
+		this.cleanupDropdownKeyboardAvoidance();
 	}
 
 	private onFileModify(file: TAbstractFile) {
@@ -372,6 +376,7 @@ export class WeekFlowView extends ItemView {
 		if (this.gridRenderer) {
 			this.gridRenderer.destroy();
 		}
+		this.cleanupDropdownKeyboardAvoidance();
 
 		const container = this.contentEl;
 		container.empty();
@@ -515,6 +520,73 @@ export class WeekFlowView extends ItemView {
 		if (!this.plugin.settings.planningPanelOpen) {
 			panel.addClass("collapsed");
 			backdrop.addClass("collapsed");
+		}
+
+		if (isMobileDevice()) {
+			this.setupDropdownKeyboardAvoidance(panel, contentEl);
+		}
+	}
+
+	private setupDropdownKeyboardAvoidance(panelEl: HTMLElement, contentEl: HTMLElement): void {
+		this.cleanupDropdownKeyboardAvoidance();
+
+		const vv = window.visualViewport;
+		if (!vv) return;
+
+		const onViewportResize = () => {
+			const focused = panelEl.querySelector(":focus") as HTMLElement | null;
+			if (!focused || !(focused instanceof HTMLInputElement || focused instanceof HTMLTextAreaElement)) {
+				panelEl.style.maxHeight = "";
+				return;
+			}
+
+			// visualViewport.height = keyboard-excluded visible height
+			// visualViewport.offsetTop = visual viewport offset relative to layout viewport
+			const keyboardTop = vv.offsetTop + vv.height;
+			const panelRect = panelEl.getBoundingClientRect();
+			const availableHeight = keyboardTop - panelRect.top;
+
+			if (availableHeight > 0) {
+				panelEl.style.maxHeight = `${availableHeight}px`;
+			}
+
+			// Ensure focused input is visible within the panel scroll area
+			requestAnimationFrame(() => {
+				focused.scrollIntoView({ block: "nearest", behavior: "smooth" });
+			});
+		};
+
+		const onFocusIn = () => {
+			vv.addEventListener("resize", onViewportResize);
+			// Initial adjustment after keyboard animation
+			setTimeout(onViewportResize, 100);
+		};
+
+		const onFocusOut = () => {
+			// Delay to avoid flicker when focus moves to another input within the panel
+			setTimeout(() => {
+				if (!panelEl.querySelector(":focus")) {
+					panelEl.style.maxHeight = "";
+					vv.removeEventListener("resize", onViewportResize);
+				}
+			}, 100);
+		};
+
+		panelEl.addEventListener("focusin", onFocusIn);
+		panelEl.addEventListener("focusout", onFocusOut);
+
+		this.dropdownKeyboardCleanup = () => {
+			panelEl.removeEventListener("focusin", onFocusIn);
+			panelEl.removeEventListener("focusout", onFocusOut);
+			vv.removeEventListener("resize", onViewportResize);
+			panelEl.style.maxHeight = "";
+		};
+	}
+
+	private cleanupDropdownKeyboardAvoidance(): void {
+		if (this.dropdownKeyboardCleanup) {
+			this.dropdownKeyboardCleanup();
+			this.dropdownKeyboardCleanup = null;
 		}
 	}
 
@@ -962,7 +1034,11 @@ export class WeekFlowView extends ItemView {
 				items[idx].tags = result.tag ? [result.tag] : [];
 				items[idx].planTime = { start: result.startMinutes, end: result.endMinutes };
 				if (result.actualStartMinutes != null && result.actualEndMinutes != null) {
-					items[idx].actualTime = { start: result.actualStartMinutes, end: result.actualEndMinutes };
+					if (result.actualStartMinutes !== result.startMinutes || result.actualEndMinutes !== result.endMinutes) {
+						items[idx].actualTime = { start: result.actualStartMinutes, end: result.actualEndMinutes };
+					} else {
+						items[idx].actualTime = undefined;
+					}
 				}
 
 				await this.guardedSave(date, items);
