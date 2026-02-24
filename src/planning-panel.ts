@@ -234,6 +234,7 @@ export class PlanningPanel {
 			navActionBtn.addEventListener("click", (e) => {
 				e.stopPropagation();
 				this.callbacks.onItemNavigate!(item);
+				this.deselectItem();
 			});
 		}
 
