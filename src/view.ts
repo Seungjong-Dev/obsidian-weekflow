@@ -57,8 +57,9 @@ export class WeekFlowView extends ItemView {
 	private pendingDayOffset: number | null = null;
 	private viewModeOverride: "auto" | 7 | 3 | 1 = "auto";
 
-	// Bottom sheet (narrow mode)
-	private bottomSheetEl: HTMLElement | null = null;
+	// Dropdown panel (narrow mode)
+	private dropdownPanelEl: HTMLElement | null = null;
+	private dropdownBackdropEl: HTMLElement | null = null;
 
 	// Panel drag state
 	private panelDragItem: PanelItem | null = null;
@@ -161,7 +162,7 @@ export class WeekFlowView extends ItemView {
 	private onLayoutTierChanged(tier: LayoutTier): void {
 		this.currentLayoutTier = tier;
 
-		// Toggle layout CSS classes (always based on real width — affects panel/bottom-sheet)
+		// Toggle layout CSS classes (always based on real width — affects panel/dropdown)
 		this.contentEl.removeClass("weekflow-layout-wide", "weekflow-layout-medium", "weekflow-layout-narrow");
 		this.contentEl.addClass(`weekflow-layout-${tier}`);
 
@@ -392,7 +393,7 @@ export class WeekFlowView extends ItemView {
 		// Main area (panel + content area)
 		const main = body.createDiv({ cls: "weekflow-main" });
 
-		// Planning panel — side panel for wide/medium, bottom sheet for narrow
+		// Planning panel — side panel for wide/medium, dropdown panel for narrow
 		this.buildPanelSections();
 		if (this.currentLayoutTier !== "narrow") {
 			const panelEl = main.createDiv({ cls: "weekflow-panel" });
@@ -468,12 +469,12 @@ export class WeekFlowView extends ItemView {
 			this.reviewController.render(contentArea, this.currentVisibleDays, this.currentDayOffset);
 		}
 
-		// Bottom sheet (narrow mode only)
+		// Dropdown panel (narrow mode only)
 		if (this.currentLayoutTier === "narrow") {
-			this.renderBottomSheet(body);
+			this.renderDropdownPanel(body);
 		}
 
-		// Restore scroll position after ALL siblings (review panel, bottom sheet)
+		// Restore scroll position after ALL siblings (review panel, dropdown panel)
 		// are in the DOM, so gridWrapper's flex height is final.
 		// requestAnimationFrame ensures layout is fully resolved before we set
 		// scrollTop (synchronous reflow alone is insufficient when flex ancestors
@@ -490,46 +491,31 @@ export class WeekFlowView extends ItemView {
 		}
 	}
 
-	// ── Bottom Sheet (Narrow mode Planning Panel) ──
+	// ── Dropdown Panel (Narrow mode Planning Panel) ──
 
-	private renderBottomSheet(container: HTMLElement): void {
-		const sheet = container.createDiv({ cls: "weekflow-bottom-sheet collapsed" });
-		this.bottomSheetEl = sheet;
+	private renderDropdownPanel(container: HTMLElement): void {
+		// Backdrop (semi-transparent, closes panel on tap)
+		const backdrop = container.createDiv({ cls: "weekflow-dropdown-backdrop" });
+		backdrop.addEventListener("pointerdown", () => this.togglePanel());
+		this.dropdownBackdropEl = backdrop;
 
-		// Handle bar (swipe up/down to expand/collapse)
-		const handleBar = sheet.createDiv({ cls: "weekflow-bottom-sheet-handle" });
-		handleBar.createDiv({ cls: "weekflow-bottom-sheet-bar" });
-
-		let sheetStartY = 0;
-		let isExpanded = false;
-
-		handleBar.addEventListener("pointerdown", (e) => {
-			e.preventDefault();
-			handleBar.setPointerCapture(e.pointerId);
-			sheetStartY = e.clientY;
-		});
-
-		handleBar.addEventListener("pointerup", (e) => {
-			const dy = sheetStartY - e.clientY;
-			if (Math.abs(dy) > 40) {
-				isExpanded = dy > 0;
-				sheet.toggleClass("collapsed", !isExpanded);
-				sheet.toggleClass("expanded", isExpanded);
-			} else {
-				// Tap: toggle
-				isExpanded = !isExpanded;
-				sheet.toggleClass("collapsed", !isExpanded);
-				sheet.toggleClass("expanded", isExpanded);
-			}
-		});
+		// Dropdown panel (positioned from top, inside body)
+		const panel = container.createDiv({ cls: "weekflow-dropdown-panel" });
+		this.dropdownPanelEl = panel;
 
 		// Content (reuses PlanningPanel)
-		const contentEl = sheet.createDiv({ cls: "weekflow-bottom-sheet-content" });
+		const contentEl = panel.createDiv({ cls: "weekflow-dropdown-content" });
 		this.planningPanel = new PlanningPanel(contentEl, {
 			onItemDragStart: (item, e) => this.onPanelDragStart(item, e),
 			onItemNavigate: (item) => this.navigateToPanelItemSource(item),
 		});
 		this.planningPanel.render(this.panelSections);
+
+		// Apply initial state
+		if (!this.plugin.settings.planningPanelOpen) {
+			panel.addClass("collapsed");
+			backdrop.addClass("collapsed");
+		}
 	}
 
 	private renderWarnings(container: HTMLElement) {
@@ -1040,11 +1026,11 @@ export class WeekFlowView extends ItemView {
 			panelEl.toggleClass("collapsed", !this.plugin.settings.planningPanelOpen);
 		}
 
-		// Bottom sheet (narrow mode)
-		if (this.bottomSheetEl) {
-			const isExpanded = this.plugin.settings.planningPanelOpen;
-			this.bottomSheetEl.toggleClass("collapsed", !isExpanded);
-			this.bottomSheetEl.toggleClass("expanded", isExpanded);
+		// Dropdown panel (narrow mode)
+		if (this.dropdownPanelEl) {
+			const isOpen = this.plugin.settings.planningPanelOpen;
+			this.dropdownPanelEl.toggleClass("collapsed", !isOpen);
+			this.dropdownBackdropEl?.toggleClass("collapsed", !isOpen);
 		}
 	}
 
@@ -1088,10 +1074,12 @@ export class WeekFlowView extends ItemView {
 	private onPanelDragStart(item: PanelItem, e: PointerEvent): void {
 		this.panelDragItem = item;
 
-		// Narrow mode: collapse bottom sheet so grid is visible during drag
-		if (this.bottomSheetEl) {
-			this.bottomSheetEl.removeClass("expanded");
-			this.bottomSheetEl.addClass("collapsed");
+		// Narrow mode: close dropdown panel so grid is visible during drag
+		if (this.dropdownPanelEl && !this.dropdownPanelEl.hasClass("collapsed")) {
+			this.plugin.settings.planningPanelOpen = false;
+			this.plugin.saveSettings();
+			this.dropdownPanelEl.addClass("collapsed");
+			this.dropdownBackdropEl?.addClass("collapsed");
 		}
 
 		this.boundPanelDragMove = (ev: PointerEvent) => this.onPanelDragMove(ev);

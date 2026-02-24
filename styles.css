@@ -1325,7 +1325,7 @@
 	touch-action: none;
 }
 
-.weekflow-bottom-sheet-handle {
+.weekflow-dropdown-backdrop {
 	touch-action: none;
 }
 
@@ -1475,66 +1475,49 @@
 	height: 16px;
 }
 
-/* ── Bottom Sheet (Narrow mode Planning Panel) ── */
-.weekflow-bottom-sheet {
+/* ── Dropdown panel (narrow mode) ── */
+.weekflow-dropdown-backdrop {
 	position: absolute;
-	bottom: 0;
+	inset: 0;
+	background: rgba(0, 0, 0, 0.3);
+	z-index: 19;
+	transition: opacity 0.2s ease;
+}
+.weekflow-dropdown-backdrop.collapsed {
+	opacity: 0;
+	pointer-events: none;
+}
+
+.weekflow-dropdown-panel {
+	position: absolute;
+	top: 0;
 	left: 0;
 	right: 0;
+	max-height: 60%;
 	background: var(--background-primary);
-	border-top: 1px solid var(--background-modifier-border);
-	border-radius: 12px 12px 0 0;
-	transition: transform 0.25s ease;
+	border-bottom: 1px solid var(--background-modifier-border);
+	border-radius: 0 0 12px 12px;
 	z-index: 20;
-	max-height: 60vh;
 	overflow: hidden;
 	display: flex;
 	flex-direction: column;
+	transition: transform 0.25s ease, opacity 0.25s ease;
+}
+.weekflow-dropdown-panel.collapsed {
+	transform: translateY(-100%);
+	opacity: 0;
+	pointer-events: none;
 }
 
-.weekflow-bottom-sheet.collapsed {
-	transform: translateY(calc(100% - 40px));
-}
-
-.weekflow-bottom-sheet.expanded {
-	transform: translateY(0);
-}
-
-.weekflow-bottom-sheet-handle {
-	display: flex;
-	justify-content: center;
-	padding: 8px;
-	cursor: grab;
-	flex-shrink: 0;
-}
-
-.weekflow-bottom-sheet-bar {
-	width: 40px;
-	height: 4px;
-	border-radius: 2px;
-	background: var(--text-muted);
-}
-
-.weekflow-bottom-sheet-content {
+.weekflow-dropdown-content {
 	flex: 1;
 	overflow-y: auto;
-	padding-bottom: 20px;
+	padding-bottom: 12px;
 }
 
-/* ── Narrow mode body needs relative positioning for bottom sheet ── */
+/* ── Narrow mode body needs relative positioning for dropdown panel ── */
 .weekflow-layout-narrow .weekflow-body {
 	position: relative;
-}
-
-/* Narrow mode: pad grid bottom so collapsed bottom sheet (40px handle) doesn't cover last rows */
-.weekflow-layout-narrow .weekflow-grid-wrapper {
-	padding-bottom: 48px;
-}
-
-/* Mobile narrow: bottom sheet is offset by 48px, so grid needs more padding */
-.is-mobile.weekflow-layout-narrow .weekflow-grid-wrapper,
-.is-mobile .weekflow-layout-narrow .weekflow-grid-wrapper {
-	padding-bottom: 96px;
 }
 
 /* Mobile: pad bottom for Obsidian's floating navigation bar */
@@ -1544,11 +1527,6 @@
 
 .is-mobile .weekflow-grid-wrapper {
 	padding-bottom: 48px;
-}
-
-/* Mobile: offset bottom sheet above Obsidian's floating navigation bar */
-.is-mobile .weekflow-bottom-sheet {
-	bottom: 48px;
 }
 
 /* ── Narrow mode: hide side panel toggle since we use bottom sheet ── */
