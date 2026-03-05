@@ -55,6 +55,7 @@ export class WeekFlowView extends ItemView {
 	private currentVisibleDays = 7;
 	private currentDayOffset = 0;
 	private pendingDayOffset: number | null = null;
+	private recalcDayOffset = false;
 	private viewModeOverride: "auto" | 7 | 3 | 1 = "auto";
 
 	// Dropdown panel (narrow mode)
@@ -248,9 +249,10 @@ export class WeekFlowView extends ItemView {
 		if (this.pendingDayOffset !== null) {
 			this.currentDayOffset = this.pendingDayOffset;
 			this.pendingDayOffset = null;
-		} else if (weekChanged) {
+		} else if (weekChanged || this.recalcDayOffset) {
 			this.currentDayOffset = this.calculateDayOffset(this.currentVisibleDays);
 		}
+		this.recalcDayOffset = false;
 
 		// Add inbox source paths to watched files
 		const inboxPaths = getInboxWatchPaths(this.app.vault, settings.inboxSources, settings.dailyNotePath);
@@ -667,7 +669,7 @@ export class WeekFlowView extends ItemView {
 		if (!todayVisible) todayBtn.addClass("weekflow-nav-today-hint");
 		todayBtn.addEventListener("click", () => {
 			this.currentDate = window.moment();
-			this.pendingDayOffset = this.calculateDayOffset(this.currentVisibleDays);
+			this.recalcDayOffset = true;
 			this.refresh();
 		});
 
