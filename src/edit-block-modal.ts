@@ -1,6 +1,7 @@
 import { App, Modal, Setting } from "obsidian";
 import type { Category, TimelineItem } from "./types";
 import { formatTime, parseTime } from "./parser";
+import { setupModalKeyboardAvoidance } from "./modal-keyboard";
 
 export interface EditBlockResult {
 	action: "save" | "delete" | "complete" | "uncomplete";
@@ -16,6 +17,7 @@ export class EditBlockModal extends Modal {
 	private item: TimelineItem;
 	private categories: Category[];
 	private onSubmit: (result: EditBlockResult) => void;
+	private keyboardCleanup: (() => void) | null = null;
 
 	constructor(
 		app: App,
@@ -32,17 +34,68 @@ export class EditBlockModal extends Modal {
 	onOpen() {
 		const { contentEl } = this;
 		contentEl.empty();
+		this.keyboardCleanup = setupModalKeyboardAvoidance(this.modalEl);
 
 		const isActual = this.item.checkbox === "actual";
 
 		contentEl.createEl("h3", { text: "Edit Block" });
 
-		// Time inputs
+		// Variable declarations (used by closures below)
 		let startValue = formatTime(this.item.planTime.start);
 		let endValue = formatTime(this.item.planTime.end);
 		let actualStartValue = "";
 		let actualEndValue = "";
+		let selectedTag = this.item.tags[0] || (this.categories.length > 0 ? this.categories[0].tag : "");
 
+		// Content input
+		let contentValue = this.item.content;
+		new Setting(contentEl)
+			.setName("Content")
+			.addText((text) => {
+				text.setValue(this.item.content).onChange((value) => {
+					contentValue = value;
+				});
+				setTimeout(() => text.inputEl.focus(), 50);
+				text.inputEl.addEventListener("keydown", (e) => {
+					if (e.key === "Enter") {
+						e.preventDefault();
+						if (isActual) {
+							this.submitActualSave(contentValue, selectedTag, actualStartValue, actualEndValue);
+						} else {
+							this.submitSave(contentValue, selectedTag, startValue, endValue);
+						}
+					}
+				});
+			});
+
+		// Category selection
+		const catContainer = contentEl.createDiv({ cls: "weekflow-modal-categories" });
+		catContainer.style.display = "flex";
+		catContainer.style.gap = "6px";
+		catContainer.style.flexWrap = "wrap";
+		catContainer.style.marginBottom = "16px";
+
+		const catButtons: HTMLElement[] = [];
+		this.categories.forEach((cat) => {
+			const btn = catContainer.createEl("button", {
+				cls: "weekflow-palette-btn",
+			});
+			const dot = btn.createSpan({ cls: "weekflow-palette-dot" });
+			dot.style.backgroundColor = cat.color;
+			btn.createSpan({ text: cat.label || cat.tag });
+
+			if (selectedTag === cat.tag) btn.addClass("active");
+
+			btn.addEventListener("click", () => {
+				catButtons.forEach((b) => b.removeClass("active"));
+				btn.addClass("active");
+				selectedTag = cat.tag;
+			});
+
+			catButtons.push(btn);
+		});
+
+		// Time inputs
 		if (isActual) {
 			// Plan time: read-only display
 			const planSetting = new Setting(contentEl).setName("Plan time");
@@ -117,55 +170,6 @@ export class EditBlockModal extends Modal {
 				endValue = endInput.value;
 			});
 		}
-
-		// Content input
-		let contentValue = this.item.content;
-		new Setting(contentEl)
-			.setName("Content")
-			.addText((text) => {
-				text.setValue(this.item.content).onChange((value) => {
-					contentValue = value;
-				});
-				setTimeout(() => text.inputEl.focus(), 50);
-				text.inputEl.addEventListener("keydown", (e) => {
-					if (e.key === "Enter") {
-						e.preventDefault();
-						if (isActual) {
-							this.submitActualSave(contentValue, selectedTag, actualStartValue, actualEndValue);
-						} else {
-							this.submitSave(contentValue, selectedTag, startValue, endValue);
-						}
-					}
-				});
-			});
-
-		// Category selection
-		let selectedTag = this.item.tags[0] || (this.categories.length > 0 ? this.categories[0].tag : "");
-		const catContainer = contentEl.createDiv({ cls: "weekflow-modal-categories" });
-		catContainer.style.display = "flex";
-		catContainer.style.gap = "6px";
-		catContainer.style.flexWrap = "wrap";
-		catContainer.style.marginBottom = "16px";
-
-		const catButtons: HTMLElement[] = [];
-		this.categories.forEach((cat) => {
-			const btn = catContainer.createEl("button", {
-				cls: "weekflow-palette-btn",
-			});
-			const dot = btn.createSpan({ cls: "weekflow-palette-dot" });
-			dot.style.backgroundColor = cat.color;
-			btn.createSpan({ text: cat.label || cat.tag });
-
-			if (selectedTag === cat.tag) btn.addClass("active");
-
-			btn.addEventListener("click", () => {
-				catButtons.forEach((b) => b.removeClass("active"));
-				btn.addClass("active");
-				selectedTag = cat.tag;
-			});
-
-			catButtons.push(btn);
-		});
 
 		// Action buttons
 		const actions = new Setting(contentEl);
@@ -272,6 +276,8 @@ export class EditBlockModal extends Modal {
 	}
 
 	onClose() {
+		this.keyboardCleanup?.();
+		this.keyboardCleanup = null;
 		this.contentEl.empty();
 	}
 }

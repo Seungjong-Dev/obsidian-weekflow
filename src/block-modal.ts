@@ -1,6 +1,7 @@
 import { App, Modal, Setting } from "obsidian";
 import type { Category, TimeRange } from "./types";
 import { formatTime, parseTime } from "./parser";
+import { setupModalKeyboardAvoidance } from "./modal-keyboard";
 
 export interface BlockModalResult {
 	content: string;
@@ -16,6 +17,7 @@ export class BlockModal extends Modal {
 	private mode: "plan" | "actual";
 	private categories: Category[];
 	private defaultTag: string;
+	private keyboardCleanup: (() => void) | null = null;
 
 	constructor(
 		app: App,
@@ -36,13 +38,62 @@ export class BlockModal extends Modal {
 	onOpen() {
 		const { contentEl } = this;
 		contentEl.empty();
+		this.keyboardCleanup = setupModalKeyboardAvoidance(this.modalEl);
 
 		contentEl.createEl("h3", { text: "New Block" });
 
-		// Time inputs (editable)
+		// Variable declarations (used by closures below)
 		let startValue = formatTime(this.planTime.start);
 		let endValue = formatTime(this.planTime.end);
+		let selectedTag = this.defaultTag;
 
+		// Content input
+		let contentValue = "";
+		new Setting(contentEl)
+			.setName("Content")
+			.addText((text) => {
+				text.setPlaceholder("What are you doing?").onChange((value) => {
+					contentValue = value;
+				});
+				// Auto-focus
+				setTimeout(() => text.inputEl.focus(), 50);
+				// Enter key to submit
+				text.inputEl.addEventListener("keydown", (e) => {
+					if (e.key === "Enter") {
+						e.preventDefault();
+						this.submit(contentValue, selectedTag, startValue, endValue);
+					}
+				});
+			});
+
+		// Category selection
+		const catContainer = contentEl.createDiv({ cls: "weekflow-modal-categories" });
+		catContainer.style.display = "flex";
+		catContainer.style.gap = "6px";
+		catContainer.style.flexWrap = "wrap";
+		catContainer.style.marginBottom = "16px";
+
+		const catButtons: HTMLElement[] = [];
+		this.categories.forEach((cat) => {
+			const btn = catContainer.createEl("button", {
+				cls: "weekflow-palette-btn",
+			});
+			const dot = btn.createSpan({ cls: "weekflow-palette-dot" });
+			dot.style.backgroundColor = cat.color;
+			btn.createSpan({ text: cat.label || cat.tag });
+
+			if (cat.tag === this.defaultTag) btn.addClass("active");
+
+			btn.addEventListener("click", () => {
+				catButtons.forEach((b) => b.removeClass("active"));
+				btn.addClass("active");
+				selectedTag = cat.tag;
+			});
+
+			catButtons.push(btn);
+		});
+
+		// Time inputs (editable)
 		const timeSetting = new Setting(contentEl).setName("Time");
 		const timeContainer = timeSetting.controlEl.createDiv({
 			cls: "weekflow-edit-time-container",
@@ -76,53 +127,6 @@ export class BlockModal extends Modal {
 		const modeLabel = timeSetting.descEl;
 		modeLabel.setText(`${this.mode} mode`);
 
-		// Content input
-		let contentValue = "";
-		new Setting(contentEl)
-			.setName("Content")
-			.addText((text) => {
-				text.setPlaceholder("What are you doing?").onChange((value) => {
-					contentValue = value;
-				});
-				// Auto-focus
-				setTimeout(() => text.inputEl.focus(), 50);
-				// Enter key to submit
-				text.inputEl.addEventListener("keydown", (e) => {
-					if (e.key === "Enter") {
-						e.preventDefault();
-						this.submit(contentValue, selectedTag, startValue, endValue);
-					}
-				});
-			});
-
-		// Category selection
-		let selectedTag = this.defaultTag;
-		const catContainer = contentEl.createDiv({ cls: "weekflow-modal-categories" });
-		catContainer.style.display = "flex";
-		catContainer.style.gap = "6px";
-		catContainer.style.flexWrap = "wrap";
-		catContainer.style.marginBottom = "16px";
-
-		const catButtons: HTMLElement[] = [];
-		this.categories.forEach((cat) => {
-			const btn = catContainer.createEl("button", {
-				cls: "weekflow-palette-btn",
-			});
-			const dot = btn.createSpan({ cls: "weekflow-palette-dot" });
-			dot.style.backgroundColor = cat.color;
-			btn.createSpan({ text: cat.label || cat.tag });
-
-			if (cat.tag === this.defaultTag) btn.addClass("active");
-
-			btn.addEventListener("click", () => {
-				catButtons.forEach((b) => b.removeClass("active"));
-				btn.addClass("active");
-				selectedTag = cat.tag;
-			});
-
-			catButtons.push(btn);
-		});
-
 		// Action buttons
 		new Setting(contentEl)
 			.addButton((btn) =>
@@ -153,6 +157,8 @@ export class BlockModal extends Modal {
 	}
 
 	onClose() {
+		this.keyboardCleanup?.();
+		this.keyboardCleanup = null;
 		this.contentEl.empty();
 	}
 }
