@@ -530,6 +530,12 @@ export async function removeFromInboxFile(
 	const lines = content.split("\n");
 	if (lineNumber >= 0 && lineNumber < lines.length) {
 		lines.splice(lineNumber, 1);
+		// Clean up consecutive blank lines around the removed position
+		const prev = lineNumber > 0 ? lines[lineNumber - 1] : undefined;
+		const curr = lineNumber < lines.length ? lines[lineNumber] : undefined;
+		if (prev !== undefined && prev.trim() === "" && curr !== undefined && curr.trim() === "") {
+			lines.splice(lineNumber, 1);
+		}
 		await vault.modify(file, lines.join("\n"));
 	}
 }
