@@ -1413,6 +1413,7 @@ export class WeekFlowView extends ItemView {
 				this.currentVisibleDays = this.viewModeOverride;
 			}
 		}
+		this.recalcDayOffset = true;
 		await this.refresh();
 	}
 }
