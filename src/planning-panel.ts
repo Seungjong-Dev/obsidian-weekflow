@@ -33,6 +33,7 @@ export class PlanningPanel {
 	private lastPointerType: string = "mouse";
 	private scrollListener: (() => void) | null = null;
 	private penDragTimer: ReturnType<typeof setTimeout> | null = null;
+	private dismissHandler: ((e: PointerEvent) => void) | null = null;
 	private currentSections: PanelSection[] = [];
 
 	constructor(containerEl: HTMLElement, callbacks: PlanningPanelCallbacks) {
@@ -41,6 +42,7 @@ export class PlanningPanel {
 	}
 
 	render(sections: PanelSection[]): void {
+		this.deselectItem();
 		this.currentSections = sections;
 		this.containerEl.empty();
 
@@ -288,6 +290,14 @@ export class PlanningPanel {
 
 		this.positionActionBar(itemEl);
 
+		// Dismiss on pointerdown outside action bar / selected item
+		this.dismissHandler = (e: PointerEvent) => {
+			if (this.actionBarEl?.contains(e.target as Node)) return;
+			if (this.selectedItemEl?.contains(e.target as Node)) return;
+			this.deselectItem();
+		};
+		document.addEventListener("pointerdown", this.dismissHandler, true);
+
 		// Deselect on panel scroll
 		this.scrollListener = () => { this.deselectItem(); };
 		this.containerEl.addEventListener("scroll", this.scrollListener, { passive: true });
@@ -346,6 +356,10 @@ export class PlanningPanel {
 		if (this.actionBarEl) {
 			this.actionBarEl.remove();
 			this.actionBarEl = null;
+		}
+		if (this.dismissHandler) {
+			document.removeEventListener("pointerdown", this.dismissHandler, true);
+			this.dismissHandler = null;
 		}
 		if (this.scrollListener) {
 			this.containerEl.removeEventListener("scroll", this.scrollListener);

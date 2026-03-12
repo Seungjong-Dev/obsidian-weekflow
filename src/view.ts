@@ -1099,6 +1099,7 @@ export class WeekFlowView extends ItemView {
 	}
 
 	private togglePanel() {
+		this.planningPanel?.deselectAll();
 		this.plugin.settings.planningPanelOpen = !this.plugin.settings.planningPanelOpen;
 		this.plugin.saveSettings();
 
