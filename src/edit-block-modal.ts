@@ -57,7 +57,7 @@ export class EditBlockModal extends Modal {
 				});
 				setTimeout(() => text.inputEl.focus(), 50);
 				text.inputEl.addEventListener("keydown", (e) => {
-					if (e.key === "Enter") {
+					if (e.key === "Enter" && !e.isComposing) {
 						e.preventDefault();
 						if (isActual) {
 							this.submitActualSave(contentValue, selectedTag, actualStartValue, actualEndValue);

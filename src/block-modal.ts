@@ -59,7 +59,7 @@ export class BlockModal extends Modal {
 				setTimeout(() => text.inputEl.focus(), 50);
 				// Enter key to submit
 				text.inputEl.addEventListener("keydown", (e) => {
-					if (e.key === "Enter") {
+					if (e.key === "Enter" && !e.isComposing) {
 						e.preventDefault();
 						this.submit(contentValue, selectedTag, startValue, endValue);
 					}

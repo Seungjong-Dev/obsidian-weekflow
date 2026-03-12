@@ -81,7 +81,7 @@ export class PlanningPanel {
 				});
 				const onAdd = section.onAddItem;
 				input.addEventListener("keydown", (e) => {
-					if (e.key === "Enter" && input.value.trim()) {
+					if (e.key === "Enter" && !e.isComposing && input.value.trim()) {
 						onAdd(input.value.trim());
 						input.value = "";
 					}
