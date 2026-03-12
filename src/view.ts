@@ -416,6 +416,8 @@ export class WeekFlowView extends ItemView {
 			this.planningPanel = new PlanningPanel(panelEl, {
 				onItemDragStart: (item, e) => this.onPanelDragStart(item, e),
 				onItemNavigate: (item) => this.navigateToPanelItemSource(item),
+				onItemEdit: (item, newText) => this.onInboxEditItem(item, newText),
+				onItemDelete: (item) => this.onInboxDeleteItem(item),
 			});
 			this.planningPanel.render(this.panelSections);
 		}
