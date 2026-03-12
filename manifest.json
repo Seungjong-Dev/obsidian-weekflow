@@ -1,7 +1,7 @@
 {
 	"id": "weekflow",
 	"name": "WeekFlow",
-	"version": "1.2.0",
+	"version": "1.2.1",
 	"minAppVersion": "0.15.0",
 	"description": "Weekly timetable-based time management and review plugin",
 	"author": "",
