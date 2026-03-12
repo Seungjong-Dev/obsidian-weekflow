@@ -17,6 +17,8 @@ export interface PanelSection {
 export interface PlanningPanelCallbacks {
 	onItemDragStart(item: PanelItem, e: PointerEvent): void;
 	onItemNavigate?(item: PanelItem): void;
+	onItemEdit?(item: PanelItem, newText: string): void;
+	onItemDelete?(item: PanelItem): void;
 }
 
 export class PlanningPanel {
@@ -31,6 +33,7 @@ export class PlanningPanel {
 	private lastPointerType: string = "mouse";
 	private scrollListener: (() => void) | null = null;
 	private penDragTimer: ReturnType<typeof setTimeout> | null = null;
+	private currentSections: PanelSection[] = [];
 
 	constructor(containerEl: HTMLElement, callbacks: PlanningPanelCallbacks) {
 		this.containerEl = containerEl;
@@ -38,6 +41,7 @@ export class PlanningPanel {
 	}
 
 	render(sections: PanelSection[]): void {
+		this.currentSections = sections;
 		this.containerEl.empty();
 
 		for (const section of sections) {
@@ -126,21 +130,39 @@ export class PlanningPanel {
 				}
 
 				// Context menu (mouse and pen — touch guarded)
-				if (this.callbacks.onItemNavigate && (item.source.type === "inbox" || item.source.type === "overdue")) {
-					itemEl.addEventListener("contextmenu", (e) => {
-						if (this.lastPointerType === "touch") return;
-						e.preventDefault();
-						e.stopPropagation();
-						const menu = new Menu();
+				itemEl.addEventListener("contextmenu", (e) => {
+					if (this.lastPointerType === "touch") return;
+					const hasNav = this.callbacks.onItemNavigate && (item.source.type === "inbox" || item.source.type === "overdue");
+					const hasEdit = this.callbacks.onItemEdit && item.source.type === "inbox";
+					const hasDelete = this.callbacks.onItemDelete && item.source.type === "inbox";
+					if (!hasNav && !hasEdit && !hasDelete) return;
+					e.preventDefault();
+					e.stopPropagation();
+					const menu = new Menu();
+					if (hasNav) {
 						const title = item.source.type === "inbox" ? "Go to source note" : "Go to daily note";
 						menu.addItem((mi) => {
 							mi.setTitle(title).setIcon("arrow-up-right").onClick(() => {
 								this.callbacks.onItemNavigate!(item);
 							});
 						});
-						menu.showAtMouseEvent(e);
-					});
-				}
+					}
+					if (hasEdit) {
+						menu.addItem((mi) => {
+							mi.setTitle("Edit").setIcon("pencil").onClick(() => {
+								this.startInlineEdit(item, itemEl);
+							});
+						});
+					}
+					if (hasDelete) {
+						menu.addItem((mi) => {
+							mi.setTitle("Delete").setIcon("trash").onClick(() => {
+								this.callbacks.onItemDelete!(item);
+							});
+						});
+					}
+					menu.showAtMouseEvent(e);
+				});
 
 				// Drag via pointerdown — touch vs mouse/pen branching
 				let startX = 0, startY = 0;
@@ -238,6 +260,32 @@ export class PlanningPanel {
 			});
 		}
 
+		// Edit button (inbox only)
+		if (this.callbacks.onItemEdit && item.source.type === "inbox") {
+			const editBtn = bar.createDiv({ cls: "weekflow-action-bar-btn" });
+			setIcon(editBtn, "pencil");
+			editBtn.ariaLabel = "Edit";
+			editBtn.addEventListener("pointerdown", (e) => { e.stopPropagation(); e.preventDefault(); });
+			editBtn.addEventListener("click", (e) => {
+				e.stopPropagation();
+				this.deselectItem();
+				this.startInlineEdit(item, itemEl);
+			});
+		}
+
+		// Delete button (inbox only)
+		if (this.callbacks.onItemDelete && item.source.type === "inbox") {
+			const deleteBtn = bar.createDiv({ cls: "weekflow-action-bar-btn" });
+			setIcon(deleteBtn, "trash");
+			deleteBtn.ariaLabel = "Delete";
+			deleteBtn.addEventListener("pointerdown", (e) => { e.stopPropagation(); e.preventDefault(); });
+			deleteBtn.addEventListener("click", (e) => {
+				e.stopPropagation();
+				this.deselectItem();
+				this.callbacks.onItemDelete!(item);
+			});
+		}
+
 		this.positionActionBar(itemEl);
 
 		// Deselect on panel scroll
@@ -247,6 +295,45 @@ export class PlanningPanel {
 
 	public deselectAll(): void {
 		this.deselectItem();
+	}
+
+	private startInlineEdit(item: PanelItem, itemEl: HTMLElement): void {
+		const originalLabel = this.buildItemLabel(item);
+		itemEl.empty();
+		itemEl.addClass("weekflow-panel-item-editing");
+
+		const input = itemEl.createEl("input", {
+			type: "text",
+			cls: "weekflow-panel-edit-input",
+			value: item.content,
+		});
+
+		const finish = (save: boolean) => {
+			const newText = input.value.trim();
+			itemEl.removeClass("weekflow-panel-item-editing");
+			if (save && newText && newText !== item.content) {
+				this.callbacks.onItemEdit!(item, newText);
+			} else {
+				// Restore original display
+				this.render(this.currentSections);
+			}
+		};
+
+		input.addEventListener("keydown", (e) => {
+			if (e.key === "Enter" && !e.isComposing) {
+				e.preventDefault();
+				finish(true);
+			} else if (e.key === "Escape") {
+				e.preventDefault();
+				finish(false);
+			}
+		});
+		input.addEventListener("blur", () => finish(false));
+
+		setTimeout(() => {
+			input.focus();
+			input.select();
+		}, 50);
 	}
 
 	private deselectItem(): void {

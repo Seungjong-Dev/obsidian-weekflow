@@ -270,6 +270,21 @@
 	outline: none;
 }
 
+.weekflow-panel-edit-input {
+	width: 100%;
+	padding: 2px 4px;
+	font-size: 12px;
+	border: 1px solid var(--interactive-accent);
+	border-radius: 3px;
+	background: var(--background-primary);
+	color: var(--text-normal);
+	outline: none;
+}
+
+.weekflow-panel-item-editing {
+	padding: 2px 4px;
+}
+
 .weekflow-panel-empty {
 	padding: 8px;
 	font-size: 11px;

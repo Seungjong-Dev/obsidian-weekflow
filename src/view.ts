@@ -4,12 +4,12 @@ import type WeekFlowPlugin from "./main";
 import { VIEW_TYPE_WEEKFLOW } from "./types";
 import type { CalendarEvent, PanelItem, ParseWarning, TimelineItem, WeekFlowSettings } from "./types";
 import { getCalendarEventsForWeek, clearCalendarCache } from "./calendar";
-import { getWeekDates, getWeekNotePaths, loadWeekData, saveDailyNoteItems, resolveDailyNotePath, getInboxItems, getInboxWatchPaths, addToInbox, getPrimaryInboxNoteSource, getActiveProjects, getProjectTasks, loadWeekReviewData } from "./daily-note";
+import { getWeekDates, getWeekNotePaths, loadWeekData, saveDailyNoteItems, resolveDailyNotePath, getInboxItems, getInboxWatchPaths, addToInbox, editInboxItem, removeFromInboxFile, getPrimaryInboxNoteSource, getActiveProjects, getProjectTasks, loadWeekReviewData } from "./daily-note";
 import type { ProjectInfo, InboxCheckboxItem } from "./daily-note";
 import { GridRenderer } from "./grid-renderer";
 import { BlockModal } from "./block-modal";
 import { EditBlockModal } from "./edit-block-modal";
-import { generateItemId } from "./parser";
+import { generateItemId, serializeCheckboxItem } from "./parser";
 import { UndoManager, type UndoableAction } from "./undo-manager";
 import { PlanningPanel, type PanelSection } from "./planning-panel";
 import type { CheckboxItem } from "./parser";
@@ -515,6 +515,8 @@ export class WeekFlowView extends ItemView {
 		this.planningPanel = new PlanningPanel(contentEl, {
 			onItemDragStart: (item, e) => this.onPanelDragStart(item, e),
 			onItemNavigate: (item) => this.navigateToPanelItemSource(item),
+			onItemEdit: (item, newText) => this.onInboxEditItem(item, newText),
+			onItemDelete: (item) => this.onInboxDeleteItem(item),
 		});
 		this.planningPanel.render(this.panelSections);
 
@@ -1143,6 +1145,25 @@ export class WeekFlowView extends ItemView {
 		const line = `- [ ] ${text}`;
 		await this.withSelfWriteGuard(() =>
 			addToInbox(this.app.vault, this.plugin.settings, line)
+		);
+		await this.refresh();
+	}
+
+	private async onInboxEditItem(item: PanelItem, newText: string): Promise<void> {
+		if (item.source.type !== "inbox") return;
+		const { notePath, lineNumber } = item.source;
+		const newLine = serializeCheckboxItem(newText, item.tags, item.rawSuffix);
+		await this.withSelfWriteGuard(() =>
+			editInboxItem(this.app.vault, notePath, lineNumber, newLine)
+		);
+		await this.refresh();
+	}
+
+	private async onInboxDeleteItem(item: PanelItem): Promise<void> {
+		if (item.source.type !== "inbox") return;
+		const { notePath, lineNumber } = item.source;
+		await this.withSelfWriteGuard(() =>
+			removeFromInboxFile(this.app.vault, notePath, lineNumber)
 		);
 		await this.refresh();
 	}

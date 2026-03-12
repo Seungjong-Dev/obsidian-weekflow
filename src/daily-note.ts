@@ -516,6 +516,26 @@ export async function addToInbox(
 }
 
 /**
+ * Edit a checkbox item in an inbox file by replacing the line at lineNumber.
+ */
+export async function editInboxItem(
+	vault: Vault,
+	filePath: string,
+	lineNumber: number,
+	newLine: string
+): Promise<void> {
+	const file = vault.getAbstractFileByPath(filePath);
+	if (!file || !(file instanceof TFile)) return;
+
+	const content = await vault.read(file);
+	const lines = content.split("\n");
+	if (lineNumber >= 0 && lineNumber < lines.length) {
+		lines[lineNumber] = newLine;
+		await vault.modify(file, lines.join("\n"));
+	}
+}
+
+/**
  * Remove a checkbox item from a specific inbox file by line number.
  */
 export async function removeFromInboxFile(
