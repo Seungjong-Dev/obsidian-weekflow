@@ -4,6 +4,7 @@ import type { WeekFlowSettings } from "./types";
 import { WeekFlowSettingTab } from "./settings";
 import { WeekFlowView } from "./view";
 import { StatsView } from "./stats-view";
+import { registerAllCliHandlers } from "./cli";
 
 export default class WeekFlowPlugin extends Plugin {
 	settings: WeekFlowSettings = DEFAULT_SETTINGS;
@@ -86,6 +87,9 @@ export default class WeekFlowPlugin extends Plugin {
 		});
 
 		this.addSettingTab(new WeekFlowSettingTab(this.app, this));
+
+		// Register CLI handlers (Obsidian 1.12.2+)
+		registerAllCliHandlers(this);
 	}
 
 	onunload() {}
