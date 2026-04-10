@@ -45,8 +45,8 @@ function parseICSEvents(
 	// Without this, events with TZID may fail to convert or silently produce
 	// incorrect times, causing them to be filtered out of the visible range.
 	for (const vtz of comp.getAllSubcomponents("vtimezone")) {
-		const tz = new ICAL.Timezone(vtz);
-		ICAL.TimezoneService.register(tz.tzid, tz);
+		const tz = new (ICAL as any).Timezone(vtz);
+		(ICAL as any).TimezoneService.register(tz.tzid, tz);
 	}
 
 	const vevents = comp.getAllSubcomponents("vevent");
