@@ -89,7 +89,8 @@ export default class WeekFlowPlugin extends Plugin {
 		this.addSettingTab(new WeekFlowSettingTab(this.app, this));
 
 		// Register CLI handlers (Obsidian 1.12.2+)
-		registerAllCliHandlers(this);
+		const cliRegistered = registerAllCliHandlers(this);
+		console.log(`[WeekFlow] CLI handlers registered: ${cliRegistered}`);
 	}
 
 	onunload() {}

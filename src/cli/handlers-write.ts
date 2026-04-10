@@ -23,6 +23,20 @@ import { ok, err, validateRequired } from "./response";
 
 type Ctx = { app: App; settings: WeekFlowSettings };
 
+/** Parse comma-separated indices, validate, and return sorted descending. */
+function parseIndices(raw: string, maxLen: number): { indices: number[] } | { error: string } {
+	const indices = raw.split(",").map((s) => parseInt(s.trim(), 10));
+	if (indices.some(isNaN)) return { error: `Invalid index value: ${raw}` };
+	for (const idx of indices) {
+		if (idx < 0 || idx >= maxLen) {
+			return { error: `Index ${idx} out of range (0-${maxLen - 1})` };
+		}
+	}
+	const unique = [...new Set(indices)];
+	unique.sort((a, b) => b - a); // descending — process from end to avoid shift
+	return { indices: unique };
+}
+
 // ── weekflow:add — create a timeline block ──
 
 export const addFlags: CliFlags = {
@@ -78,7 +92,7 @@ export function addHandler(ctx: Ctx) {
 
 export const completeFlags: CliFlags = {
 	date: { value: "<YYYY-MM-DD>", description: "Target date", required: true },
-	index: { value: "<N>", description: "Item index from query result", required: true },
+	index: { value: "<N|N,N,...>", description: "Item index(es), comma-separated for batch", required: true },
 	"actual-start": { value: "<HH:MM>", description: "Actual start time (default: same as plan)" },
 	"actual-end": { value: "<HH:MM>", description: "Actual end time (default: same as plan)" },
 };
@@ -93,30 +107,39 @@ export function completeHandler(ctx: Ctx) {
 			const date = moment(params.date, "YYYY-MM-DD");
 			if (!date.isValid()) return err(CMD, `Invalid date: ${params.date}`);
 
-			const idx = parseInt(params.index, 10);
 			const { items } = await getDailyNoteItems(ctx.app.vault, date, ctx.settings);
 
-			if (idx < 0 || idx >= items.length) {
-				return err(CMD, `Index ${idx} out of range (0-${items.length - 1})`);
+			const parsed = parseIndices(params.index, items.length);
+			if ("error" in parsed) return err(CMD, parsed.error);
+
+			// actual-start/end only applies when completing a single item
+			if (parsed.indices.length > 1 && (params["actual-start"] || params["actual-end"])) {
+				return err(CMD, "actual-start/actual-end can only be used with a single index");
 			}
 
-			const item = items[idx];
-			if (item.checkbox === "actual") {
-				return err(CMD, `Item at index ${idx} is already completed`);
-			}
+			const completed = [];
+			for (const idx of parsed.indices) {
+				const item = items[idx];
+				if (item.checkbox === "actual") {
+					return err(CMD, `Item at index ${idx} is already completed`);
+				}
+				item.checkbox = "actual";
 
-			item.checkbox = "actual";
-
-			// Set actual time if provided, otherwise use plan time
-			if (params["actual-start"] || params["actual-end"]) {
-				const actStart = params["actual-start"] ? parseTime(params["actual-start"]) : item.planTime.start;
-				const actEnd = params["actual-end"] ? parseTime(params["actual-end"]) : item.planTime.end;
-				if (actEnd <= actStart) return err(CMD, "Actual end time must be after actual start time");
-				item.actualTime = { start: actStart, end: actEnd };
+				if (params["actual-start"] || params["actual-end"]) {
+					const actStart = params["actual-start"] ? parseTime(params["actual-start"]) : item.planTime.start;
+					const actEnd = params["actual-end"] ? parseTime(params["actual-end"]) : item.planTime.end;
+					if (actEnd <= actStart) return err(CMD, "Actual end time must be after actual start time");
+					item.actualTime = { start: actStart, end: actEnd };
+				}
+				completed.push(toDigestItem(item, idx));
 			}
 
 			await saveDailyNoteItems(ctx.app.vault, date, ctx.settings, items);
-			return ok(CMD, { date: params.date, item: toDigestItem(item, idx) });
+
+			const data = completed.length === 1
+				? { date: params.date, item: completed[0] }
+				: { date: params.date, items: completed };
+			return ok(CMD, data);
 		} catch (e) {
 			return err(CMD, String(e));
 		}
@@ -127,7 +150,7 @@ export function completeHandler(ctx: Ctx) {
 
 export const deferFlags: CliFlags = {
 	date: { value: "<YYYY-MM-DD>", description: "Source date", required: true },
-	index: { value: "<N>", description: "Item index", required: true },
+	index: { value: "<N|N,N,...>", description: "Item index(es), comma-separated for batch", required: true },
 	to: { value: "<YYYY-MM-DD>", description: "Target date", required: true },
 };
 
@@ -143,38 +166,54 @@ export function deferHandler(ctx: Ctx) {
 			if (!fromDate.isValid()) return err(CMD, `Invalid date: ${params.date}`);
 			if (!toDate.isValid()) return err(CMD, `Invalid to date: ${params.to}`);
 
-			const idx = parseInt(params.index, 10);
 			const { items: fromItems } = await getDailyNoteItems(ctx.app.vault, fromDate, ctx.settings);
 
-			if (idx < 0 || idx >= fromItems.length) {
-				return err(CMD, `Index ${idx} out of range (0-${fromItems.length - 1})`);
+			const parsed = parseIndices(params.index, fromItems.length);
+			if ("error" in parsed) return err(CMD, parsed.error);
+
+			// Validate all items are plan before mutating
+			for (const idx of parsed.indices) {
+				if (fromItems[idx].checkbox !== "plan") {
+					return err(CMD, `Only plan items can be deferred (index ${idx} is '${fromItems[idx].checkbox}')`);
+				}
 			}
 
-			const item = fromItems[idx];
-			if (item.checkbox !== "plan") {
-				return err(CMD, `Only plan items can be deferred (item is '${item.checkbox}')`);
+			// Mark originals as deferred (indices are descending, safe to mutate)
+			const deferred = [];
+			for (const idx of parsed.indices) {
+				fromItems[idx].checkbox = "deferred";
+				deferred.push(idx);
 			}
-
-			// Mark original as deferred
-			item.checkbox = "deferred";
 			await saveDailyNoteItems(ctx.app.vault, fromDate, ctx.settings, fromItems);
 
-			// Create new plan item on target date
-			const newItem: TimelineItem = {
-				id: generateItemId(),
-				checkbox: "plan",
-				planTime: { ...item.planTime },
-				content: item.content,
-				tags: [...item.tags],
-				rawSuffix: item.rawSuffix,
-			};
+			// Create new plan items on target date
 			const { items: toItems } = await getDailyNoteItems(ctx.app.vault, toDate, ctx.settings);
-			toItems.push(newItem);
+			const created = [];
+			// Add in ascending order so target indices are predictable
+			for (const idx of [...parsed.indices].reverse()) {
+				const item = fromItems[idx];
+				const newItem: TimelineItem = {
+					id: generateItemId(),
+					checkbox: "plan",
+					planTime: { ...item.planTime },
+					content: item.content,
+					tags: [...item.tags],
+					rawSuffix: item.rawSuffix,
+				};
+				toItems.push(newItem);
+				created.push(toDigestItem(newItem, toItems.length - 1));
+			}
 			await saveDailyNoteItems(ctx.app.vault, toDate, ctx.settings, toItems);
 
+			if (parsed.indices.length === 1) {
+				return ok(CMD, {
+					from: { date: params.date, index: parsed.indices[0], status: "deferred" },
+					to: { date: params.to, item: created[0] },
+				});
+			}
 			return ok(CMD, {
-				from: { date: params.date, index: idx, status: "deferred" },
-				to: { date: params.to, item: toDigestItem(newItem, toItems.length - 1) },
+				from: { date: params.date, indices: deferred.sort((a, b) => a - b), status: "deferred" },
+				to: { date: params.to, items: created },
 			});
 		} catch (e) {
 			return err(CMD, String(e));
@@ -186,7 +225,7 @@ export function deferHandler(ctx: Ctx) {
 
 export const deleteFlags: CliFlags = {
 	date: { value: "<YYYY-MM-DD>", description: "Target date", required: true },
-	index: { value: "<N>", description: "Item index", required: true },
+	index: { value: "<N|N,N,...>", description: "Item index(es), comma-separated for batch", required: true },
 };
 
 export function deleteHandler(ctx: Ctx) {
@@ -199,20 +238,25 @@ export function deleteHandler(ctx: Ctx) {
 			const date = moment(params.date, "YYYY-MM-DD");
 			if (!date.isValid()) return err(CMD, `Invalid date: ${params.date}`);
 
-			const idx = parseInt(params.index, 10);
 			const { items } = await getDailyNoteItems(ctx.app.vault, date, ctx.settings);
 
-			if (idx < 0 || idx >= items.length) {
-				return err(CMD, `Index ${idx} out of range (0-${items.length - 1})`);
-			}
+			const parsed = parseIndices(params.index, items.length);
+			if ("error" in parsed) return err(CMD, parsed.error);
 
-			const removed = items.splice(idx, 1)[0];
+			// Splice in descending order so indices stay valid
+			const removedList = [];
+			for (const idx of parsed.indices) {
+				const removed = items.splice(idx, 1)[0];
+				removedList.push(toDigestItem(removed, idx));
+			}
 			await saveDailyNoteItems(ctx.app.vault, date, ctx.settings, items);
 
-			return ok(CMD, {
-				date: params.date,
-				removed: toDigestItem(removed, idx),
-			});
+			if (removedList.length === 1) {
+				return ok(CMD, { date: params.date, removed: removedList[0] });
+			}
+			// Return in ascending index order for readability
+			removedList.reverse();
+			return ok(CMD, { date: params.date, removed: removedList });
 		} catch (e) {
 			return err(CMD, String(e));
 		}
@@ -246,7 +290,7 @@ export function inboxAddHandler(ctx: Ctx) {
 // ── weekflow:inbox:remove ──
 
 export const inboxRemoveFlags: CliFlags = {
-	index: { value: "<N>", description: "Item index from weekflow:inbox result", required: true },
+	index: { value: "<N|N,N,...>", description: "Item index(es), comma-separated for batch", required: true },
 };
 
 export function inboxRemoveHandler(ctx: Ctx) {
@@ -256,19 +300,24 @@ export function inboxRemoveHandler(ctx: Ctx) {
 		if (missing) return err(CMD, missing);
 
 		try {
-			const idx = parseInt(params.index, 10);
 			const items = await getInboxItems(ctx.app.vault, ctx.settings);
 
-			if (idx < 0 || idx >= items.length) {
-				return err(CMD, `Index ${idx} out of range (0-${items.length - 1})`);
+			const parsed = parseIndices(params.index, items.length);
+			if ("error" in parsed) return err(CMD, parsed.error);
+
+			// Remove in descending order so line numbers stay valid
+			const removedList = [];
+			for (const idx of parsed.indices) {
+				const item = items[idx];
+				await removeFromInboxFile(ctx.app.vault, item.sourcePath, item.lineNumber);
+				removedList.push({ content: item.content, tags: item.tags });
 			}
 
-			const item = items[idx];
-			await removeFromInboxFile(ctx.app.vault, item.sourcePath, item.lineNumber);
-
-			return ok(CMD, {
-				removed: { content: item.content, tags: item.tags },
-			});
+			if (removedList.length === 1) {
+				return ok(CMD, { removed: removedList[0] });
+			}
+			removedList.reverse();
+			return ok(CMD, { removed: removedList });
 		} catch (e) {
 			return err(CMD, String(e));
 		}
