@@ -52,6 +52,12 @@ export interface CalendarEvent {
 	color: string;
 }
 
+export interface LogItem {
+	timeMinutes: number;
+	content: string;
+	lineNumber: number;
+}
+
 export interface InboxSource {
 	path: string;    // note path (e.g., "Inbox.md") or folder path (e.g., "Projects/Active")
 	heading: string; // heading to scope reads/writes; empty string = entire note
@@ -83,6 +89,11 @@ export interface WeekFlowSettings {
 	reviewHeading: string;
 	reviewPanelOpen: boolean;
 	reviewPanelHeight: number; // px, 0 = auto
+	reviewPanelMode: "review" | "log";
+
+	// Logs
+	logsHeading: string;
+	logTimestampFormat: string; // moment.js format, e.g. "HH:mm"
 
 	// Calendar
 	calendarSources: CalendarSource[];
@@ -112,6 +123,9 @@ export const DEFAULT_SETTINGS: WeekFlowSettings = {
 	reviewHeading: "## Review",
 	reviewPanelOpen: true,
 	reviewPanelHeight: 160,
+	reviewPanelMode: "review",
+	logsHeading: "## Logs",
+	logTimestampFormat: "HH:mm",
 	calendarSources: [],
 	calendarCacheDuration: 30,
 };

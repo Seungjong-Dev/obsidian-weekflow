@@ -1,8 +1,8 @@
 import type { App } from "obsidian";
-import { moment } from "obsidian";
+import { moment, setIcon } from "obsidian";
 type Moment = ReturnType<typeof moment>;
-import type { WeekFlowSettings } from "./types";
-import { saveDailyReviewContent } from "./daily-note";
+import type { LogItem, WeekFlowSettings } from "./types";
+import { appendDailyLog, saveDailyReviewContent } from "./daily-note";
 
 export interface ReviewPanelDeps {
 	app: App;
@@ -11,10 +11,12 @@ export interface ReviewPanelDeps {
 	contentEl: HTMLElement;
 	withSelfWriteGuard: <T>(fn: () => Promise<T>) => Promise<T>;
 	saveSettings: () => void | Promise<void>;
+	onNavigateLog?: (date: Moment, lineNumber: number) => void;
 }
 
 export class ReviewPanelController {
 	private reviewData: Map<string, string> = new Map();
+	private logData: Map<string, LogItem[]> = new Map();
 	private reviewDebounceTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
 	private deps: ReviewPanelDeps;
 
@@ -29,6 +31,10 @@ export class ReviewPanelController {
 
 	loadData(data: Map<string, string>): void {
 		this.reviewData = data;
+	}
+
+	loadLogData(data: Map<string, LogItem[]>): void {
+		this.logData = data;
 	}
 
 	getReviewData(): Map<string, string> {
@@ -110,6 +116,22 @@ export class ReviewPanelController {
 		}
 	}
 
+	setMode(mode: "review" | "log"): void {
+		if (this.deps.settings.reviewPanelMode === mode) return;
+		this.deps.settings.reviewPanelMode = mode;
+		this.deps.saveSettings();
+
+		const panel = this.deps.contentEl.querySelector(".weekflow-review-panel");
+		if (!panel) return;
+		const content = panel.querySelector(".weekflow-review-content") as HTMLElement | null;
+		if (!content) return;
+
+		const visibleDays = this.lastVisibleDays;
+		const dayOffset = this.lastDayOffset;
+		content.empty();
+		this.fillContent(content, visibleDays, dayOffset);
+	}
+
 	destroy(): void {
 		for (const timer of this.reviewDebounceTimers.values()) {
 			clearTimeout(timer);
@@ -119,17 +141,56 @@ export class ReviewPanelController {
 
 	// ── Private ──
 
+	private lastVisibleDays: number = 7;
+	private lastDayOffset: number = 0;
+
 	private renderContent(panel: HTMLElement, visibleDays: number, dayOffset: number): void {
 		const content = panel.createDiv({ cls: "weekflow-review-content" });
 		this.fillContent(content, visibleDays, dayOffset);
 	}
 
 	private fillContent(content: HTMLElement, visibleDays: number, dayOffset: number): void {
+		this.lastVisibleDays = visibleDays;
+		this.lastDayOffset = dayOffset;
 		content.style.gridTemplateColumns = `60px repeat(${visibleDays}, 1fr)`;
 
 		const spacer = content.createDiv({ cls: "weekflow-review-spacer" });
-		spacer.createSpan({ text: "Review", cls: "weekflow-review-spacer-label" });
+		this.renderModeSwitch(spacer);
 
+		const mode = this.deps.settings.reviewPanelMode || "review";
+		if (mode === "log") {
+			this.fillLogCells(content, visibleDays, dayOffset);
+		} else {
+			this.fillReviewCells(content, visibleDays, dayOffset);
+		}
+	}
+
+	private renderModeSwitch(spacer: HTMLElement): void {
+		const mode = this.deps.settings.reviewPanelMode || "review";
+		const sw = spacer.createDiv({ cls: "weekflow-review-mode-switch" });
+
+		const reviewBtn = sw.createEl("button", {
+			cls: "weekflow-review-mode-btn",
+			text: "Review",
+		});
+		if (mode === "review") reviewBtn.addClass("active");
+		reviewBtn.addEventListener("click", (e) => {
+			e.stopPropagation();
+			this.setMode("review");
+		});
+
+		const logBtn = sw.createEl("button", {
+			cls: "weekflow-review-mode-btn",
+			text: "Log",
+		});
+		if (mode === "log") logBtn.addClass("active");
+		logBtn.addEventListener("click", (e) => {
+			e.stopPropagation();
+			this.setMode("log");
+		});
+	}
+
+	private fillReviewCells(content: HTMLElement, visibleDays: number, dayOffset: number): void {
 		for (let i = 0; i < visibleDays; i++) {
 			const date = this.deps.dates[dayOffset + i];
 			const dateKey = date.format("YYYY-MM-DD");
@@ -152,6 +213,90 @@ export class ReviewPanelController {
 				this.saveImmediate(dateKey, textarea.value);
 			});
 		}
+	}
+
+	private fillLogCells(content: HTMLElement, visibleDays: number, dayOffset: number): void {
+		for (let i = 0; i < visibleDays; i++) {
+			const date = this.deps.dates[dayOffset + i];
+			const dateKey = date.format("YYYY-MM-DD");
+			const isToday = date.isSame(window.moment(), "day");
+
+			const cell = content.createDiv({ cls: "weekflow-review-cell weekflow-log-cell" });
+			if (isToday) cell.addClass("weekflow-review-cell-today");
+
+			const list = cell.createDiv({ cls: "weekflow-log-list" });
+			const logs = this.logData.get(dateKey) || [];
+			const sorted = [...logs].sort((a, b) => a.timeMinutes - b.timeMinutes);
+
+			if (sorted.length === 0) {
+				const empty = list.createDiv({ cls: "weekflow-log-empty" });
+				empty.setText(isToday ? "No logs yet" : "—");
+			}
+
+			for (const log of sorted) {
+				const row = list.createDiv({ cls: "weekflow-log-entry" });
+				const timeEl = row.createSpan({ cls: "weekflow-log-time" });
+				timeEl.setText(this.formatLogTime(log.timeMinutes));
+				const textEl = row.createSpan({ cls: "weekflow-log-text" });
+				textEl.setText(log.content);
+
+				if (this.deps.onNavigateLog) {
+					row.addClass("weekflow-log-entry-clickable");
+					row.addEventListener("click", () => {
+						this.deps.onNavigateLog!(date, log.lineNumber);
+					});
+				}
+			}
+
+			if (isToday) {
+				const addRow = cell.createDiv({ cls: "weekflow-log-add-row" });
+				const plus = addRow.createSpan({ cls: "weekflow-log-add-icon" });
+				setIcon(plus, "plus");
+				const input = addRow.createEl("input", {
+					type: "text",
+					cls: "weekflow-log-input",
+					placeholder: "+ log (now)...",
+				});
+				input.addEventListener("keydown", (e) => {
+					if (e.key === "Enter" && !e.isComposing && input.value.trim()) {
+						e.preventDefault();
+						const text = input.value.trim();
+						input.value = "";
+						void this.addLogNow(date, text);
+					}
+				});
+			}
+		}
+	}
+
+	private formatLogTime(timeMinutes: number): string {
+		return moment()
+			.startOf("day")
+			.add(timeMinutes, "minutes")
+			.format(this.deps.settings.logTimestampFormat || "HH:mm");
+	}
+
+	private async addLogNow(date: Moment, text: string): Promise<void> {
+		const now = window.moment();
+		const timeMinutes = now.hours() * 60 + now.minutes();
+
+		// Optimistic local update so the new entry appears immediately
+		const dateKey = date.format("YYYY-MM-DD");
+		const existing = this.logData.get(dateKey) || [];
+		const optimistic: LogItem = { timeMinutes, content: text, lineNumber: -1 };
+		this.logData.set(dateKey, [...existing, optimistic]);
+		this.update(this.lastVisibleDays, this.lastDayOffset);
+		// Re-focus the input after re-render
+		requestAnimationFrame(() => {
+			const panel = this.deps.contentEl.querySelector(".weekflow-review-panel");
+			if (!panel) return;
+			const input = panel.querySelector(".weekflow-log-input") as HTMLInputElement | null;
+			input?.focus();
+		});
+
+		await this.deps.withSelfWriteGuard(() =>
+			appendDailyLog(this.deps.app.vault, date, this.deps.settings, timeMinutes, text)
+		);
 	}
 
 	private initResize(handle: HTMLElement): void {

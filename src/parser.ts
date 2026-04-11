@@ -1,4 +1,5 @@
-import type { CheckboxState, ParseResult, ParseWarning, TimelineItem, TimeRange } from "./types";
+import { moment } from "obsidian";
+import type { CheckboxState, LogItem, ParseResult, ParseWarning, TimelineItem, TimeRange } from "./types";
 
 let idCounter = 0;
 export function generateItemId(): string {
@@ -453,4 +454,208 @@ export function updateTimelineSection(
 	const result = [...before, ...serialized, ...after];
 
 	return result.join("\n");
+}
+
+// ──────────────────────────────────────────────────────────────
+// Logs
+// ──────────────────────────────────────────────────────────────
+
+const LOG_LINE_RE = /^(\s*)-\s+(.*)$/;
+const LOG_FALLBACK_RE =
+	/^(\d{1,2}):(\d{2})(?::(\d{2}))?(?:\s*(am|pm))?$/i;
+
+/**
+ * Try to extract a timestamp prefix (in minutes since midnight) from the body
+ * of a `- ...` log line. Returns [timeMinutes, contentAfter] or null if no
+ * timestamp could be recognized.
+ *
+ * Strategy: try the configured moment format on 1-, 2-, or 3-token prefixes
+ * (to cover formats like "h:mm a" or "HH:mm:ss a"), then fall back to a
+ * permissive regex so entries written under a previous format still parse.
+ */
+function tryParseLogTimestamp(
+	body: string,
+	format: string
+): [number, string] | null {
+	const tokens = body.split(/\s+/);
+	const maxTokens = Math.min(3, tokens.length);
+
+	for (let n = 1; n <= maxTokens; n++) {
+		const candidate = tokens.slice(0, n).join(" ");
+		const m = moment(candidate, format, true);
+		if (m.isValid()) {
+			const minutes = m.hours() * 60 + m.minutes();
+			const rest = tokens.slice(n).join(" ");
+			return [minutes, rest];
+		}
+	}
+
+	// Fallback: permissive regex
+	for (let n = 1; n <= maxTokens; n++) {
+		const candidate = tokens.slice(0, n).join(" ");
+		const match = candidate.match(LOG_FALLBACK_RE);
+		if (match) {
+			let h = parseInt(match[1], 10);
+			const mm = parseInt(match[2], 10);
+			const ampm = match[4]?.toLowerCase();
+			if (ampm === "pm" && h < 12) h += 12;
+			if (ampm === "am" && h === 12) h = 0;
+			if (h >= 24 || mm >= 60) continue;
+			const minutes = h * 60 + mm;
+			const rest = tokens.slice(n).join(" ");
+			return [minutes, rest];
+		}
+	}
+
+	return null;
+}
+
+export interface LogParseResult {
+	logs: LogItem[];
+	warnings: ParseWarning[];
+}
+
+/**
+ * Parse timestamped log entries from the section under the given heading.
+ * Non-matching lines are ignored (not returned), but will be preserved on
+ * write via updateLogsSection.
+ */
+export function parseLogItems(
+	content: string,
+	heading: string,
+	timestampFormat: string
+): LogParseResult {
+	const lines = content.split("\n");
+	const warnings: ParseWarning[] = [];
+	const logs: LogItem[] = [];
+
+	const headingLevel = (heading.match(/^#+/) || [""])[0].length;
+	let startIdx = -1;
+	for (let i = 0; i < lines.length; i++) {
+		if (lines[i].trim() === heading.trim()) {
+			startIdx = i + 1;
+			break;
+		}
+	}
+	if (startIdx === -1) return { logs, warnings };
+
+	for (let i = startIdx; i < lines.length; i++) {
+		const line = lines[i];
+		const hMatch = line.match(/^(#+)\s/);
+		if (hMatch && hMatch[1].length <= headingLevel) break;
+
+		const lMatch = line.match(LOG_LINE_RE);
+		if (!lMatch) continue;
+
+		const body = lMatch[2].trim();
+		const parsed = tryParseLogTimestamp(body, timestampFormat);
+		if (!parsed) continue;
+
+		logs.push({
+			timeMinutes: parsed[0],
+			content: parsed[1],
+			lineNumber: i,
+		});
+	}
+
+	return { logs, warnings };
+}
+
+/**
+ * Serialize a log entry using the configured moment format.
+ */
+export function serializeLogItem(
+	log: LogItem,
+	timestampFormat: string
+): string {
+	const ts = moment()
+		.startOf("day")
+		.add(log.timeMinutes, "minutes")
+		.format(timestampFormat);
+	const content = log.content.trim();
+	return content.length > 0 ? `- ${ts} ${content}` : `- ${ts}`;
+}
+
+/**
+ * Replace or insert the logs section in a note's content.
+ *
+ * Non-matching lines inside the logs section (blank lines, hand-written
+ * bullets without timestamps, sub-bullets) are preserved verbatim. Lines that
+ * were matched as log entries are replaced in order with the new serialized
+ * list. New entries beyond the count of existing matched lines are appended
+ * to the end of the section.
+ *
+ * If the heading does not exist, it is appended at the end of the content.
+ */
+export function updateLogsSection(
+	content: string,
+	heading: string,
+	logs: LogItem[],
+	timestampFormat: string
+): string {
+	const lines = content.split("\n");
+	const headingLevel = (heading.match(/^#+/) || [""])[0].length;
+
+	let startIdx = -1;
+	for (let i = 0; i < lines.length; i++) {
+		if (lines[i].trim() === heading.trim()) {
+			startIdx = i + 1;
+			break;
+		}
+	}
+
+	const serialized = logs.map((l) => serializeLogItem(l, timestampFormat));
+
+	if (startIdx === -1) {
+		// Heading not found: append heading + all logs
+		const suffix = content.endsWith("\n") ? "" : "\n";
+		const newSection =
+			serialized.length > 0
+				? `${heading}\n${serialized.join("\n")}`
+				: `${heading}\n`;
+		return content + suffix + "\n" + newSection + "\n";
+	}
+
+	// Find end of section
+	let endIdx = lines.length;
+	for (let i = startIdx; i < lines.length; i++) {
+		const match = lines[i].match(/^(#+)\s/);
+		if (match && match[1].length <= headingLevel) {
+			endIdx = i;
+			break;
+		}
+	}
+
+	// Walk the existing section and replace matched log lines in order;
+	// preserve non-matching lines verbatim.
+	const sectionLines = lines.slice(startIdx, endIdx);
+	const newSectionLines: string[] = [];
+	let cursor = 0;
+	for (const line of sectionLines) {
+		const lMatch = line.match(LOG_LINE_RE);
+		if (lMatch && tryParseLogTimestamp(lMatch[2].trim(), timestampFormat)) {
+			if (cursor < serialized.length) {
+				newSectionLines.push(serialized[cursor]);
+				cursor++;
+			}
+			// If we've run out of replacements, drop this old log line.
+		} else {
+			newSectionLines.push(line);
+		}
+	}
+	// Append any remaining new entries at the end of the section.
+	// Trim trailing blank lines before appending so new entries sit next to content.
+	while (
+		newSectionLines.length > 0 &&
+		newSectionLines[newSectionLines.length - 1].trim() === ""
+	) {
+		newSectionLines.pop();
+	}
+	for (let i = cursor; i < serialized.length; i++) {
+		newSectionLines.push(serialized[i]);
+	}
+
+	const before = lines.slice(0, startIdx);
+	const after = lines.slice(endIdx);
+	return [...before, ...newSectionLines, ...after].join("\n");
 }

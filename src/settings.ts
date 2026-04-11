@@ -163,6 +163,34 @@ export class WeekFlowSettingTab extends PluginSettingTab {
 					})
 			);
 
+		// Logs Heading
+		new Setting(containerEl)
+			.setName("Logs heading")
+			.setDesc("Heading under which timestamped log entries are stored")
+			.addText((text) =>
+				text
+					.setPlaceholder("## Logs")
+					.setValue(this.plugin.settings.logsHeading)
+					.onChange(async (value) => {
+						this.plugin.settings.logsHeading = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		// Log Timestamp Format
+		new Setting(containerEl)
+			.setName("Log timestamp format")
+			.setDesc("moment.js format used when writing new log entries. Examples: HH:mm, HH:mm:ss, h:mm a. Previously written entries are still parsed.")
+			.addText((text) =>
+				text
+					.setPlaceholder("HH:mm")
+					.setValue(this.plugin.settings.logTimestampFormat)
+					.onChange(async (value) => {
+						this.plugin.settings.logTimestampFormat = value || "HH:mm";
+						await this.plugin.saveSettings();
+					})
+			);
+
 		// Day Start Hour
 		new Setting(containerEl)
 			.setName("Day start hour")

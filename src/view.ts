@@ -4,7 +4,7 @@ import type WeekFlowPlugin from "./main";
 import { VIEW_TYPE_WEEKFLOW } from "./types";
 import type { CalendarEvent, PanelItem, ParseWarning, TimelineItem, WeekFlowSettings } from "./types";
 import { getCalendarEventsForWeek, clearCalendarCache } from "./calendar";
-import { getWeekDates, getWeekNotePaths, loadWeekData, saveDailyNoteItems, resolveDailyNotePath, getInboxItems, getInboxWatchPaths, addToInbox, editInboxItem, removeFromInboxFile, getPrimaryInboxNoteSource, getActiveProjects, getProjectTasks, loadWeekReviewData } from "./daily-note";
+import { getWeekDates, getWeekNotePaths, loadWeekData, saveDailyNoteItems, resolveDailyNotePath, getInboxItems, getInboxWatchPaths, addToInbox, editInboxItem, removeFromInboxFile, getPrimaryInboxNoteSource, getActiveProjects, getProjectTasks, loadWeekReviewData, loadWeekLogData } from "./daily-note";
 import type { ProjectInfo, InboxCheckboxItem } from "./daily-note";
 import { GridRenderer } from "./grid-renderer";
 import { BlockModal } from "./block-modal";
@@ -262,11 +262,12 @@ export class WeekFlowView extends ItemView {
 			}
 		}
 
-		// Load week data, inbox, and review data (local — fast)
-		const [result, inbox, reviewData] = await Promise.all([
+		// Load week data, inbox, review, and log data (local — fast)
+		const [result, inbox, reviewData, logData] = await Promise.all([
 			loadWeekData(this.app.vault, this.dates, settings),
 			getInboxItems(this.app.vault, settings),
 			loadWeekReviewData(this.app.vault, this.dates, settings),
+			loadWeekLogData(this.app.vault, this.dates, settings),
 		]);
 		this.weekData = result.weekData;
 		this.weekWarnings = result.warnings;
@@ -280,6 +281,12 @@ export class WeekFlowView extends ItemView {
 			contentEl: this.contentEl,
 			withSelfWriteGuard: <T>(fn: () => Promise<T>) => this.withSelfWriteGuard(fn),
 			saveSettings: () => this.plugin.saveSettings(),
+			onNavigateLog: (date: ReturnType<typeof moment>, lineNumber: number) => {
+				const dayIndex = this.dates.findIndex((d) => d.isSame(date, "day"));
+				if (dayIndex >= 0) {
+					this.openDailyNoteAtLine(dayIndex, lineNumber);
+				}
+			},
 		};
 		if (!this.reviewController) {
 			this.reviewController = new ReviewPanelController(reviewDeps);
@@ -287,6 +294,7 @@ export class WeekFlowView extends ItemView {
 			this.reviewController.updateDeps(reviewDeps);
 		}
 		this.reviewController.loadData(reviewData);
+		this.reviewController.loadLogData(logData);
 
 		// Initialize or update block actions
 		const blockActionsCtx = {

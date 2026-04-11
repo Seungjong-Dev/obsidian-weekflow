@@ -979,6 +979,137 @@
 	background: var(--background-primary-alt);
 }
 
+/* Mode switch (Review | Log) in the left spacer */
+.weekflow-review-spacer {
+	flex-direction: column;
+	align-items: stretch;
+	justify-content: flex-start;
+	padding: 4px 4px 0 4px;
+	gap: 2px;
+}
+
+.weekflow-review-mode-switch {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	width: 100%;
+}
+
+.weekflow-review-mode-btn {
+	appearance: none;
+	border: 1px solid var(--background-modifier-border);
+	background: var(--background-primary);
+	color: var(--text-muted);
+	font-size: 10px;
+	font-weight: 600;
+	letter-spacing: 0.5px;
+	text-transform: uppercase;
+	padding: 3px 4px;
+	border-radius: 3px;
+	cursor: pointer;
+	line-height: 1;
+}
+
+.weekflow-review-mode-btn:hover {
+	background: var(--background-secondary);
+	color: var(--text-normal);
+}
+
+.weekflow-review-mode-btn.active {
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+	border-color: var(--interactive-accent);
+}
+
+/* Log mode cells */
+.weekflow-log-cell {
+	padding: 4px 6px;
+	overflow: hidden;
+}
+
+.weekflow-log-list {
+	flex: 1;
+	overflow-y: auto;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	font-size: 12px;
+	line-height: 1.35;
+}
+
+.weekflow-log-empty {
+	color: var(--text-faint);
+	font-size: 11px;
+	font-style: italic;
+	padding: 2px 0;
+}
+
+.weekflow-log-entry {
+	display: flex;
+	gap: 6px;
+	padding: 1px 2px;
+	border-radius: 3px;
+	color: var(--text-normal);
+}
+
+.weekflow-log-entry-clickable {
+	cursor: pointer;
+}
+
+.weekflow-log-entry-clickable:hover {
+	background: var(--background-modifier-hover);
+}
+
+.weekflow-log-time {
+	color: var(--text-muted);
+	font-variant-numeric: tabular-nums;
+	font-size: 11px;
+	flex-shrink: 0;
+	font-weight: 600;
+}
+
+.weekflow-log-text {
+	min-width: 0;
+	word-break: break-word;
+}
+
+.weekflow-log-add-row {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	padding: 4px 2px 2px 2px;
+	border-top: 1px solid var(--background-modifier-border);
+	margin-top: 4px;
+}
+
+.weekflow-log-add-icon {
+	display: flex;
+	align-items: center;
+	color: var(--text-muted);
+	flex-shrink: 0;
+}
+
+.weekflow-log-add-icon .svg-icon {
+	width: 12px;
+	height: 12px;
+}
+
+.weekflow-log-input {
+	flex: 1;
+	border: none;
+	background: transparent;
+	color: var(--text-normal);
+	font-size: 12px;
+	font-family: var(--font-interface);
+	outline: none;
+	padding: 2px 0;
+	min-width: 0;
+}
+
+.weekflow-log-input:focus {
+	background: var(--background-primary-alt);
+}
+
 /* Current Time Indicator */
 .weekflow-now-line {
 	position: absolute;

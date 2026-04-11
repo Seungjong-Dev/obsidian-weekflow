@@ -1,7 +1,7 @@
 import { type App, type Vault, normalizePath, moment, TFile, TFolder } from "obsidian";
 type Moment = ReturnType<typeof moment>;
-import type { InboxSource, ParseWarning, TimelineItem, WeekFlowSettings } from "./types";
-import { parseTimelineItems, parseCheckboxItems, serializeTimelineItem, updateTimelineSection, extractBlockId, parseReviewContent, updateReviewSection } from "./parser";
+import type { InboxSource, LogItem, ParseWarning, TimelineItem, WeekFlowSettings } from "./types";
+import { parseTimelineItems, parseCheckboxItems, serializeTimelineItem, updateTimelineSection, extractBlockId, parseReviewContent, updateReviewSection, parseLogItems, updateLogsSection } from "./parser";
 import type { CheckboxItem } from "./parser";
 
 /**
@@ -334,6 +334,102 @@ export async function loadWeekReviewData(
 	});
 	await Promise.all(promises);
 	return reviewData;
+}
+
+// ── Logs I/O ──
+
+/**
+ * Read log entries from a daily note for a given date.
+ */
+export async function getDailyLogItems(
+	vault: Vault,
+	date: Moment,
+	settings: WeekFlowSettings
+): Promise<LogItem[]> {
+	const path = resolveDailyNotePath(settings.dailyNotePath, date);
+	const file = vault.getAbstractFileByPath(path);
+	if (!file || !("extension" in file)) return [];
+
+	const content = await vault.read(file as any);
+	const { logs } = parseLogItems(content, settings.logsHeading, settings.logTimestampFormat);
+	return logs;
+}
+
+/**
+ * Save log entries to a daily note for a given date.
+ * Creates the file (respecting the template) if it doesn't exist.
+ */
+export async function saveDailyLogItems(
+	vault: Vault,
+	date: Moment,
+	settings: WeekFlowSettings,
+	logs: LogItem[]
+): Promise<void> {
+	const path = resolveDailyNotePath(settings.dailyNotePath, date);
+	const file = vault.getAbstractFileByPath(path);
+
+	if (file && "extension" in file) {
+		const content = await vault.read(file as any);
+		const updated = updateLogsSection(
+			content,
+			settings.logsHeading,
+			logs,
+			settings.logTimestampFormat
+		);
+		await vault.modify(file as any, updated);
+	} else {
+		let baseContent = "";
+		if (settings.dailyNoteTemplatePath) {
+			baseContent = await readTemplate(vault, settings.dailyNoteTemplatePath);
+		}
+
+		const content = updateLogsSection(
+			baseContent,
+			settings.logsHeading,
+			logs,
+			settings.logTimestampFormat
+		);
+
+		const dir = path.substring(0, path.lastIndexOf("/"));
+		if (dir) {
+			await ensureFolderExists(vault, dir);
+		}
+		await vault.create(path, content);
+	}
+}
+
+/**
+ * Append a single new log entry to a daily note. Convenience hot-path for the
+ * "quick-log" input in the viewer.
+ */
+export async function appendDailyLog(
+	vault: Vault,
+	date: Moment,
+	settings: WeekFlowSettings,
+	timeMinutes: number,
+	content: string
+): Promise<void> {
+	const existing = await getDailyLogItems(vault, date, settings);
+	existing.push({ timeMinutes, content, lineNumber: -1 });
+	await saveDailyLogItems(vault, date, settings, existing);
+}
+
+/**
+ * Load log data for an entire week.
+ */
+export async function loadWeekLogData(
+	vault: Vault,
+	dates: Moment[],
+	settings: WeekFlowSettings
+): Promise<Map<string, LogItem[]>> {
+	const logData = new Map<string, LogItem[]>();
+	const promises = dates.map(async (date) => {
+		const logs = await getDailyLogItems(vault, date, settings);
+		const dateKey = date.format("YYYY-MM-DD");
+		logData.set(dateKey, logs);
+	});
+	await Promise.all(promises);
+	return logData;
 }
 
 // ── Inbox I/O ──
