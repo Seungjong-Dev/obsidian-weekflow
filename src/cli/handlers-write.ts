@@ -16,9 +16,13 @@ import {
 	addToInbox,
 	getInboxItems,
 	removeFromInboxFile,
+	getDailyLogItems,
+	saveDailyLogItems,
+	appendDailyLog,
 } from "../daily-note";
 import { generateItemId, parseTime, serializeCheckboxItem } from "../parser";
 import { toDigestItem } from "../digest";
+import { toDigestLog } from "./handlers-read";
 import { ok, err, validateRequired } from "./response";
 
 type Ctx = { app: App; settings: WeekFlowSettings };
@@ -318,6 +322,100 @@ export function inboxRemoveHandler(ctx: Ctx) {
 			}
 			removedList.reverse();
 			return ok(CMD, { removed: removedList });
+		} catch (e) {
+			return err(CMD, String(e));
+		}
+	};
+}
+
+// ── weekflow:log:add — append a log entry ──
+
+export const logAddFlags: CliFlags = {
+	content: { value: "<text>", description: "Log entry text", required: true },
+	date: { value: "<YYYY-MM-DD>", description: "Target date (default: today)" },
+	time: { value: "<HH:MM>", description: "Timestamp (default: now)" },
+};
+
+export function logAddHandler(ctx: Ctx) {
+	return async (params: CliData): Promise<string> => {
+		const CMD = "weekflow:log:add";
+		const missing = validateRequired(params, ["content"]);
+		if (missing) return err(CMD, missing);
+
+		try {
+			const date = params.date ? moment(params.date, "YYYY-MM-DD") : moment();
+			if (!date.isValid()) return err(CMD, `Invalid date: ${params.date}`);
+
+			let timeMinutes: number;
+			if (params.time) {
+				try {
+					timeMinutes = parseTime(params.time);
+				} catch {
+					return err(CMD, `Invalid time: ${params.time} (expected HH:MM)`);
+				}
+				if (!Number.isFinite(timeMinutes) || timeMinutes < 0 || timeMinutes >= 24 * 60) {
+					return err(CMD, `Invalid time: ${params.time} (expected HH:MM)`);
+				}
+			} else {
+				const now = moment();
+				timeMinutes = now.hours() * 60 + now.minutes();
+			}
+
+			await appendDailyLog(ctx.app.vault, date, ctx.settings, timeMinutes, params.content);
+
+			// Re-read to return the new entry with its assigned index
+			const logs = await getDailyLogItems(ctx.app.vault, date, ctx.settings);
+			const sorted = [...logs].sort((a, b) => a.timeMinutes - b.timeMinutes);
+			const newIdx = sorted.findIndex(
+				(l) => l.timeMinutes === timeMinutes && l.content === params.content
+			);
+			const found = newIdx >= 0 ? sorted[newIdx] : { timeMinutes, content: params.content, lineNumber: -1 };
+
+			return ok(CMD, {
+				date: date.format("YYYY-MM-DD"),
+				item: toDigestLog(found, newIdx >= 0 ? newIdx : sorted.length - 1, ctx.settings.logTimestampFormat),
+			});
+		} catch (e) {
+			return err(CMD, String(e));
+		}
+	};
+}
+
+// ── weekflow:log:delete — remove log entries by index ──
+
+export const logDeleteFlags: CliFlags = {
+	date: { value: "<YYYY-MM-DD>", description: "Target date", required: true },
+	index: { value: "<N|N,N,...>", description: "Entry index(es), comma-separated for batch", required: true },
+};
+
+export function logDeleteHandler(ctx: Ctx) {
+	return async (params: CliData): Promise<string> => {
+		const CMD = "weekflow:log:delete";
+		const missing = validateRequired(params, ["date", "index"]);
+		if (missing) return err(CMD, missing);
+
+		try {
+			const date = moment(params.date, "YYYY-MM-DD");
+			if (!date.isValid()) return err(CMD, `Invalid date: ${params.date}`);
+
+			const logs = await getDailyLogItems(ctx.app.vault, date, ctx.settings);
+			const sorted = [...logs].sort((a, b) => a.timeMinutes - b.timeMinutes);
+
+			const parsed = parseIndices(params.index, sorted.length);
+			if ("error" in parsed) return err(CMD, parsed.error);
+
+			const removedList = [];
+			for (const idx of parsed.indices) {
+				const removed = sorted.splice(idx, 1)[0];
+				removedList.push(toDigestLog(removed, idx, ctx.settings.logTimestampFormat));
+			}
+			await saveDailyLogItems(ctx.app.vault, date, ctx.settings, sorted);
+
+			if (removedList.length === 1) {
+				return ok(CMD, { date: params.date, removed: removedList[0] });
+			}
+			removedList.reverse();
+			return ok(CMD, { date: params.date, removed: removedList });
 		} catch (e) {
 			return err(CMD, String(e));
 		}

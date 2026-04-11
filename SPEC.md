@@ -1093,6 +1093,7 @@ obsidian weekflow:delete date=2026-04-10 index=1,2,3
 | `weekflow:stats` | `from`, `to` | 카테고리/프로젝트별 시간 통계 |
 | `weekflow:projects` | — | 활성 프로젝트 + 미완 태스크 목록 |
 | `weekflow:review` | `date` | 특정 날 리뷰 텍스트 조회 |
+| `weekflow:log` | `date` | 특정 날 로그 항목 조회 (기본: 오늘) |
 
 \* = required
 
@@ -1106,12 +1107,29 @@ obsidian weekflow:delete date=2026-04-10 index=1,2,3
 | `weekflow:delete` | `date`\*, `index`\* | 블록 삭제 |
 | `weekflow:inbox:add` | `content`\*, `tags` | 인박스에 항목 추가 |
 | `weekflow:inbox:remove` | `index`\* | 인박스 항목 삭제 |
+| `weekflow:review:write` | `date`\*, `text`\* | 리뷰 텍스트 저장 |
+| `weekflow:log:add` | `content`\*, `date`, `time` | 로그 항목 추가 (기본: 오늘, 현재 시각) |
+| `weekflow:log:delete` | `date`\*, `index`\* | 로그 항목 삭제 |
 
 `index`는 단일(`index=0`) 또는 쉼표 구분 복수(`index=0,2,3`) 모두 지원.
 복수일 때 내부에서 역순 처리하여 인덱스 밀림 방지. 단일이면 기존과 동일한 응답, 복수이면 배열로 반환.
-| `weekflow:review:write` | `date`\*, `text`\* | 리뷰 텍스트 저장 |
 
 \* = required
+
+#### 로그 CLI 특이사항
+
+- **정렬 순서가 `index`의 기준:** `weekflow:log`는 로그를 `timeMinutes` 오름차순으로 정렬한 뒤 `index`를 부여한다. `weekflow:log:delete`도 같은 정렬 후 인덱스를 기준으로 삭제한다 — 파일 내 작성 순서와 섞여도 일관된 식별이 보장된다.
+- **`time` 플래그 포맷:** `weekflow:log:add`의 `time`은 항상 `HH:MM`(24시간제)로 입력한다. 설정의 `Log timestamp format`과 무관하게 CLI 입력 포맷은 고정 — 에이전트가 포맷을 추측할 필요가 없다. 저장 시에는 설정된 포맷으로 직렬화된다.
+- **응답 아이템 형태:**
+  ```json
+  {
+    "index": 2,
+    "time": "14:32",
+    "timeMinutes": 872,
+    "content": "PR 리뷰 완료"
+  }
+  ```
+  `time`은 설정된 포맷으로 표시되고, `timeMinutes`는 자정 기준 분으로 가공 없이 제공된다.
 
 ### Digest 데이터 구조
 

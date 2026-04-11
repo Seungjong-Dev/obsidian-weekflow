@@ -14,6 +14,7 @@ import {
 	statsFlags, statsHandler,
 	projectsFlags, projectsHandler,
 	reviewReadFlags, reviewReadHandler,
+	logReadFlags, logReadHandler,
 } from "./handlers-read";
 import {
 	addFlags, addHandler,
@@ -23,6 +24,8 @@ import {
 	inboxAddFlags, inboxAddHandler,
 	inboxRemoveFlags, inboxRemoveHandler,
 	reviewWriteFlags, reviewWriteHandler,
+	logAddFlags, logAddHandler,
+	logDeleteFlags, logDeleteHandler,
 } from "./handlers-write";
 
 /**
@@ -137,6 +140,27 @@ export function registerAllCliHandlers(plugin: WeekFlowPlugin): boolean {
 		"Save review text for a date",
 		reviewWriteFlags,
 		reviewWriteHandler(ctx),
+	);
+
+	plugin.registerCliHandler(
+		"weekflow:log",
+		"List log entries for a date",
+		logReadFlags,
+		logReadHandler(ctx),
+	);
+
+	plugin.registerCliHandler(
+		"weekflow:log:add",
+		"Append a timestamped log entry",
+		logAddFlags,
+		logAddHandler(ctx),
+	);
+
+	plugin.registerCliHandler(
+		"weekflow:log:delete",
+		"Delete log entries by index",
+		logDeleteFlags,
+		logDeleteHandler(ctx),
 	);
 
 	return true;

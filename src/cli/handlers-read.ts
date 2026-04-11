@@ -15,11 +15,13 @@ import {
 	loadWeekReviewData,
 	getDailyNoteItems,
 	getDailyReviewContent,
+	getDailyLogItems,
 	getInboxItems,
 	getActiveProjects,
 	getProjectTasks,
 } from "../daily-note";
 import { buildDigest, toDigestItem, toDigestDaySummary } from "../digest";
+import type { LogItem } from "../types";
 import { calculateCategoryStats, calculateProjectStats, calculatePlanActualSummary } from "../statistics";
 import { ok, err, validateRequired } from "./response";
 
@@ -221,6 +223,50 @@ export function reviewReadHandler(ctx: Ctx) {
 		} catch (e) {
 			return err(CMD, String(e));
 		}
+	};
+}
+
+// ── weekflow:log (read) ──
+
+export const logReadFlags: CliFlags = {
+	date: { value: "<YYYY-MM-DD>", description: "Date to read logs from (default: today)" },
+};
+
+export function logReadHandler(ctx: Ctx) {
+	return async (params: CliData): Promise<string> => {
+		const CMD = "weekflow:log";
+		try {
+			const date = params.date ? moment(params.date, "YYYY-MM-DD") : moment();
+			if (!date.isValid()) return err(CMD, `Invalid date: ${params.date}`);
+
+			const logs = await getDailyLogItems(ctx.app.vault, date, ctx.settings);
+			const sorted = [...logs].sort((a, b) => a.timeMinutes - b.timeMinutes);
+			return ok(CMD, {
+				date: date.format("YYYY-MM-DD"),
+				items: sorted.map((log, idx) => toDigestLog(log, idx, ctx.settings.logTimestampFormat)),
+				count: sorted.length,
+			});
+		} catch (e) {
+			return err(CMD, String(e));
+		}
+	};
+}
+
+/**
+ * Serialize a LogItem for CLI output. Exposes both the formatted timestamp
+ * (human/agent-readable, using the configured moment format) and the raw
+ * minutes-since-midnight (for downstream sorting/math).
+ */
+export function toDigestLog(log: LogItem, index: number, format: string) {
+	const time = moment()
+		.startOf("day")
+		.add(log.timeMinutes, "minutes")
+		.format(format || "HH:mm");
+	return {
+		index,
+		time,
+		timeMinutes: log.timeMinutes,
+		content: log.content,
 	};
 }
 
