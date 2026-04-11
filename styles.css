@@ -979,46 +979,29 @@
 	background: var(--background-primary-alt);
 }
 
-/* Mode switch (Review | Log) in the left spacer */
+/* Mode switch: two stacked vertical labels in the left spacer,
+   preserving the original REVIEW label look. Active label uses
+   normal text, inactive is faint — click either to switch. */
 .weekflow-review-spacer {
 	flex-direction: column;
-	align-items: stretch;
+	align-items: flex-end;
 	justify-content: flex-start;
-	padding: 4px 4px 0 4px;
-	gap: 2px;
+	gap: 10px;
 }
 
-.weekflow-review-mode-switch {
-	display: flex;
-	flex-direction: column;
-	gap: 2px;
-	width: 100%;
-}
-
-.weekflow-review-mode-btn {
-	appearance: none;
-	border: 1px solid var(--background-modifier-border);
-	background: var(--background-primary);
-	color: var(--text-muted);
-	font-size: 10px;
-	font-weight: 600;
-	letter-spacing: 0.5px;
-	text-transform: uppercase;
-	padding: 3px 4px;
-	border-radius: 3px;
+.weekflow-review-mode-label {
 	cursor: pointer;
-	line-height: 1;
+	color: var(--text-faint);
+	transition: color 120ms ease;
+	user-select: none;
 }
 
-.weekflow-review-mode-btn:hover {
-	background: var(--background-secondary);
+.weekflow-review-mode-label:hover {
+	color: var(--text-muted);
+}
+
+.weekflow-review-mode-label.active {
 	color: var(--text-normal);
-}
-
-.weekflow-review-mode-btn.active {
-	background: var(--interactive-accent);
-	color: var(--text-on-accent);
-	border-color: var(--interactive-accent);
 }
 
 /* Log mode cells */

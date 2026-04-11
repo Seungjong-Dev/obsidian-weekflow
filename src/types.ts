@@ -123,7 +123,7 @@ export const DEFAULT_SETTINGS: WeekFlowSettings = {
 	reviewHeading: "## Review",
 	reviewPanelOpen: true,
 	reviewPanelHeight: 160,
-	reviewPanelMode: "review",
+	reviewPanelMode: "log",
 	logsHeading: "## Logs",
 	logTimestampFormat: "HH:mm",
 	calendarSources: [],

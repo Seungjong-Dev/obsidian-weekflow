@@ -167,27 +167,25 @@ export class ReviewPanelController {
 
 	private renderModeSwitch(spacer: HTMLElement): void {
 		const mode = this.deps.settings.reviewPanelMode || "review";
-		const sw = spacer.createDiv({ cls: "weekflow-review-mode-switch" });
 
-		const reviewBtn = sw.createEl("button", {
-			cls: "weekflow-review-mode-btn",
-			text: "Review",
-		});
-		if (mode === "review") reviewBtn.addClass("active");
-		reviewBtn.addEventListener("click", (e) => {
-			e.stopPropagation();
-			this.setMode("review");
-		});
+		const makeLabel = (label: string, key: "review" | "log") => {
+			const el = spacer.createSpan({
+				cls: "weekflow-review-spacer-label weekflow-review-mode-label",
+				text: label,
+			});
+			el.toggleClass("active", mode === key);
+			el.setAttribute("role", "button");
+			el.setAttribute("aria-pressed", mode === key ? "true" : "false");
+			el.ariaLabel = `Switch to ${label} mode`;
+			el.addEventListener("click", (e) => {
+				e.stopPropagation();
+				this.setMode(key);
+			});
+			return el;
+		};
 
-		const logBtn = sw.createEl("button", {
-			cls: "weekflow-review-mode-btn",
-			text: "Log",
-		});
-		if (mode === "log") logBtn.addClass("active");
-		logBtn.addEventListener("click", (e) => {
-			e.stopPropagation();
-			this.setMode("log");
-		});
+		makeLabel("Review", "review");
+		makeLabel("Log", "log");
 	}
 
 	private fillReviewCells(content: HTMLElement, visibleDays: number, dayOffset: number): void {
