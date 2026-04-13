@@ -982,8 +982,8 @@ export class GridRenderer {
 
 		const color = this.getCategoryColor(item.tags);
 		const isOverlap = this.overlapGroupMap.has(item.id);
-		const has5minStart = displayTime.start % 10 !== 0;
-		const has5minEnd = displayTime.end % 10 !== 0;
+		const subSlotStart = displayTime.start % 10; // 0-9 minutes into first slot
+		const subSlotEnd = displayTime.end % 10;     // 0-9 minutes into last slot (0 = aligned)
 
 		// Put content text in the widest segment to avoid row height expansion
 		const widestIdx = segments.reduce((best, seg, idx) => {
@@ -1045,15 +1045,15 @@ export class GridRenderer {
 				if (i > 0) block.addClass("weekflow-block-cont-left");
 			}
 
-			// 5-minute diagonal edges
+			// Sub-slot offset: position block precisely at minute boundary
 			const slots = seg.slotEnd - seg.slotStart;
-			if (i === 0 && has5minStart) {
-				block.addClass("weekflow-5min-start");
-				block.style.setProperty("--slots", String(slots));
+			if (i === 0 && subSlotStart !== 0) {
+				const offsetPct = (subSlotStart / 10) * (100 / slots);
+				block.style.left = `${offsetPct}%`;
 			}
-			if (i === segments.length - 1 && has5minEnd) {
-				block.addClass("weekflow-5min-end");
-				block.style.setProperty("--slots", String(slots));
+			if (i === segments.length - 1 && subSlotEnd !== 0) {
+				const offsetPct = ((10 - subSlotEnd) / 10) * (100 / slots);
+				block.style.right = `${offsetPct}%`;
 			}
 
 			// Compact class for short blocks (< 3 total slots = < 30 min)
@@ -1533,8 +1533,8 @@ export class GridRenderer {
 		const segments = this.getHourSegments(item.planTime.start, item.planTime.end)
 			.filter(seg => !this.isHourFolded(seg.row - 2) && !this.isBoundaryHour(seg.row - 2));
 		if (segments.length === 0) return;
-		const has5minStart = item.planTime.start % 10 !== 0;
-		const has5minEnd = item.planTime.end % 10 !== 0;
+		const subSlotStart = item.planTime.start % 10;
+		const subSlotEnd = item.planTime.end % 10;
 
 		segments.forEach((seg, i) => {
 			const outline = this.gridEl!.createDiv({
@@ -1556,15 +1556,15 @@ export class GridRenderer {
 				);
 			}
 
-			// 5-minute diagonal edges
+			// Sub-slot offset for plan outline
 			const slots = seg.slotEnd - seg.slotStart;
-			if (i === 0 && has5minStart) {
-				outline.addClass("weekflow-5min-start");
-				outline.style.setProperty("--slots", String(slots));
+			if (i === 0 && subSlotStart !== 0) {
+				const offsetPct = (subSlotStart / 10) * (100 / slots);
+				outline.style.left = `${offsetPct}%`;
 			}
-			if (i === segments.length - 1 && has5minEnd) {
-				outline.addClass("weekflow-5min-end");
-				outline.style.setProperty("--slots", String(slots));
+			if (i === segments.length - 1 && subSlotEnd !== 0) {
+				const offsetPct = ((10 - subSlotEnd) / 10) * (100 / slots);
+				outline.style.right = `${offsetPct}%`;
 			}
 		});
 	}

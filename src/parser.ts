@@ -40,10 +40,6 @@ export function formatTime(minutes: number): string {
 	return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }
 
-/** Round to nearest 5 minutes */
-function roundTo5(minutes: number): number {
-	return Math.round(minutes / 5) * 5;
-}
 
 function parseCheckbox(ch: string): CheckboxState {
 	if (ch === "x") return "actual";
@@ -103,8 +99,8 @@ export function parseTimelineItems(
 		}
 
 		const checkbox = parseCheckbox(m[1]);
-		const planStart = roundTo5(parseTime(m[2]));
-		const planEnd = roundTo5(parseTime(m[3]));
+		const planStart = parseTime(m[2]);
+		const planEnd = parseTime(m[3]);
 
 		// Validate: end must be after start
 		if (planEnd <= planStart) {
@@ -114,8 +110,8 @@ export function parseTimelineItems(
 
 		let actualTime: TimeRange | undefined;
 		if (m[4] && m[5]) {
-			const actStart = roundTo5(parseTime(m[4]));
-			const actEnd = roundTo5(parseTime(m[5]));
+			const actStart = parseTime(m[4]);
+			const actEnd = parseTime(m[5]);
 			if (actEnd > actStart) {
 				actualTime = { start: actStart, end: actEnd };
 			} else {
