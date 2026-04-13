@@ -44,7 +44,7 @@ WeekFlow parses time ranges and the `>` separator; all other content (tags, Task
 1. Find the configured heading, parse checkbox list items until next heading or EOF.
 2. Time ranges use `-` not `~` as separator: `09:00-11:00`.
 3. End time before start time is a parse error (overnight items must be split at midnight).
-4. Times are stored in 5-minute granularity despite 10-minute grid cells (cells split diagonally for 5-min precision).
+4. Times are stored with 1-minute precision. Grid cells are 10 minutes; sub-cell offsets are rendered via proportional `left`/`right` positioning.
 
 ## Project Integration
 
