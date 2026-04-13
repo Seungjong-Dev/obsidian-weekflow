@@ -17,6 +17,7 @@ export class BlockModal extends Modal {
 	private mode: "plan" | "actual";
 	private categories: Category[];
 	private defaultTag: string;
+	private prefillContent: string;
 	private keyboardCleanup: (() => void) | null = null;
 
 	constructor(
@@ -25,7 +26,8 @@ export class BlockModal extends Modal {
 		mode: "plan" | "actual",
 		categories: Category[],
 		onSubmit: (result: BlockModalResult) => void,
-		defaultTag?: string
+		defaultTag?: string,
+		prefillContent?: string
 	) {
 		super(app);
 		this.planTime = planTime;
@@ -33,6 +35,7 @@ export class BlockModal extends Modal {
 		this.categories = categories;
 		this.onSubmit = onSubmit;
 		this.defaultTag = defaultTag || (categories.length > 0 ? categories[0].tag : "");
+		this.prefillContent = prefillContent || "";
 	}
 
 	onOpen() {
@@ -48,13 +51,14 @@ export class BlockModal extends Modal {
 		let selectedTag = this.defaultTag;
 
 		// Content input
-		let contentValue = "";
+		let contentValue = this.prefillContent;
 		new Setting(contentEl)
 			.setName("Content")
 			.addText((text) => {
 				text.setPlaceholder("What are you doing?").onChange((value) => {
 					contentValue = value;
 				});
+				if (this.prefillContent) text.setValue(this.prefillContent);
 				// Auto-focus
 				setTimeout(() => text.inputEl.focus(), 50);
 				// Enter key to submit

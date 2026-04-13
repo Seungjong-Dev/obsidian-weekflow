@@ -910,28 +910,14 @@ export class WeekFlowView extends ItemView {
 
 	// ── Block Creation (cell drag) ──
 
-	private async onDragEnd() {
-		if (!this.gridRenderer) return;
-
-		const selection = this.gridRenderer.getSelection();
-		if (!selection) return;
-
-		const planTime = {
-			start: selection.startMinutes,
-			end: selection.endMinutes,
-		};
-
+	/** Open full modal for block creation (fallback from inline editor) */
+	private openBlockModal(selection: { dayIndex: number; startMinutes: number; endMinutes: number }) {
+		const planTime = { start: selection.startMinutes, end: selection.endMinutes };
 		const dayIndex = selection.dayIndex;
 		const targetDate = this.dates[dayIndex];
 		const today = window.moment().startOf("day");
 		const isPast = targetDate.isBefore(today, "day");
-
-		// Past dates → actual, today/future → plan
 		const effectiveMode = isPast ? "actual" : "plan";
-
-		// Clear selection immediately so tap-tap state resets
-		// (otherwise dismissed modal leaves stale anchor)
-		this.gridRenderer.clearSelection();
 
 		new BlockModal(
 			this.app,
@@ -939,76 +925,218 @@ export class WeekFlowView extends ItemView {
 			effectiveMode,
 			this.plugin.settings.categories,
 			async (result) => {
-				const checkbox = effectiveMode === "actual" ? "actual" : "plan";
-				const finalPlanTime = {
-					start: result.startMinutes,
-					end: result.endMinutes,
-				};
-				const newItem: TimelineItem = {
-					id: generateItemId(),
-					checkbox: checkbox,
-					planTime: finalPlanTime,
-					content: result.content,
-					tags: result.tag ? [result.tag] : [],
-					rawSuffix: "",
-				};
-
-				const dayIndex = selection.dayIndex;
-				const date = this.dates[dayIndex];
-				const dateKey = date.format("YYYY-MM-DD");
-
-				// Check for overnight split
-				const splitResult = this.blockActions!.splitOvernightItem(newItem, dayIndex);
-				if (splitResult) {
-					// Save today portion
-					const todayItems = [...(this.weekData.get(splitResult.todayKey) || []), splitResult.today];
-					this.weekData.set(splitResult.todayKey, todayItems);
-					await this.guardedSave(this.dates[splitResult.todayDayIndex], todayItems);
-
-					// Save tomorrow portion
-					const tomorrowItems = [...(this.weekData.get(splitResult.tomorrowKey) || []), splitResult.tomorrow];
-					this.weekData.set(splitResult.tomorrowKey, tomorrowItems);
-					await this.guardedSave(this.dates[splitResult.tomorrowDayIndex], tomorrowItems);
-
-					// Undo action
-					const action: UndoableAction = {
-						description: "Create overnight block",
-						execute: async () => { /* already executed */ },
-						undo: async () => {
-							const ti = this.weekData.get(splitResult.todayKey) || [];
-							this.weekData.set(splitResult.todayKey, ti.filter(i => i.id !== splitResult.today.id));
-							await this.guardedSave(this.dates[splitResult.todayDayIndex], this.weekData.get(splitResult.todayKey)!);
-
-							const tmr = this.weekData.get(splitResult.tomorrowKey) || [];
-							this.weekData.set(splitResult.tomorrowKey, tmr.filter(i => i.id !== splitResult.tomorrow.id));
-							await this.guardedSave(this.dates[splitResult.tomorrowDayIndex], this.weekData.get(splitResult.tomorrowKey)!);
-						},
-					};
-					this.undoManager.pushExecuted(action);
-				} else {
-					const existing = this.weekData.get(dateKey) || [];
-					existing.push(newItem);
-					this.weekData.set(dateKey, existing);
-
-					await this.guardedSave(date, existing);
-
-					// Undo action
-					const action: UndoableAction = {
-						description: "Create block",
-						execute: async () => { /* already executed */ },
-						undo: async () => {
-							const items = this.weekData.get(dateKey) || [];
-							this.weekData.set(dateKey, items.filter(i => i.id !== newItem.id));
-							await this.guardedSave(date, this.weekData.get(dateKey)!);
-						},
-					};
-					this.undoManager.pushExecuted(action);
-				}
-
-				await this.refresh();
+				await this.createBlockFromResult(result, selection, effectiveMode);
 			},
 			this.selectedCategory
 		).open();
+	}
+
+	private async createBlockFromResult(
+		result: { content: string; tag: string; startMinutes: number; endMinutes: number },
+		selection: { dayIndex: number; startMinutes: number; endMinutes: number },
+		effectiveMode: "plan" | "actual"
+	) {
+		const checkbox = effectiveMode === "actual" ? "actual" : "plan";
+		const finalPlanTime = {
+			start: result.startMinutes,
+			end: result.endMinutes,
+		};
+		const newItem: TimelineItem = {
+			id: generateItemId(),
+			checkbox: checkbox,
+			planTime: finalPlanTime,
+			content: result.content,
+			tags: result.tag ? [result.tag] : [],
+			rawSuffix: "",
+		};
+
+		const dayIndex = selection.dayIndex;
+		const date = this.dates[dayIndex];
+		const dateKey = date.format("YYYY-MM-DD");
+
+		// Check for overnight split
+		const splitResult = this.blockActions!.splitOvernightItem(newItem, dayIndex);
+		if (splitResult) {
+			const todayItems = [...(this.weekData.get(splitResult.todayKey) || []), splitResult.today];
+			this.weekData.set(splitResult.todayKey, todayItems);
+			await this.guardedSave(this.dates[splitResult.todayDayIndex], todayItems);
+
+			const tomorrowItems = [...(this.weekData.get(splitResult.tomorrowKey) || []), splitResult.tomorrow];
+			this.weekData.set(splitResult.tomorrowKey, tomorrowItems);
+			await this.guardedSave(this.dates[splitResult.tomorrowDayIndex], tomorrowItems);
+
+			const action: UndoableAction = {
+				description: "Create overnight block",
+				execute: async () => { /* already executed */ },
+				undo: async () => {
+					const ti = this.weekData.get(splitResult.todayKey) || [];
+					this.weekData.set(splitResult.todayKey, ti.filter(i => i.id !== splitResult.today.id));
+					await this.guardedSave(this.dates[splitResult.todayDayIndex], this.weekData.get(splitResult.todayKey)!);
+
+					const tmr = this.weekData.get(splitResult.tomorrowKey) || [];
+					this.weekData.set(splitResult.tomorrowKey, tmr.filter(i => i.id !== splitResult.tomorrow.id));
+					await this.guardedSave(this.dates[splitResult.tomorrowDayIndex], this.weekData.get(splitResult.tomorrowKey)!);
+				},
+			};
+			this.undoManager.pushExecuted(action);
+		} else {
+			const existing = this.weekData.get(dateKey) || [];
+			existing.push(newItem);
+			this.weekData.set(dateKey, existing);
+
+			await this.guardedSave(date, existing);
+
+			const action: UndoableAction = {
+				description: "Create block",
+				execute: async () => { /* already executed */ },
+				undo: async () => {
+					const items = this.weekData.get(dateKey) || [];
+					this.weekData.set(dateKey, items.filter(i => i.id !== newItem.id));
+					await this.guardedSave(date, this.weekData.get(dateKey)!);
+				},
+			};
+			this.undoManager.pushExecuted(action);
+		}
+
+		await this.refresh();
+	}
+
+	private async onDragEnd() {
+		if (!this.gridRenderer) return;
+
+		const selection = this.gridRenderer.getSelection();
+		if (!selection) return;
+
+		const dayIndex = selection.dayIndex;
+		const targetDate = this.dates[dayIndex];
+		const today = window.moment().startOf("day");
+		const isPast = targetDate.isBefore(today, "day");
+		const effectiveMode = isPast ? "actual" : "plan";
+
+		// On touch devices, fall back to modal (inline editor needs keyboard)
+		if (isTouchDevice()) {
+			this.gridRenderer.clearSelection();
+			this.openBlockModal(selection);
+			return;
+		}
+
+		// Show inline editor over the selected cells
+		const selectionRect = this.gridRenderer.getSelectionRect();
+		if (!selectionRect) {
+			this.gridRenderer.clearSelection();
+			this.openBlockModal(selection);
+			return;
+		}
+
+		this.showInlineEditor(selectionRect, selection, effectiveMode);
+	}
+
+	private inlineEditorEl: HTMLElement | null = null;
+
+	private showInlineEditor(
+		rect: DOMRect,
+		selection: { dayIndex: number; startMinutes: number; endMinutes: number },
+		effectiveMode: "plan" | "actual"
+	) {
+		this.dismissInlineEditor();
+
+		const container = this.containerEl.querySelector(".weekflow-grid-wrapper") as HTMLElement;
+		if (!container) return;
+		const containerRect = container.getBoundingClientRect();
+
+		const editor = container.createDiv({ cls: "weekflow-inline-editor" });
+		this.inlineEditorEl = editor;
+
+		// Position relative to grid wrapper
+		editor.style.position = "absolute";
+		editor.style.top = `${rect.top - containerRect.top + container.scrollTop}px`;
+		editor.style.left = `${rect.left - containerRect.left}px`;
+		editor.style.width = `${rect.width}px`;
+		editor.style.zIndex = "20";
+
+		// Category color indicator
+		const activeTag = this.selectedCategory;
+		const category = this.plugin.settings.categories.find(c => c.tag === activeTag);
+		const color = category?.color || this.plugin.settings.categories[0]?.color || "#888";
+		const colorDot = editor.createDiv({ cls: "weekflow-inline-editor-dot" });
+		colorDot.style.backgroundColor = color;
+
+		const input = editor.createEl("input", {
+			type: "text",
+			placeholder: "Add content...",
+			cls: "weekflow-inline-editor-input",
+		});
+		input.style.borderColor = color;
+
+		// Focus input
+		setTimeout(() => input.focus(), 0);
+
+		const submit = async () => {
+			const content = input.value.trim();
+			if (!content) {
+				this.dismissInlineEditor();
+				return;
+			}
+			this.dismissInlineEditor();
+			this.gridRenderer?.clearSelection();
+			await this.createBlockFromResult(
+				{
+					content,
+					tag: activeTag || this.plugin.settings.categories[0]?.tag || "",
+					startMinutes: selection.startMinutes,
+					endMinutes: selection.endMinutes,
+				},
+				selection,
+				effectiveMode
+			);
+		};
+
+		const cancel = () => {
+			this.dismissInlineEditor();
+			this.gridRenderer?.clearSelection();
+		};
+
+		input.addEventListener("keydown", (e) => {
+			if (e.key === "Enter" && !e.isComposing) {
+				e.preventDefault();
+				submit();
+			} else if (e.key === "Escape") {
+				e.preventDefault();
+				cancel();
+			} else if (e.key === "Tab") {
+				// Tab → open full modal for advanced editing
+				e.preventDefault();
+				const currentContent = input.value.trim();
+				this.dismissInlineEditor();
+				this.gridRenderer?.clearSelection();
+				// Open modal pre-filled
+				new BlockModal(
+					this.app,
+					{ start: selection.startMinutes, end: selection.endMinutes },
+					effectiveMode,
+					this.plugin.settings.categories,
+					async (result) => {
+						await this.createBlockFromResult(result, selection, effectiveMode);
+					},
+					this.selectedCategory,
+					currentContent
+				).open();
+			}
+		});
+
+		input.addEventListener("blur", () => {
+			// Small delay to allow click on other elements
+			setTimeout(() => {
+				if (this.inlineEditorEl) cancel();
+			}, 150);
+		});
+	}
+
+	private dismissInlineEditor() {
+		if (this.inlineEditorEl) {
+			this.inlineEditorEl.remove();
+			this.inlineEditorEl = null;
+		}
 	}
 
 	// ── Block Click → Edit Modal ──

@@ -97,7 +97,12 @@ export class PlanningPanel {
 			// Items
 			if (section.items.length === 0) {
 				const emptyEl = sectionEl.createDiv({ cls: "weekflow-panel-empty" });
-				emptyEl.setText("No items");
+				const emptyMessages: Record<string, string> = {
+					overdue: "All caught up!",
+					inbox: "No items yet",
+					project: "No active projects",
+				};
+				emptyEl.setText(emptyMessages[section.type] || "No items");
 				continue;
 			}
 

@@ -315,8 +315,24 @@ export class GridRenderer {
 			headerCell.createSpan({ text: date.format("ddd"), cls: "weekflow-day-name" });
 			headerCell.createSpan({ text: date.format("MM/DD"), cls: "weekflow-day-date" });
 
+			// Header summary stats (done/total)
+			const dateKey = date.format("YYYY-MM-DD");
+			const dayItems = this.weekData.get(dateKey) || [];
+			if (dayItems.length > 0) {
+				const done = dayItems.filter(it => it.checkbox === "actual").length;
+				headerCell.createSpan({
+					text: `${done}/${dayItems.length}`,
+					cls: "weekflow-header-stats",
+				});
+			}
+
 			if (date.isSame(window.moment(), "day")) {
 				headerCell.addClass("weekflow-today");
+			}
+			// Weekend distinction
+			const dayOfWeek = date.day();
+			if (dayOfWeek === 0 || dayOfWeek === 6) {
+				headerCell.addClass("weekflow-weekend");
 			}
 		}
 
@@ -344,6 +360,10 @@ export class GridRenderer {
 			});
 			timeLabel.style.gridColumn = "1";
 			timeLabel.style.gridRow = `${row}`;
+			// Landmark hours: 6, 12, 18, 0
+			if (h % 6 === 0) {
+				timeLabel.addClass("weekflow-time-landmark");
+			}
 
 			for (let i = 0; i < this.visibleDays; i++) {
 				const d = this.dayOffset + i;
@@ -358,6 +378,14 @@ export class GridRenderer {
 					cell.style.gridRow = `${row}`;
 
 					if (slot === 0) cell.addClass("weekflow-cell-day-start");
+					// Visual rhythm: even hours get subtle background
+					if (h % 2 === 0) cell.addClass("weekflow-hour-even");
+					// Weekend cells
+					const cellDate = this.dates[d];
+					const cellDow = cellDate.day();
+					if (cellDow === 0 || cellDow === 6) cell.addClass("weekflow-weekend");
+					// Today column highlight
+					if (cellDate.isSame(window.moment(), "day")) cell.addClass("weekflow-cell-today");
 
 					cell.dataset.day = String(d);
 					cell.dataset.minutes = String(minutes);
@@ -747,6 +775,22 @@ export class GridRenderer {
 		return this.selectionRange;
 	}
 
+	/** Return bounding rect of the currently selected cells (relative to viewport) */
+	getSelectionRect(): DOMRect | null {
+		if (!this.gridEl || !this.selectionRange) return null;
+		const selected = this.gridEl.querySelectorAll(".weekflow-cell-selected");
+		if (selected.length === 0) return null;
+		let top = Infinity, left = Infinity, bottom = -Infinity, right = -Infinity;
+		selected.forEach(el => {
+			const r = el.getBoundingClientRect();
+			top = Math.min(top, r.top);
+			left = Math.min(left, r.left);
+			bottom = Math.max(bottom, r.bottom);
+			right = Math.max(right, r.right);
+		});
+		return new DOMRect(left, top, right - left, bottom - top);
+	}
+
 	// ── Public API for external drag (Panel→Grid) ──
 
 	public getGridCellFromPoint(x: number, y: number): { dayIndex: number; minutes: number } | null {
@@ -869,7 +913,26 @@ export class GridRenderer {
 			}
 
 			this.renderOverlapHandlesForDay(d, items);
+
+			// Empty day hint
+			if (items.length === 0) {
+				this.renderEmptyDayHint(i);
+			}
 		}
+	}
+
+	/** Render a subtle hint in empty day columns */
+	private renderEmptyDayHint(visibleIndex: number): void {
+		if (!this.gridEl) return;
+		const colStart = visibleIndex * 6 + 2;
+		// Place in the middle of the visible hour range
+		const midHour = Math.floor((this.settings.dayStartHour + this.settings.dayEndHour) / 2);
+		const row = midHour + 2;
+
+		const hint = this.gridEl.createDiv({ cls: "weekflow-empty-day-hint" });
+		hint.style.gridColumn = `${colStart} / span 6`;
+		hint.style.gridRow = `${row} / span 2`;
+		hint.setText("Drag to add");
 	}
 
 	/**
@@ -931,6 +994,9 @@ export class GridRenderer {
 			return w > bw ? idx : best;
 		}, 0);
 
+		// Total slot span for adaptive content display
+		const totalSlots = segments.reduce((sum, seg) => sum + (seg.slotEnd - seg.slotStart), 0);
+
 		const tooltipTime = `${formatTime(item.planTime.start)}-${formatTime(item.planTime.end)}`;
 		const tooltipText = `${tooltipTime} ${item.content}`;
 
@@ -991,6 +1057,9 @@ export class GridRenderer {
 				block.addClass("weekflow-5min-end");
 				block.style.setProperty("--slots", String(slots));
 			}
+
+			// Compact class for short blocks (< 3 total slots = < 30 min)
+			if (totalSlots < 3) block.addClass("weekflow-block-compact");
 
 			// Content text in widest segment
 			if (i === widestIdx) {
