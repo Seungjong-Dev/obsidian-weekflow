@@ -1120,6 +1120,7 @@ obsidian weekflow:delete date=2026-04-10 index=1,2,3
 | `weekflow:review` | `date` | 특정 날 리뷰 텍스트 조회 |
 | `weekflow:weekly-review` | `date` | 주간 노트 리뷰 텍스트 조회 (해당 주의 아무 날짜) |
 | `weekflow:log` | `date` | 특정 날 로그 항목 조회 (기본: 오늘) |
+| `weekflow:settings` | — | 플러그인 설정 전체 조회 (weekStartDay, 경로, 카테고리 등) |
 
 \* = required
 

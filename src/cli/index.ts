@@ -16,6 +16,7 @@ import {
 	reviewReadFlags, reviewReadHandler,
 	weeklyReviewReadFlags, weeklyReviewReadHandler,
 	logReadFlags, logReadHandler,
+	settingsFlags, settingsHandler,
 } from "./handlers-read";
 import {
 	addFlags, addHandler,
@@ -92,6 +93,13 @@ export function registerAllCliHandlers(plugin: WeekFlowPlugin): boolean {
 		"Read review text for a date",
 		reviewReadFlags,
 		reviewReadHandler(ctx),
+	);
+
+	plugin.registerCliHandler(
+		"weekflow:settings",
+		"Show all plugin settings (weekStartDay, paths, categories, etc.)",
+		settingsFlags,
+		settingsHandler(ctx),
 	);
 
 	// Write commands

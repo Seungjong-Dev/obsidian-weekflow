@@ -295,6 +295,17 @@ export function weeklyReviewReadHandler(ctx: Ctx) {
 	};
 }
 
+// ── weekflow:settings — expose plugin settings for external agents ──
+
+export const settingsFlags: CliFlags | null = null;
+
+export function settingsHandler(ctx: Ctx) {
+	return async (_params: CliData): Promise<string> => {
+		const CMD = "weekflow:settings";
+		return ok(CMD, ctx.settings);
+	};
+}
+
 // ── Helpers ──
 
 function resolveDateRange(params: CliData, settings: WeekFlowSettings) {
