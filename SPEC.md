@@ -1231,8 +1231,8 @@ obsidian weekflow:review:write date=2026-04-12 text="이번 주 요약: ..."
 ```
 src/cli/
 ├── index.ts              # registerAllCliHandlers() — main.ts에서 호출
-├── handlers-read.ts      # 조회 핸들러 (7개)
-├── handlers-write.ts     # 변경 핸들러 (7개)
+├── handlers-read.ts      # 조회 핸들러 (10개)
+├── handlers-write.ts     # 변경 핸들러 (10개)
 └── response.ts           # JSON 응답 유틸 (ok/err)
 src/digest.ts             # 데이터 정제 (TimelineItem → DigestItem)
 ```
