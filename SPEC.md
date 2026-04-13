@@ -261,6 +261,15 @@ Daily Note (Sun) ──┘
   - **템플릿 지원:** 설정에 템플릿 파일 경로가 지정되어 있으면, 새 데일리 노트 생성 시 해당 템플릿의 내용을 그대로 복사하여 기반으로 생성한다. 토큰 치환은 하지 않으며, Templater 등 사용자의 템플릿 플러그인이 별도로 처리한다.
   - 템플릿에 Timeline Heading이 이미 포함되어 있으면 그 아래에 항목을 삽입하고, 없으면 끝에 추가
 
+### 주간 노트
+
+주간 노트는 데일리 노트와 별도의 파일로, 주 단위 리뷰를 저장한다. 경로 패턴은 moment.js 토큰을 사용하며 (기본: `YYYY-[W]ww`), 같은 주 내 어떤 날짜를 전달하더라도 동일한 파일로 해석된다.
+
+- Review Heading은 데일리 노트와 공용 (`## Review`)
+- 주간 노트가 없는 상태에서 리뷰를 저장하면 파일을 자동 생성한다
+- 템플릿 지원: 데일리 노트와 동일한 방식 (Weekly Note Template 설정)
+- `ww` 토큰은 locale 기반 주 번호, `WW` 토큰은 ISO 기반 (월요일 시작)
+
 ### 데일리 노트 내 데이터 형식
 
 데일리 노트 내 **특정 헤딩(heading)** 아래에 마크다운 리스트로 저장한다. 헤딩 이름은 설정에서 지정할 수 있다.
@@ -481,6 +490,8 @@ WeekFlow 뷰 사이드에 플래닝 패널을 제공한다. 시간 배정이 필
 |------|------|--------|-------|
 | Daily Note Path | 데일리 노트 경로 패턴 (moment.js) | `YYYY-MM-DD` | 1 |
 | Daily Note Template | 새 데일리 노트 생성 시 사용할 템플릿 파일 경로 | (빈 문자열) | 1 |
+| Weekly Note Path | 주간 노트 경로 패턴 (moment.js) | `YYYY-[W]ww` | — |
+| Weekly Note Template | 새 주간 노트 생성 시 사용할 템플릿 파일 경로 | (빈 문자열) | — |
 | Timeline Heading | 타임라인 데이터가 위치할 헤딩 | `## Timeline` | 1 |
 | Day Start Hour | 테이블 시작 시간 | `6` (06:00) | 1 |
 | Day End Hour | 테이블 종료 시간 | `24` (00:00) | 1 |
@@ -494,7 +505,7 @@ WeekFlow 뷰 사이드에 플래닝 패널을 제공한다. 시간 배정이 필
 | Project Active Statuses | 활성으로 간주할 상태 값 목록 (쉼표 구분) | `🟡 In Progress, 🔴 Urgent` | 3 |
 | Project Tasks Heading | 프로젝트 내 태스크가 위치할 헤딩 | `## Tasks` | 3 |
 | Presets | 타임 슬롯 프리셋 목록 | (빈 목록) | 3 |
-| Review Heading | 회고 데이터가 위치할 헤딩 | `## Review` | 4 |
+| Review Heading | 회고 데이터가 위치할 헤딩 (데일리/주간 노트 공용) | `## Review` | 4 |
 | Review Panel Open | 리뷰 패널 열림/닫힘 상태 유지 | `true` | 4 |
 | Review Panel Height | 리뷰 패널 높이 (px, 드래그 리사이즈) | `160` | 4 |
 | Review Panel Mode | 리뷰 패널 기본 모드 (`review` / `log`) | `log` | 4 |
@@ -1107,6 +1118,7 @@ obsidian weekflow:delete date=2026-04-10 index=1,2,3
 | `weekflow:stats` | `from`, `to` | 카테고리/프로젝트별 시간 통계 |
 | `weekflow:projects` | — | 활성 프로젝트 + 미완 태스크 목록 |
 | `weekflow:review` | `date` | 특정 날 리뷰 텍스트 조회 |
+| `weekflow:weekly-review` | `date` | 주간 노트 리뷰 텍스트 조회 (해당 주의 아무 날짜) |
 | `weekflow:log` | `date` | 특정 날 로그 항목 조회 (기본: 오늘) |
 
 \* = required
@@ -1122,6 +1134,7 @@ obsidian weekflow:delete date=2026-04-10 index=1,2,3
 | `weekflow:inbox:add` | `content`\*, `tags` | 인박스에 항목 추가 |
 | `weekflow:inbox:remove` | `index`\* | 인박스 항목 삭제 |
 | `weekflow:review:write` | `date`\*, `text`\* | 리뷰 텍스트 저장 |
+| `weekflow:weekly-review:write` | `date`\*, `text`\* | 주간 노트 리뷰 텍스트 저장 |
 | `weekflow:log:add` | `content`\*, `date`, `time` | 로그 항목 추가 (기본: 오늘, 현재 시각) |
 | `weekflow:log:delete` | `date`\*, `index`\* | 로그 항목 삭제 |
 
