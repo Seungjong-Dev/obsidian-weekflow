@@ -20,6 +20,7 @@ import {
 	saveDailyLogItems,
 	appendDailyLog,
 } from "../daily-note";
+import { saveWeeklyReviewContent } from "../weekly-note";
 import { generateItemId, parseTime, serializeCheckboxItem } from "../parser";
 import { toDigestItem } from "../digest";
 import { toDigestLog } from "./handlers-read";
@@ -441,6 +442,35 @@ export function reviewWriteHandler(ctx: Ctx) {
 
 			await saveDailyReviewContent(ctx.app.vault, date, ctx.settings, params.text);
 			return ok(CMD, { date: params.date, saved: true });
+		} catch (e) {
+			return err(CMD, String(e));
+		}
+	};
+}
+
+// ── weekflow:weekly-review (write) ──
+
+export const weeklyReviewWriteFlags: CliFlags = {
+	date: { value: "<YYYY-MM-DD>", description: "Any date within the target week", required: true },
+	text: { value: "<text>", description: "Review text content", required: true },
+};
+
+export function weeklyReviewWriteHandler(ctx: Ctx) {
+	return async (params: CliData): Promise<string> => {
+		const CMD = "weekflow:weekly-review:write";
+		const missing = validateRequired(params, ["date", "text"]);
+		if (missing) return err(CMD, missing);
+
+		try {
+			const date = moment(params.date, "YYYY-MM-DD");
+			if (!date.isValid()) return err(CMD, `Invalid date: ${params.date}`);
+
+			await saveWeeklyReviewContent(ctx.app.vault, date, ctx.settings, params.text);
+			return ok(CMD, {
+				week: date.format("GGGG-[W]WW"),
+				date: params.date,
+				saved: true,
+			});
 		} catch (e) {
 			return err(CMD, String(e));
 		}

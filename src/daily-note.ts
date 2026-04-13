@@ -162,7 +162,7 @@ export async function saveDailyNoteItems(
 	}
 }
 
-async function ensureFolderExists(vault: Vault, dir: string): Promise<void> {
+export async function ensureFolderExists(vault: Vault, dir: string): Promise<void> {
 	if (vault.getAbstractFileByPath(dir)) return;
 	const parent = dir.substring(0, dir.lastIndexOf("/"));
 	if (parent) {
@@ -179,7 +179,7 @@ async function ensureFolderExists(vault: Vault, dir: string): Promise<void> {
  * Read a template file content as-is (no token replacement).
  * Template plugins (Templater etc.) handle their own processing.
  */
-async function readTemplate(
+export async function readTemplate(
 	vault: Vault,
 	templatePath: string
 ): Promise<string> {

@@ -149,6 +149,44 @@ export class WeekFlowSettingTab extends PluginSettingTab {
 					})
 			);
 
+		// Weekly Note Path
+		const weeklyPathSetting = new Setting(containerEl)
+			.setName("Weekly note path")
+			.setDesc("Path pattern using moment.js tokens (e.g., YYYY-[W]ww)")
+			.addText((text) =>
+				text
+					.setPlaceholder("YYYY-[W]ww")
+					.setValue(this.plugin.settings.weeklyNotePath)
+					.onChange(async (value) => {
+						this.plugin.settings.weeklyNotePath = value;
+						await this.plugin.saveSettings();
+						updateWeeklyPathPreview();
+					})
+			);
+
+		const weeklyPathPreviewEl = weeklyPathSetting.descEl.createDiv({
+			cls: "weekflow-setting-preview",
+		});
+		const updateWeeklyPathPreview = () => {
+			const preview = window.moment().format(this.plugin.settings.weeklyNotePath);
+			weeklyPathPreviewEl.setText(`📄 Preview: ${preview}.md`);
+		};
+		updateWeeklyPathPreview();
+
+		// Weekly Note Template Path
+		new Setting(containerEl)
+			.setName("Weekly note template")
+			.setDesc("Path to template file used when creating new weekly notes (leave empty to skip)")
+			.addText((text) =>
+				text
+					.setPlaceholder("Templates/Weekly Note")
+					.setValue(this.plugin.settings.weeklyNoteTemplatePath)
+					.onChange(async (value) => {
+						this.plugin.settings.weeklyNoteTemplatePath = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
 		// Timeline Heading
 		new Setting(containerEl)
 			.setName("Timeline heading")
@@ -360,7 +398,7 @@ export class WeekFlowSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName("Review heading")
-			.setDesc("Heading under which daily review text is stored")
+			.setDesc("Heading under which review text is stored in daily and weekly notes")
 			.addText((text) =>
 				text
 					.setPlaceholder("## Review")

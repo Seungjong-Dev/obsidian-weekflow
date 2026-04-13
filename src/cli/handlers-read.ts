@@ -20,6 +20,7 @@ import {
 	getActiveProjects,
 	getProjectTasks,
 } from "../daily-note";
+import { getWeeklyReviewContent } from "../weekly-note";
 import { buildDigest, toDigestItem, toDigestDaySummary } from "../digest";
 import type { LogItem } from "../types";
 import { calculateCategoryStats, calculateProjectStats, calculatePlanActualSummary } from "../statistics";
@@ -267,6 +268,30 @@ export function toDigestLog(log: LogItem, index: number, format: string) {
 		time,
 		timeMinutes: log.timeMinutes,
 		content: log.content,
+	};
+}
+
+// ── weekflow:weekly-review (read) ──
+
+export const weeklyReviewReadFlags: CliFlags = {
+	date: { value: "<YYYY-MM-DD>", description: "Any date within the target week (default: today)" },
+};
+
+export function weeklyReviewReadHandler(ctx: Ctx) {
+	return async (params: CliData): Promise<string> => {
+		const CMD = "weekflow:weekly-review";
+		try {
+			const date = params.date ? moment(params.date, "YYYY-MM-DD") : moment();
+			if (!date.isValid()) return err(CMD, `Invalid date: ${params.date}`);
+			const review = await getWeeklyReviewContent(ctx.app.vault, date, ctx.settings);
+			return ok(CMD, {
+				week: date.format("GGGG-[W]WW"),
+				date: date.format("YYYY-MM-DD"),
+				review: review || null,
+			});
+		} catch (e) {
+			return err(CMD, String(e));
+		}
 	};
 }
 
