@@ -1051,22 +1051,130 @@ export class WeekFlowView extends ItemView {
 		editor.style.position = "absolute";
 		editor.style.top = `${rect.top - containerRect.top + container.scrollTop}px`;
 		editor.style.left = `${rect.left - containerRect.left}px`;
-		editor.style.width = `${rect.width}px`;
+		editor.style.width = `${Math.max(rect.width, 180)}px`;
 		editor.style.zIndex = "20";
 
-		// Category color indicator
-		const activeTag = this.selectedCategory;
-		const category = this.plugin.settings.categories.find(c => c.tag === activeTag);
-		const color = category?.color || this.plugin.settings.categories[0]?.color || "#888";
-		const colorDot = editor.createDiv({ cls: "weekflow-inline-editor-dot" });
-		colorDot.style.backgroundColor = color;
+		// Track selected category (mutable)
+		let activeTag = this.selectedCategory || this.plugin.settings.categories[0]?.tag || "";
 
-		const input = editor.createEl("input", {
+		// ── Row 1: Single category dot + Input ──
+		const inputRow = editor.createDiv({ cls: "weekflow-inline-editor-row" });
+
+		// Single active category dot (click to open picker)
+		const activeDot = inputRow.createDiv({ cls: "weekflow-inline-editor-dot" });
+		const updateActiveDot = () => {
+			const cat = this.plugin.settings.categories.find(c => c.tag === activeTag);
+			activeDot.style.backgroundColor = cat?.color || "#888";
+			activeDot.ariaLabel = cat?.label || activeTag || "Category";
+		};
+		updateActiveDot();
+
+		// Category picker dropdown (shown on dot click)
+		let catPickerEl: HTMLElement | null = null;
+		const showCatPicker = () => {
+			if (catPickerEl) { catPickerEl.remove(); catPickerEl = null; return; }
+			catPickerEl = editor.createDiv({ cls: "weekflow-inline-autocomplete" });
+			for (const cat of this.plugin.settings.categories) {
+				const item = catPickerEl.createDiv({ cls: "weekflow-inline-autocomplete-item" });
+				if (cat.tag === activeTag) item.addClass("active");
+				const dot = item.createDiv({ cls: "weekflow-inline-autocomplete-dot" });
+				dot.style.backgroundColor = cat.color;
+				item.createSpan({ text: cat.label || cat.tag });
+				item.addEventListener("pointerdown", (e) => {
+					e.preventDefault();
+					e.stopPropagation();
+					activeTag = cat.tag;
+					updateActiveDot();
+					catPickerEl?.remove();
+					catPickerEl = null;
+					input.focus();
+				});
+			}
+		};
+
+		activeDot.addEventListener("pointerdown", (e) => {
+			e.preventDefault();
+			e.stopPropagation();
+			showCatPicker();
+		});
+
+		const input = inputRow.createEl("input", {
 			type: "text",
 			placeholder: "Add content...",
 			cls: "weekflow-inline-editor-input",
 		});
-		input.style.borderColor = color;
+
+		// ── Row 2: Tab hint ──
+		const hintRow = editor.createDiv({ cls: "weekflow-inline-editor-hint" });
+		hintRow.innerHTML = `<kbd>#</kbd> category <kbd>Enter</kbd> create <kbd>Tab</kbd> details <kbd>Esc</kbd> cancel`;
+
+		// ── #tag autocomplete state ──
+		let dropdownEl: HTMLElement | null = null;
+		let dropdownIndex = -1;
+		let filteredCats: typeof categories = [];
+		const categories = this.plugin.settings.categories;
+
+		const getHashQuery = (): { start: number; query: string } | null => {
+			const val = input.value;
+			const cursor = input.selectionStart ?? val.length;
+			const hashIdx = val.lastIndexOf("#", cursor - 1);
+			if (hashIdx === -1) return null;
+			if (hashIdx > 0 && val[hashIdx - 1] !== " ") return null;
+			const query = val.slice(hashIdx + 1, cursor);
+			// Close if space after # (tag input ended)
+			if (query.includes(" ")) return null;
+			return { start: hashIdx, query };
+		};
+
+		const updateDropdownHighlight = () => {
+			if (!dropdownEl) return;
+			dropdownEl.querySelectorAll(".weekflow-inline-autocomplete-item").forEach((el, i) => {
+				el.toggleClass("active", i === dropdownIndex);
+			});
+		};
+
+		const hideDropdown = () => {
+			if (dropdownEl) { dropdownEl.remove(); dropdownEl = null; }
+			dropdownIndex = -1;
+			filteredCats = [];
+		};
+
+		const selectFromDropdown = (cat: { tag: string }) => {
+			activeTag = cat.tag;
+			updateActiveDot();
+			const hq = getHashQuery();
+			if (hq) {
+				const val = input.value;
+				const before = val.slice(0, hq.start).trimEnd();
+				const after = val.slice(hq.start + 1 + hq.query.length);
+				input.value = (before + (before && after.trimStart() ? " " : "") + after.trimStart()).trim();
+			}
+			hideDropdown();
+			input.focus();
+		};
+
+		const showDropdown = (filtered: typeof categories) => {
+			filteredCats = filtered;
+			dropdownIndex = 0; // auto-highlight first
+
+			if (dropdownEl) dropdownEl.remove();
+			dropdownEl = editor.createDiv({ cls: "weekflow-inline-autocomplete" });
+
+			filtered.forEach((cat, i) => {
+				const item = dropdownEl!.createDiv({ cls: "weekflow-inline-autocomplete-item" });
+				if (i === dropdownIndex) item.addClass("active");
+
+				const dot = item.createDiv({ cls: "weekflow-inline-autocomplete-dot" });
+				dot.style.backgroundColor = cat.color;
+				item.createSpan({ text: cat.label || cat.tag });
+
+				item.addEventListener("pointerdown", (e) => {
+					e.preventDefault();
+					e.stopPropagation();
+					selectFromDropdown(cat);
+				});
+			});
+		};
 
 		// Focus input
 		setTimeout(() => input.focus(), 0);
@@ -1082,7 +1190,7 @@ export class WeekFlowView extends ItemView {
 			await this.createBlockFromResult(
 				{
 					content,
-					tag: activeTag || this.plugin.settings.categories[0]?.tag || "",
+					tag: activeTag,
 					startMinutes: selection.startMinutes,
 					endMinutes: selection.endMinutes,
 				},
@@ -1096,7 +1204,45 @@ export class WeekFlowView extends ItemView {
 			this.gridRenderer?.clearSelection();
 		};
 
+		input.addEventListener("input", () => {
+			const hq = getHashQuery();
+			if (!hq) { hideDropdown(); return; }
+			const q = hq.query.toLowerCase();
+			const filtered = categories.filter(c =>
+				c.tag.toLowerCase().includes(q) ||
+				c.label.toLowerCase().includes(q)
+			);
+			if (filtered.length === 0) { hideDropdown(); return; }
+			showDropdown(filtered);
+		});
+
 		input.addEventListener("keydown", (e) => {
+			// Handle dropdown navigation first
+			if (dropdownEl) {
+				if (e.key === "ArrowDown") {
+					e.preventDefault();
+					dropdownIndex = Math.min(dropdownIndex + 1, filteredCats.length - 1);
+					updateDropdownHighlight();
+					return;
+				}
+				if (e.key === "ArrowUp") {
+					e.preventDefault();
+					dropdownIndex = Math.max(dropdownIndex - 1, 0);
+					updateDropdownHighlight();
+					return;
+				}
+				if (e.key === "Enter" && !e.isComposing && dropdownIndex >= 0) {
+					e.preventDefault();
+					selectFromDropdown(filteredCats[dropdownIndex]);
+					return;
+				}
+				if (e.key === "Escape") {
+					e.preventDefault();
+					hideDropdown();
+					return;
+				}
+			}
+
 			if (e.key === "Enter" && !e.isComposing) {
 				e.preventDefault();
 				submit();
@@ -1104,12 +1250,10 @@ export class WeekFlowView extends ItemView {
 				e.preventDefault();
 				cancel();
 			} else if (e.key === "Tab") {
-				// Tab → open full modal for advanced editing
 				e.preventDefault();
 				const currentContent = input.value.trim();
 				this.dismissInlineEditor();
 				this.gridRenderer?.clearSelection();
-				// Open modal pre-filled
 				new BlockModal(
 					this.app,
 					{ start: selection.startMinutes, end: selection.endMinutes },
@@ -1118,17 +1262,25 @@ export class WeekFlowView extends ItemView {
 					async (result) => {
 						await this.createBlockFromResult(result, selection, effectiveMode);
 					},
-					this.selectedCategory,
+					activeTag,
 					currentContent
 				).open();
 			}
 		});
 
 		input.addEventListener("blur", () => {
-			// Small delay to allow click on other elements
 			setTimeout(() => {
-				if (this.inlineEditorEl) cancel();
-			}, 150);
+				if (this.inlineEditorEl && !this.inlineEditorEl.contains(document.activeElement)) {
+					cancel();
+				}
+			}, 100);
+		});
+
+		// Clicks inside editor (but not on input) should refocus input
+		editor.addEventListener("pointerdown", (e) => {
+			if (e.target !== input) {
+				e.preventDefault();
+			}
 		});
 	}
 

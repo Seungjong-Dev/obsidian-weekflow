@@ -384,8 +384,6 @@ export class GridRenderer {
 					const cellDate = this.dates[d];
 					const cellDow = cellDate.day();
 					if (cellDow === 0 || cellDow === 6) cell.addClass("weekflow-weekend");
-					// Today column highlight
-					if (cellDate.isSame(window.moment(), "day")) cell.addClass("weekflow-cell-today");
 
 					cell.dataset.day = String(d);
 					cell.dataset.minutes = String(minutes);
