@@ -411,6 +411,7 @@ export async function appendDailyLog(
 ): Promise<void> {
 	const existing = await getDailyLogItems(vault, date, settings);
 	existing.push({ timeMinutes, content, lineNumber: -1 });
+	existing.sort((a, b) => a.timeMinutes - b.timeMinutes);
 	await saveDailyLogItems(vault, date, settings, existing);
 }
 
