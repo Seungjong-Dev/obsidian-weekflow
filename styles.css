@@ -1080,6 +1080,34 @@
 	border: none;
 }
 
+/* Collapsed tab indicator at bottom of grid */
+.weekflow-review-collapsed-tab {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 4px;
+	padding: 4px 12px;
+	font-size: 11px;
+	font-weight: 600;
+	color: var(--text-muted);
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
+	cursor: pointer;
+	border-top: 1px solid var(--background-modifier-border);
+	background: var(--background-primary);
+	transition: background 0.15s ease;
+}
+
+.weekflow-review-collapsed-tab:hover {
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+
+.weekflow-review-collapsed-tab svg {
+	width: 12px;
+	height: 12px;
+}
+
 .weekflow-review-content {
 	display: grid;
 	/* grid-template-columns set dynamically via JS based on visibleDays */
@@ -1089,9 +1117,9 @@
 
 .weekflow-review-spacer {
 	display: flex;
-	align-items: flex-start;
-	justify-content: flex-end;
-	padding: 6px 6px 0 0;
+	align-items: center;
+	justify-content: center;
+	padding: 4px 2px;
 	border-right: 1px solid var(--background-modifier-border);
 	background: var(--background-primary);
 }
@@ -1100,10 +1128,10 @@
 	font-size: 10px;
 	font-weight: 600;
 	color: var(--text-muted);
-	writing-mode: vertical-rl;
-	text-orientation: mixed;
-	letter-spacing: 1px;
 	text-transform: uppercase;
+	letter-spacing: 0.5px;
+	padding: 2px 4px;
+	border-radius: 3px;
 }
 
 .weekflow-review-cell {
@@ -1138,14 +1166,12 @@
 	background: var(--background-primary-alt);
 }
 
-/* Mode switch: two stacked vertical labels in the left spacer,
-   preserving the original REVIEW label look. Active label uses
-   normal text, inactive is faint — click either to switch. */
+/* Mode switch: horizontal tab-style labels in the left spacer. */
 .weekflow-review-spacer {
 	flex-direction: column;
-	align-items: flex-end;
-	justify-content: flex-start;
-	gap: 10px;
+	align-items: center;
+	justify-content: center;
+	gap: 4px;
 }
 
 .weekflow-review-mode-label {

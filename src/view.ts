@@ -486,6 +486,16 @@ export class WeekFlowView extends ItemView {
 			this.reviewController.render(contentArea, this.currentVisibleDays, this.currentDayOffset);
 		}
 
+		// Collapsed review tab indicator (click to expand)
+		if (!this.plugin.settings.reviewPanelOpen) {
+			const collapsedTab = contentArea.createDiv({ cls: "weekflow-review-collapsed-tab" });
+			const mode = this.plugin.settings.reviewPanelMode || "review";
+			collapsedTab.setText(mode === "log" ? "Log" : "Review");
+			const tabIcon = collapsedTab.createSpan();
+			setIcon(tabIcon, "chevron-up");
+			collapsedTab.addEventListener("click", () => this.toggleReviewPanel());
+		}
+
 		// Dropdown panel (narrow mode only)
 		if (this.currentLayoutTier === "narrow") {
 			this.renderDropdownPanel(body);
