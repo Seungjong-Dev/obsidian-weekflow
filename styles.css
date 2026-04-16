@@ -78,6 +78,19 @@
 	padding: 2px 6px;
 }
 
+.weekflow-week-label-chevron {
+	display: inline-flex;
+	align-items: center;
+	margin-left: 2px;
+	opacity: 0.5;
+	vertical-align: middle;
+}
+
+.weekflow-week-label-chevron svg {
+	width: 12px;
+	height: 12px;
+}
+
 .weekflow-viewmode-indicator {
 	font-size: 10px;
 	font-weight: 400;
@@ -759,6 +772,29 @@
 
 .weekflow-block-toggle:hover {
 	/* hover handled in @media (pointer: fine) */
+}
+
+/* Block more-actions button (⋯) */
+.weekflow-block-more {
+	position: absolute;
+	bottom: 1px;
+	left: 4px;
+	width: 16px;
+	height: 16px;
+	border-radius: 50%;
+	opacity: 0;
+	z-index: 8;
+	background: var(--background-primary);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	cursor: pointer;
+	box-shadow: 0 0 2px rgba(0, 0, 0, 0.2);
+}
+
+.weekflow-block-more svg {
+	width: 12px;
+	height: 12px;
 }
 
 /* Read-only time display in edit modal */
@@ -1604,6 +1640,14 @@
 	}
 
 	.weekflow-block-nav:hover {
+		background: var(--background-modifier-hover);
+	}
+
+	.weekflow-block:hover .weekflow-block-more {
+		opacity: 1;
+	}
+
+	.weekflow-block-more:hover {
 		background: var(--background-modifier-hover);
 	}
 

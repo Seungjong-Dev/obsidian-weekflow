@@ -656,6 +656,7 @@ export class WeekFlowView extends ItemView {
 		}
 
 		const weekLabel = nav.createSpan({ cls: "weekflow-week-label" });
+		weekLabel.setAttribute("aria-label", "Change view mode");
 		weekLabel.addEventListener("click", (e) => this.showViewModeMenu(e));
 		if (this.currentVisibleDays < 7) {
 			const weekNum = this.dates[0].format("[W]ww");
@@ -668,6 +669,8 @@ export class WeekFlowView extends ItemView {
 		if (this.viewModeOverride !== "auto") {
 			weekLabel.createSpan({ text: `(${this.viewModeOverride}d)`, cls: "weekflow-viewmode-indicator" });
 		}
+		const chevron = weekLabel.createSpan({ cls: "weekflow-week-label-chevron" });
+		setIcon(chevron, "chevron-down");
 
 		const nextBtn = nav.createEl("button", { text: "\u25B6" });
 		if (todayAfter) nextBtn.addClass("weekflow-nav-today-hint");
@@ -792,6 +795,8 @@ export class WeekFlowView extends ItemView {
 			if (this.viewModeOverride !== "auto") {
 				weekLabel.createSpan({ text: `(${this.viewModeOverride}d)`, cls: "weekflow-viewmode-indicator" });
 			}
+			const chevron = weekLabel.createSpan({ cls: "weekflow-week-label-chevron" });
+			setIcon(chevron, "chevron-down");
 		}
 
 		// Update today hints on ◀/▶ and Today buttons

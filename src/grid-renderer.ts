@@ -209,10 +209,14 @@ export class GridRenderer {
 		};
 
 		// Label cell (column 1, time label area)
+		const foldLabel = isFolded ? "Show" : "Hide";
+		const foldRange = `${formatTime(foldStart * 60)}\u2013${formatTime(foldEnd * 60)}`;
 		const labelCell = this.gridEl.createDiv({ cls: "weekflow-fold-bar weekflow-fold-bar-label" });
 		labelCell.style.gridRow = `${startRow}`;
 		labelCell.style.gridColumn = `1`;
-		labelCell.setText(`${arrow} ${formatTime(foldStart * 60)}\u2013${formatTime(foldEnd * 60)}`);
+		labelCell.setText(`${arrow} ${foldRange}`);
+		labelCell.setAttribute("aria-label", `${foldLabel} ${foldRange}`);
+		labelCell.setAttribute("title", `${foldLabel} ${foldRange}`);
 		labelCell.addEventListener("click", toggleFold);
 
 		// Per-day cells (each spanning 6 columns)
@@ -1096,6 +1100,16 @@ export class GridRenderer {
 					const navCb = this.callbacks.onBlockNavigate;
 					navBtn.addEventListener("pointerdown", (e) => { e.stopPropagation(); e.preventDefault(); });
 					navBtn.addEventListener("click", (e) => { e.stopPropagation(); navCb(dayIndex, item); });
+				}
+
+				// More menu button (⋯) — surfaces right-click actions on hover
+				if (this.callbacks.onBlockRightClick) {
+					const moreBtn = block.createDiv({ cls: "weekflow-block-more" });
+					setIcon(moreBtn, "more-horizontal");
+					moreBtn.ariaLabel = "More actions";
+					const menuCb = this.callbacks.onBlockRightClick;
+					moreBtn.addEventListener("pointerdown", (e) => { e.stopPropagation(); e.preventDefault(); });
+					moreBtn.addEventListener("click", (e) => { e.stopPropagation(); menuCb(dayIndex, item, e as unknown as PointerEvent); });
 				}
 			}
 
