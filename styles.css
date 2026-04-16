@@ -202,7 +202,7 @@
 	border-right: 1px solid var(--background-modifier-border);
 	overflow-y: auto;
 	flex-shrink: 0;
-	transition: width 0.2s ease, min-width 0.2s ease, opacity 0.15s ease;
+	transition: opacity 0.15s ease;
 }
 
 .weekflow-panel.collapsed {
@@ -650,7 +650,7 @@
 	display: flex;
 	flex-direction: column;
 	min-height: 0;
-	transition: box-shadow 0.15s ease, transform 0.1s ease, background-color 0.3s ease, border-width 0.2s ease, opacity 0.25s ease;
+	transition: box-shadow 0.15s ease, transform 0.1s ease, background-color 0.3s ease, opacity 0.25s ease;
 }
 
 /* Completion flash: brief highlight when toggled */
@@ -1460,7 +1460,8 @@
 .weekflow-stats-progress-fill {
 	height: 100%;
 	border-radius: 8px;
-	transition: width 0.3s ease;
+	transform-origin: left;
+	transition: transform 0.3s ease;
 }
 
 .weekflow-stats-bar-label {
@@ -1585,7 +1586,8 @@
 .weekflow-chart-segment {
 	width: 100%;
 	min-height: 0;
-	transition: height 0.3s ease;
+	transform-origin: bottom;
+	transition: transform 0.3s ease;
 }
 
 .weekflow-chart-xlabel {
@@ -1629,7 +1631,8 @@
 	height: 100%;
 	background: var(--interactive-accent);
 	border-radius: 4px;
-	transition: width 0.3s ease;
+	transform-origin: left;
+	transition: transform 0.3s ease;
 }
 
 .weekflow-chart-hbar-value {
