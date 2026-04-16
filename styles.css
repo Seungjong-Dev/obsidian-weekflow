@@ -73,6 +73,12 @@
 	flex-shrink: 0;
 }
 
+.weekflow-toolbar-nav button svg,
+.weekflow-toolbar-tools button svg {
+	width: 16px;
+	height: 16px;
+}
+
 .weekflow-toolbar-nav button:hover,
 .weekflow-toolbar-tools button:hover {
 	background: none;

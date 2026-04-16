@@ -657,7 +657,8 @@ export class WeekFlowView extends ItemView {
 		const todayBefore = today.isBefore(visStart, "day"); // today is to the left (prev)
 		const todayAfter = today.isAfter(visEnd, "day"); // today is to the right (next)
 
-		const prevBtn = nav.createEl("button", { text: "\u25C0" });
+		const prevBtn = nav.createEl("button");
+		setIcon(prevBtn, "chevron-left");
 		if (todayBefore) prevBtn.addClass("weekflow-nav-today-hint");
 		if (this.currentVisibleDays < 7) {
 			prevBtn.addEventListener("click", () => this.onSwipe("right"));
@@ -682,7 +683,8 @@ export class WeekFlowView extends ItemView {
 		const chevron = weekLabel.createSpan({ cls: "weekflow-week-label-chevron" });
 		setIcon(chevron, "chevron-down");
 
-		const nextBtn = nav.createEl("button", { text: "\u25B6" });
+		const nextBtn = nav.createEl("button");
+		setIcon(nextBtn, "chevron-right");
 		if (todayAfter) nextBtn.addClass("weekflow-nav-today-hint");
 		if (this.currentVisibleDays < 7) {
 			nextBtn.addEventListener("click", () => this.onSwipe("left"));
