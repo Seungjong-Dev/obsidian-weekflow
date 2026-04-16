@@ -611,7 +611,17 @@
 	display: flex;
 	flex-direction: column;
 	min-height: 0;
-	transition: box-shadow 0.15s ease, transform 0.1s ease;
+	transition: box-shadow 0.15s ease, transform 0.1s ease, background-color 0.3s ease, border-width 0.2s ease, opacity 0.25s ease;
+}
+
+/* Completion flash: brief highlight when toggled */
+.weekflow-block-just-completed {
+	animation: weekflow-complete-flash 0.5s ease-out;
+}
+
+@keyframes weekflow-complete-flash {
+	0% { filter: brightness(1.3); }
+	100% { filter: brightness(1); }
 }
 
 .weekflow-block:hover {

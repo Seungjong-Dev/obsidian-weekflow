@@ -1535,10 +1535,23 @@ export class WeekFlowView extends ItemView {
 
 	private async onBlockReturnToInbox(item: TimelineItem, fromDay: number): Promise<void> {
 		await this.blockActions!.onBlockReturnToInbox(item, fromDay);
+		this.showUndoToast("Returned to inbox");
 	}
 
 	private async deleteBlock(dayIndex: number, item: TimelineItem) {
 		await this.blockActions!.deleteBlock(dayIndex, item);
+		this.showUndoToast("Block deleted");
+	}
+
+	private showUndoToast(message: string) {
+		const fragment = document.createDocumentFragment();
+		const span = fragment.createEl("span", { text: message + " — " });
+		const undoLink = span.createEl("a", { text: "Undo", attr: { style: "cursor: pointer; font-weight: 600;" } });
+		undoLink.addEventListener("click", () => {
+			this.undo();
+			notice.hide();
+		});
+		const notice = new Notice(fragment, 5000);
 	}
 
 	// ── Block Right-Click Context Menu ──
@@ -1649,6 +1662,14 @@ export class WeekFlowView extends ItemView {
 
 	private async onBlockComplete(dayIndex: number, item: TimelineItem) {
 		await this.blockActions!.onBlockComplete(dayIndex, item);
+		// Flash the completed block for visual feedback (DOM is rebuilt after refresh)
+		requestAnimationFrame(() => {
+			const blockEl = this.contentEl.querySelector(`[data-item-id="${item.id}"]`) as HTMLElement | null;
+			if (blockEl) {
+				blockEl.addClass("weekflow-block-just-completed");
+				blockEl.addEventListener("animationend", () => blockEl.removeClass("weekflow-block-just-completed"), { once: true });
+			}
+		});
 	}
 
 	private async onBlockUncomplete(dayIndex: number, item: TimelineItem) {
