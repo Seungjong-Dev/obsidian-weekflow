@@ -7,6 +7,23 @@
 	font-family: var(--font-interface);
 }
 
+/* Keyboard focus indicators (accessibility) */
+.weekflow-container button:focus-visible,
+.weekflow-container [role="button"]:focus-visible,
+.weekflow-container .weekflow-week-label:focus-visible,
+.weekflow-container .weekflow-block:focus-visible,
+.weekflow-container .weekflow-block-toggle:focus-visible,
+.weekflow-container .weekflow-block-nav:focus-visible,
+.weekflow-container .weekflow-block-more:focus-visible,
+.weekflow-container .weekflow-fold-bar:focus-visible,
+.weekflow-container .weekflow-panel-item:focus-visible,
+.weekflow-container .weekflow-category-dot:focus-visible,
+.weekflow-container .weekflow-stats-range-btn:focus-visible,
+.weekflow-container .weekflow-overlap-handle:focus-visible {
+	outline: 2px solid var(--interactive-accent);
+	outline-offset: 1px;
+}
+
 /* Toolbar */
 .weekflow-toolbar {
 	display: flex;
