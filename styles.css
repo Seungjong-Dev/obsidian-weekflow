@@ -17,7 +17,6 @@
 .weekflow-container .weekflow-week-label:focus-visible,
 .weekflow-container .weekflow-block:focus-visible,
 .weekflow-container .weekflow-block-toggle:focus-visible,
-.weekflow-container .weekflow-block-nav:focus-visible,
 .weekflow-container .weekflow-block-more:focus-visible,
 .weekflow-container .weekflow-fold-bar:focus-visible,
 .weekflow-container .weekflow-panel-item:focus-visible,
@@ -747,28 +746,6 @@
 }
 
 /* Block navigation icon (go to daily note) */
-.weekflow-block-nav {
-	position: absolute;
-	bottom: 1px;
-	right: 4px;
-	width: 16px;
-	height: 16px;
-	border-radius: 50%;
-	opacity: 0;
-	z-index: 8;
-	background: var(--background-primary);
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	cursor: pointer;
-	box-shadow: var(--shadow-sm);
-}
-
-.weekflow-block-nav svg {
-	width: 12px;
-	height: 12px;
-}
-
 /* Block toggle button (complete/uncomplete) */
 .weekflow-block-toggle {
 	position: absolute;
@@ -799,7 +776,7 @@
 .weekflow-block-more {
 	position: absolute;
 	bottom: 1px;
-	left: 4px;
+	right: 4px;
 	width: 16px;
 	height: 16px;
 	border-radius: 50%;
@@ -1711,14 +1688,6 @@
 	}
 
 	.weekflow-block-toggle:hover {
-		background: var(--background-modifier-hover);
-	}
-
-	.weekflow-block:hover .weekflow-block-nav {
-		opacity: 1;
-	}
-
-	.weekflow-block-nav:hover {
 		background: var(--background-modifier-hover);
 	}
 

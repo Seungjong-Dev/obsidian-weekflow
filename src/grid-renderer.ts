@@ -1092,17 +1092,8 @@ export class GridRenderer {
 					toggleBtn.addEventListener("click", (e) => { e.stopPropagation(); uncompleteCb(dayIndex, item); });
 				}
 
-				// Navigation icon
-				if (this.callbacks.onBlockNavigate) {
-					const navBtn = block.createDiv({ cls: "weekflow-block-nav" });
-					setIcon(navBtn, "arrow-up-right");
-					navBtn.ariaLabel = "Go to daily note";
-					const navCb = this.callbacks.onBlockNavigate;
-					navBtn.addEventListener("pointerdown", (e) => { e.stopPropagation(); e.preventDefault(); });
-					navBtn.addEventListener("click", (e) => { e.stopPropagation(); navCb(dayIndex, item); });
-				}
-
 				// More menu button (⋯) — surfaces right-click actions on hover
+				// (Navigation "Go to daily note" is available inside this menu)
 				if (this.callbacks.onBlockRightClick) {
 					const moreBtn = block.createDiv({ cls: "weekflow-block-more" });
 					setIcon(moreBtn, "more-horizontal");
