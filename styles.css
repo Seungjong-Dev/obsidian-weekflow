@@ -1,5 +1,9 @@
 /* WeekFlow Container */
 .weekflow-container {
+	--shadow-sm: 0 0 2px rgba(0, 0, 0, 0.2);
+	--shadow-md: 0 2px 8px rgba(0, 0, 0, 0.12);
+	--shadow-lg: 0 2px 12px rgba(0, 0, 0, 0.15);
+	--shadow-xl: 0 4px 16px rgba(0, 0, 0, 0.12);
 	display: flex;
 	flex-direction: column;
 	height: 100%;
@@ -476,7 +480,7 @@
 .weekflow-cell {
 	border-right: 1px dotted var(--background-modifier-border-hover);
 	border-bottom: 1px solid var(--background-modifier-border);
-	cursor: crosshair;
+	cursor: cell;
 	transition: background 0.1s;
 }
 
@@ -522,7 +526,7 @@
 	background: var(--background-primary);
 	border: 1px solid var(--background-modifier-border);
 	border-radius: 6px;
-	box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+	box-shadow: var(--shadow-lg);
 	position: relative;
 }
 
@@ -579,7 +583,7 @@
 	background: var(--background-primary);
 	border: 1px solid var(--background-modifier-border);
 	border-radius: 6px;
-	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+	box-shadow: var(--shadow-md);
 	z-index: 30;
 	overflow: hidden;
 	max-height: 160px;
@@ -757,7 +761,7 @@
 	align-items: center;
 	justify-content: center;
 	cursor: pointer;
-	box-shadow: 0 0 2px rgba(0, 0, 0, 0.2);
+	box-shadow: var(--shadow-sm);
 }
 
 .weekflow-block-nav svg {
@@ -780,7 +784,7 @@
 	align-items: center;
 	justify-content: center;
 	cursor: pointer;
-	box-shadow: 0 0 2px rgba(0, 0, 0, 0.2);
+	box-shadow: var(--shadow-sm);
 }
 
 .weekflow-block:hover .weekflow-block-toggle {
@@ -806,7 +810,7 @@
 	align-items: center;
 	justify-content: center;
 	cursor: pointer;
-	box-shadow: 0 0 2px rgba(0, 0, 0, 0.2);
+	box-shadow: var(--shadow-sm);
 }
 
 .weekflow-block-more svg {
@@ -853,7 +857,7 @@
 	border-width: 3px !important;
 	z-index: 15 !important;
 	opacity: 1 !important;
-	box-shadow: 0 1px 6px rgba(0, 0, 0, 0.25);
+	box-shadow: var(--shadow-md);
 }
 
 .weekflow-block-selected .weekflow-block-toggle {
@@ -1405,7 +1409,7 @@
 	background: var(--background-primary);
 	color: var(--text-normal);
 	font-weight: 600;
-	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+	box-shadow: var(--shadow-sm);
 }
 
 .weekflow-stats-content {
@@ -1698,7 +1702,7 @@
 	}
 
 	.weekflow-block:hover {
-		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+		box-shadow: var(--shadow-md);
 		transform: translateY(-1px);
 	}
 
@@ -1788,7 +1792,7 @@
 /* ── Longpress visual feedback (touch drag) ── */
 .weekflow-longpress-active {
 	transform: scale(1.05);
-	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+	box-shadow: var(--shadow-xl);
 	transition: transform 0.15s ease;
 	z-index: 20;
 }
@@ -1804,7 +1808,7 @@
 	color: var(--text-normal);
 	font-size: 12px;
 	line-height: 1.4;
-	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+	box-shadow: var(--shadow-md);
 	border: 1px solid var(--background-modifier-border);
 	z-index: 1000;
 	pointer-events: none;
@@ -1879,7 +1883,7 @@
 	display: flex;
 	flex-direction: column;
 	transition: transform 0.25s ease, opacity 0.25s ease;
-	box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+	box-shadow: var(--shadow-xl);
 }
 .weekflow-dropdown-panel.collapsed {
 	transform: translateY(-100%);
@@ -1958,7 +1962,7 @@
 	background: var(--background-primary);
 	border: 1px solid var(--background-modifier-border);
 	border-radius: 8px;
-	box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+	box-shadow: var(--shadow-lg);
 	z-index: 30;
 	pointer-events: auto;
 }
@@ -2000,7 +2004,7 @@
 /* Block selection / move / delete styles */
 .weekflow-block-touch-selected {
 	z-index: 15 !important;
-	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+	box-shadow: var(--shadow-md);
 }
 .weekflow-block-move-mode {
 	border-style: dashed !important;
@@ -2064,7 +2068,7 @@
 	background: var(--background-primary);
 	border: 1px solid var(--background-modifier-border);
 	border-radius: 8px;
-	box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+	box-shadow: var(--shadow-lg);
 	z-index: 30;
 	pointer-events: auto;
 }
