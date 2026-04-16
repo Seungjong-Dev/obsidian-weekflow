@@ -450,38 +450,106 @@ export class StatsView extends ItemView {
 		const section = container.createDiv({ cls: "weekflow-stats-section" });
 		section.createEl("h3", { text: "Plan vs Actual Summary" });
 
+		// Narrative summary
+		const { completedItems, totalPlanItems, deferredItems, unplannedActualItems, completionRate } = this.summary;
+		if (totalPlanItems > 0 || unplannedActualItems > 0) {
+			const narrative = section.createDiv({ cls: "weekflow-stats-narrative" });
+			const parts: string[] = [];
+			if (totalPlanItems > 0) parts.push(`${completedItems} of ${totalPlanItems} planned items completed`);
+			if (deferredItems > 0) parts.push(`${deferredItems} deferred`);
+			if (unplannedActualItems > 0) parts.push(`${unplannedActualItems} unplanned`);
+			narrative.setText(parts.join(", ") + ".");
+		}
+
 		const grid = section.createDiv({ cls: "weekflow-stats-summary-grid" });
 
 		this.renderSummaryCard(
 			grid,
-			`${this.summary.completionRate}%`,
+			this.summary.completionRate,
 			"Completion Rate",
-			`${this.summary.completedItems} of ${this.summary.totalPlanItems} items completed`
+			`${completedItems} / ${totalPlanItems}`,
+			true
 		);
 
 		this.renderSummaryCard(
 			grid,
-			`${this.summary.deferredRate}%`,
+			this.summary.deferredRate,
 			"Deferred Rate",
-			`${this.summary.deferredItems} items deferred`
+			`${deferredItems} items`,
+			true
 		);
 
 		this.renderSummaryCard(
 			grid,
-			`${this.summary.unplannedActualItems}`,
+			this.summary.unplannedActualItems,
 			"Unplanned Actuals",
-			"Completed without prior plan"
+			"Without prior plan",
+			false
 		);
+	}
+
+	private getRateColor(rate: number, invert = false): string {
+		const r = invert ? 100 - rate : rate;
+		if (r >= 75) return "var(--color-green, #4ade80)";
+		if (r >= 50) return "var(--color-yellow, #facc15)";
+		return "var(--color-red, #f87171)";
 	}
 
 	private renderSummaryCard(
 		container: HTMLElement,
-		value: string,
+		value: number,
 		label: string,
-		description: string
+		description: string,
+		isRate: boolean
 	) {
 		const card = container.createDiv({ cls: "weekflow-stats-card" });
-		card.createDiv({ cls: "weekflow-stats-card-value", text: value });
+
+		if (isRate) {
+			// Progress ring
+			const ringSize = 56;
+			const strokeWidth = 5;
+			const radius = (ringSize - strokeWidth) / 2;
+			const circumference = 2 * Math.PI * radius;
+			const offset = circumference - (value / 100) * circumference;
+			const color = this.getRateColor(value, label === "Deferred Rate");
+
+			const ringContainer = card.createDiv({ cls: "weekflow-stats-ring-container" });
+			const svg = createSvg("svg");
+			svg.setAttribute("width", String(ringSize));
+			svg.setAttribute("height", String(ringSize));
+			svg.setAttribute("viewBox", `0 0 ${ringSize} ${ringSize}`);
+
+			const bgCircle = createSvg("circle");
+			bgCircle.setAttribute("cx", String(ringSize / 2));
+			bgCircle.setAttribute("cy", String(ringSize / 2));
+			bgCircle.setAttribute("r", String(radius));
+			bgCircle.setAttribute("fill", "none");
+			bgCircle.setAttribute("stroke", "var(--background-modifier-border)");
+			bgCircle.setAttribute("stroke-width", String(strokeWidth));
+			svg.appendChild(bgCircle);
+
+			const fgCircle = createSvg("circle");
+			fgCircle.setAttribute("cx", String(ringSize / 2));
+			fgCircle.setAttribute("cy", String(ringSize / 2));
+			fgCircle.setAttribute("r", String(radius));
+			fgCircle.setAttribute("fill", "none");
+			fgCircle.setAttribute("stroke", color);
+			fgCircle.setAttribute("stroke-width", String(strokeWidth));
+			fgCircle.setAttribute("stroke-dasharray", String(circumference));
+			fgCircle.setAttribute("stroke-dashoffset", String(offset));
+			fgCircle.setAttribute("stroke-linecap", "round");
+			fgCircle.setAttribute("transform", `rotate(-90 ${ringSize / 2} ${ringSize / 2})`);
+			fgCircle.classList.add("weekflow-stats-ring-progress");
+			svg.appendChild(fgCircle);
+
+			ringContainer.appendChild(svg);
+
+			const valueEl = ringContainer.createDiv({ cls: "weekflow-stats-ring-value" });
+			valueEl.setText(`${value}%`);
+		} else {
+			card.createDiv({ cls: "weekflow-stats-card-value", text: String(value) });
+		}
+
 		card.createDiv({ cls: "weekflow-stats-card-label", text: label });
 		card.createDiv({ cls: "weekflow-stats-card-desc", text: description });
 	}

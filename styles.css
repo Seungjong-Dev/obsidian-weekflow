@@ -1455,9 +1455,16 @@
 	color: var(--text-muted);
 }
 
+.weekflow-stats-narrative {
+	font-size: 13px;
+	color: var(--text-muted);
+	margin-bottom: 12px;
+	line-height: 1.4;
+}
+
 .weekflow-stats-summary-grid {
 	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+	grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
 	gap: 12px;
 }
 
@@ -1466,17 +1473,42 @@
 	background: var(--background-secondary);
 	border-radius: 8px;
 	text-align: center;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+}
+
+.weekflow-stats-ring-container {
+	position: relative;
+	width: 56px;
+	height: 56px;
+	margin-bottom: 8px;
+}
+
+.weekflow-stats-ring-value {
+	position: absolute;
+	inset: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 14px;
+	font-weight: 700;
+	color: var(--text-normal);
+}
+
+.weekflow-stats-ring-progress {
+	transition: stroke-dashoffset 0.5s ease;
 }
 
 .weekflow-stats-card-value {
-	font-size: 28px;
+	font-size: 24px;
 	font-weight: 700;
 	color: var(--text-normal);
 	line-height: 1.2;
 }
 
 .weekflow-stats-card-label {
-	font-size: 13px;
+	font-size: 12px;
 	font-weight: 600;
 	color: var(--text-normal);
 	margin-top: 4px;
@@ -1485,7 +1517,7 @@
 .weekflow-stats-card-desc {
 	font-size: 11px;
 	color: var(--text-muted);
-	margin-top: 4px;
+	margin-top: 2px;
 }
 
 /* Stacked Bar Chart (Burning Rate / Activity Trend) */
