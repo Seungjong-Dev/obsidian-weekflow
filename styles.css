@@ -875,7 +875,7 @@
 	height: 10px;
 	border-radius: 50%;
 	cursor: pointer;
-	border: 1.5px solid rgba(255, 255, 255, 0.5);
+	border: 1.5px solid color-mix(in srgb, var(--background-primary) 50%, transparent);
 	transition: transform 0.1s;
 	pointer-events: auto;
 }
@@ -1835,7 +1835,7 @@
 .weekflow-dropdown-backdrop {
 	position: absolute;
 	inset: 0;
-	background: rgba(0, 0, 0, 0.3);
+	background: var(--background-modifier-cover);
 	z-index: 19;
 	transition: opacity 0.2s ease;
 }
@@ -1966,7 +1966,7 @@
 /* Delete confirm */
 .weekflow-action-bar-delete .weekflow-action-bar-delete-confirm {
 	background: var(--text-error);
-	color: white;
+	color: var(--text-on-accent);
 }
 .weekflow-action-bar-cancel { color: var(--text-muted); }
 
