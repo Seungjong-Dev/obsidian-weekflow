@@ -826,7 +826,7 @@ export class GridRenderer {
 			const ghost = this.gridEl!.createDiv({ cls: "weekflow-block-ghost" });
 			ghost.style.gridRow = `${seg.row}`;
 			ghost.style.gridColumn = `${dayColStart + seg.slotStart} / ${dayColStart + seg.slotEnd}`;
-			ghost.style.backgroundColor = color + "40";
+			ghost.style.backgroundColor = `color-mix(in srgb, ${color} 25%, transparent)`;
 			ghost.style.borderColor = color;
 			if (i === widestIdx) ghost.setText(label);
 			this.externalGhostEls.push(ghost);
@@ -1034,13 +1034,13 @@ export class GridRenderer {
 				block.style.color = color;
 			} else if (item.checkbox === "actual") {
 				block.addClass("weekflow-block-actual");
-				block.style.backgroundColor = color + "40";
+				block.style.backgroundColor = `color-mix(in srgb, ${color} 25%, transparent)`;
 				block.style.borderColor = color;
 				block.style.color = color;
 			} else if (item.checkbox === "deferred") {
 				block.addClass("weekflow-block-deferred");
-				block.style.borderColor = color + "80";
-				block.style.color = color + "80";
+				block.style.borderColor = `color-mix(in srgb, ${color} 50%, transparent)`;
+				block.style.color = `color-mix(in srgb, ${color} 50%, transparent)`;
 			}
 
 			// Connected segments
@@ -1326,7 +1326,7 @@ export class GridRenderer {
 			const ghost = this.gridEl!.createDiv({ cls: "weekflow-block-ghost" });
 			ghost.style.gridRow = `${seg.row}`;
 			ghost.style.gridColumn = `${dayColStart + seg.slotStart} / ${dayColStart + seg.slotEnd}`;
-			ghost.style.backgroundColor = color + "40";
+			ghost.style.backgroundColor = `color-mix(in srgb, ${color} 25%, transparent)`;
 			ghost.style.borderColor = color;
 			if (i === widestIdx) ghost.setText(label);
 			this.ghostEls.push(ghost);
@@ -1478,7 +1478,7 @@ export class GridRenderer {
 			const ghost = this.gridEl!.createDiv({ cls: "weekflow-block-ghost" });
 			ghost.style.gridRow = `${seg.row}`;
 			ghost.style.gridColumn = `${dayColStart + seg.slotStart} / ${dayColStart + seg.slotEnd}`;
-			ghost.style.backgroundColor = color + "30";
+			ghost.style.backgroundColor = `color-mix(in srgb, ${color} 19%, transparent)`;
 			ghost.style.borderColor = color;
 			if (i === widestIdx) ghost.setText(label);
 			this.resizeGhostEls.push(ghost);

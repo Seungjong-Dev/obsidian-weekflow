@@ -1104,8 +1104,10 @@
 
 .weekflow-review-spacer {
 	display: flex;
+	flex-direction: column;
 	align-items: center;
 	justify-content: center;
+	gap: 4px;
 	padding: 4px 2px;
 	border-right: 1px solid var(--background-modifier-border);
 	background: var(--background-primary);
@@ -1151,14 +1153,6 @@
 
 .weekflow-review-textarea:focus {
 	background: var(--background-primary-alt);
-}
-
-/* Mode switch: horizontal tab-style labels in the left spacer. */
-.weekflow-review-spacer {
-	flex-direction: column;
-	align-items: center;
-	justify-content: center;
-	gap: 4px;
 }
 
 .weekflow-review-mode-label {
