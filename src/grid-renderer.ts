@@ -185,7 +185,17 @@ export class GridRenderer {
 		return false;
 	}
 
-	/** Boundary hours no longer exist — fold bars are rendered as overlays, not grid rows. */
+	/**
+	 * The last hour of a folded range hosts the fold bar overlay.
+	 * Only true when that range is actually folded.
+	 */
+	private isFoldBarHost(h: number): boolean {
+		if (h === this.settings.dayStartHour - 1 && this.settings.dayStartHour > 0 && this.earlyFolded) return true;
+		if (h === this.settings.dayEndHour && this.settings.dayEndHour < 24 && this.lateFolded) return true;
+		return false;
+	}
+
+	/** No hour is a boundary — kept for compatibility with block segment filtering. */
 	private isBoundaryHour(_h: number): boolean {
 		return false;
 	}
@@ -216,10 +226,8 @@ export class GridRenderer {
 	private renderFoldBarOverlay(foldStart: number, foldEnd: number, isEarly: boolean, isFolded: boolean): void {
 		if (!this.gridEl) return;
 
-		// Position: at the boundary between folded and normal zones
-		// Early: bottom edge of the folded zone (top of dayStartHour row)
-		// Late: top edge of the folded zone (bottom of dayEndHour-1 row)
-		const anchorHour = isEarly ? this.settings.dayStartHour : this.settings.dayEndHour - 1;
+		// Position: on the last folded hour (which has 28px height for the fold bar)
+		const anchorHour = isEarly ? this.settings.dayStartHour - 1 : this.settings.dayEndHour;
 		const anchorRow = anchorHour + 2;
 
 		const arrow = isFolded
@@ -233,11 +241,9 @@ export class GridRenderer {
 
 		// Create a full-width bar spanning all columns
 		const bar = this.gridEl.createDiv({ cls: `weekflow-fold-bar weekflow-fold-bar-overlay ${isEarly ? "weekflow-fold-bar-early" : "weekflow-fold-bar-late"}` });
-		// Position in the grid: span all columns, at the anchor row
+		// Position in the grid: span all columns, in the fold bar host row
 		bar.style.gridRow = `${anchorRow}`;
 		bar.style.gridColumn = `1 / -1`;
-		// Align to the correct edge
-		bar.style.alignSelf = isEarly ? "start" : "end";
 		bar.style.zIndex = "1";
 
 		const foldLabel = isFolded ? "Show" : "Hide";
@@ -272,15 +278,18 @@ export class GridRenderer {
 	}
 
 	private getNormalRowHeight(bodyHeight: number): number {
+		let foldBarHostCount = 0;
 		let normalCount = 0;
 		for (let h = 0; h < 24; h++) {
-			if (!this.isHourFolded(h)) normalCount++;
+			if (this.isFoldBarHost(h)) foldBarHostCount++;
+			else if (!this.isHourFolded(h)) normalCount++;
 		}
 		if (normalCount === 0) return bodyHeight / 24;
-		return bodyHeight / normalCount;
+		return (bodyHeight - foldBarHostCount * this.FOLD_BAR_HEIGHT) / normalCount;
 	}
 
 	private getRowHeight(h: number, normalRowHeight: number): number {
+		if (this.isFoldBarHost(h)) return this.FOLD_BAR_HEIGHT;
 		if (this.isHourFolded(h)) return 0;
 		return normalRowHeight;
 	}
@@ -309,8 +318,9 @@ export class GridRenderer {
 		this.gridEl.style.gridTemplateColumns =
 			`60px repeat(${cols}, 1fr)`;
 
-		// 24-hour grid — folded hours get 0px, all others get normal height
+		// 24-hour grid — folded hours get 0px (fold bar hosts get 28px), all others normal
 		const rowTemplate = Array.from({ length: 24 }, (_, h) => {
+			if (this.isFoldBarHost(h)) return `${this.FOLD_BAR_HEIGHT}px`;
 			if (this.isHourFolded(h)) return '0px';
 			return 'minmax(40px, 1fr)';
 		}).join(' ');
