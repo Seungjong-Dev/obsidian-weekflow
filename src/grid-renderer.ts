@@ -2505,4 +2505,22 @@ export class GridRenderer {
 		}
 		return false;
 	}
+
+	/** Re-fold any fold zone that the cursor has left. Returns true if a re-render occurred. */
+	refoldIfCursorLeft(minutes: number): boolean {
+		const hour = Math.floor(minutes / 60);
+		let changed = false;
+		// Cursor is NOT in early zone → refold early if it was open
+		if (hour >= this.settings.dayStartHour && !this.earlyFolded) {
+			this.earlyFolded = true;
+			changed = true;
+		}
+		// Cursor is NOT in late zone → refold late if it was open
+		if (hour < this.settings.dayEndHour && !this.lateFolded) {
+			this.lateFolded = true;
+			changed = true;
+		}
+		if (changed) this.render();
+		return changed;
+	}
 }

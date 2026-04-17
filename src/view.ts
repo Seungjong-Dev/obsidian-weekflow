@@ -1819,6 +1819,12 @@ export class WeekFlowView extends ItemView {
 					if (rerendered) this.vimManager?.restoreCursor();
 				}
 			},
+			refoldIfCursorLeft: (minutes: number) => {
+				if (this.gridRenderer) {
+					const rerendered = this.gridRenderer.refoldIfCursorLeft(minutes);
+					if (rerendered) this.vimManager?.restoreCursor();
+				}
+			},
 			renderCursor: (pos: CursorPosition) => {
 				this.gridRenderer?.renderVimCursor(pos.dayIndex, pos.minutes);
 			},

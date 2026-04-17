@@ -38,6 +38,7 @@ export interface VimContext {
 	// UI callbacks
 	showHelpModal: () => void;
 	unfoldIfNeeded: (minutes: number) => void;
+	refoldIfCursorLeft: (minutes: number) => void;
 	renderCursor: (pos: CursorPosition) => void;
 	clearCursor: () => void;
 	renderVisualHighlight: (startMinutes: number, endMinutes: number, dayIndex: number) => void;
@@ -294,6 +295,10 @@ export class VimKeyboardManager {
 		this.cursor = { dayIndex: newDay, minutes: newMinutes };
 		// Unfold if cursor moves into a folded time range
 		this.ctx.unfoldIfNeeded(newMinutes);
+		// Re-fold zones the cursor has left (normal mode only)
+		if (this.mode === "normal") {
+			this.ctx.refoldIfCursorLeft(newMinutes);
+		}
 		this.renderCursor();
 		this.updateIndicator();
 		this.ctx.scrollToMinutes(newMinutes);
@@ -305,6 +310,7 @@ export class VimKeyboardManager {
 
 	private jumpStart(): void {
 		this.cursor.minutes = this.ctx.settings.dayStartHour * 60;
+		if (this.mode === "normal") this.ctx.refoldIfCursorLeft(this.cursor.minutes);
 		this.renderCursor();
 		this.updateIndicator();
 		this.ctx.scrollToMinutes(this.cursor.minutes);
@@ -312,6 +318,8 @@ export class VimKeyboardManager {
 
 	private jumpEnd(): void {
 		this.cursor.minutes = Math.max(0, this.ctx.settings.dayEndHour * 60 - 10);
+		this.ctx.unfoldIfNeeded(this.cursor.minutes);
+		if (this.mode === "normal") this.ctx.refoldIfCursorLeft(this.cursor.minutes);
 		this.renderCursor();
 		this.updateIndicator();
 		this.ctx.scrollToMinutes(this.cursor.minutes);
@@ -325,6 +333,8 @@ export class VimKeyboardManager {
 		const todayIdx = this.ctx.dates.findIndex(d => d.format("YYYY-MM-DD") === today);
 		if (todayIdx >= 0) this.cursor.dayIndex = todayIdx;
 		this.cursor.minutes = Math.min(minutes, 1430);
+		this.ctx.unfoldIfNeeded(this.cursor.minutes);
+		if (this.mode === "normal") this.ctx.refoldIfCursorLeft(this.cursor.minutes);
 		this.renderCursor();
 		this.updateIndicator();
 		this.ctx.scrollToMinutes(this.cursor.minutes);
