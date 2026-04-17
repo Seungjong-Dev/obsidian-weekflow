@@ -233,7 +233,7 @@ export class GridRenderer {
 		const actionLabel = isFolded ? `Show ${foldRange}` : `Hide ${foldRange}`;
 
 		const labelCell = this.gridEl.createDiv({
-			cls: `weekflow-fold-bar weekflow-fold-bar-label${isFolded ? "" : " weekflow-fold-bar-unfolded"}`,
+			cls: `weekflow-fold-bar weekflow-fold-bar-label`,
 		});
 		labelCell.style.gridRow = `${row}`;
 		labelCell.style.gridColumn = `1`;
@@ -251,7 +251,7 @@ export class GridRenderer {
 			const d = this.dayOffset + i;
 			const colStart = i * 6 + 2;
 			const dayCell = this.gridEl.createDiv({
-				cls: `weekflow-fold-bar weekflow-fold-bar-day${isFolded ? "" : " weekflow-fold-bar-unfolded"}`,
+				cls: `weekflow-fold-bar weekflow-fold-bar-day`,
 			});
 			dayCell.style.gridRow = `${row}`;
 			dayCell.style.gridColumn = `${colStart} / span 6`;
@@ -397,6 +397,13 @@ export class GridRenderer {
 			}
 			if (unfoldZone) {
 				timeLabel.addClass("weekflow-fold-zone");
+				// Mark the last fold-zone row (adjacent to normal zone) for boundary styling
+				if (unfoldZone === "early" && h === this.settings.dayStartHour - 1) {
+					timeLabel.addClass("weekflow-fold-zone-edge-early");
+				}
+				if (unfoldZone === "late" && h === this.settings.dayEndHour) {
+					timeLabel.addClass("weekflow-fold-zone-edge-late");
+				}
 			}
 
 			for (let i = 0; i < this.visibleDays; i++) {

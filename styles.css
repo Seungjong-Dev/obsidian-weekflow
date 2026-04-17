@@ -430,9 +430,9 @@
 	align-items: center;
 	justify-content: center;
 	gap: 6px;
-	background: color-mix(in srgb, var(--background-secondary) 30%, var(--background-primary));
-	border-top: 1px dashed color-mix(in srgb, var(--background-modifier-border) 50%, transparent);
-	border-bottom: 1px dashed color-mix(in srgb, var(--background-modifier-border) 50%, transparent);
+	background: var(--background-secondary);
+	border-top: 1px solid var(--background-modifier-border);
+	border-bottom: 1px solid var(--background-modifier-border);
 	cursor: pointer;
 	font-size: 10px;
 	color: var(--text-faint);
@@ -442,11 +442,11 @@
 	transition: background 0.15s ease, color 0.15s ease;
 }
 .weekflow-fold-bar:hover {
-	background: color-mix(in srgb, var(--background-secondary) 60%, var(--background-primary));
+	background: var(--background-modifier-hover);
 	color: var(--text-muted);
 }
 .weekflow-fold-bar:active {
-	background: color-mix(in srgb, var(--background-secondary) 75%, var(--background-primary));
+	background: color-mix(in srgb, var(--background-modifier-hover) 80%, var(--background-modifier-border));
 }
 
 .weekflow-fold-bar-label {
@@ -499,11 +499,17 @@
 	background: color-mix(in srgb, var(--background-secondary) 80%, var(--background-primary));
 }
 
-/* Fold bar unfolded state — subtler to not compete with the grid content */
-.weekflow-fold-bar.weekflow-fold-bar-unfolded {
-	background: color-mix(in srgb, var(--background-secondary) 50%, var(--background-primary));
-	border-top-style: dashed;
-	border-bottom-style: dashed;
+/* Fold zone time labels — right border connects with fold bar label as one column */
+.weekflow-time-label.weekflow-fold-zone {
+	border-right: 1px solid var(--background-modifier-border);
+}
+
+/* Boundary between fold zone and normal zone (time label column only) */
+.weekflow-time-label.weekflow-fold-zone-edge-early {
+	border-bottom: 1px solid var(--background-modifier-border);
+}
+.weekflow-time-label.weekflow-fold-zone-edge-late {
+	border-top: 1px solid var(--background-modifier-border);
 }
 
 /* Time label — improved readability */
