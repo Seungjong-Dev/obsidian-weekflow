@@ -259,23 +259,15 @@ export class GridRenderer {
 				dayCell.addEventListener("click", toggleFold);
 			}
 		} else {
-			// ── Unfolded: normal time label with fold button + normal grid cells ──
-			const arrow = isEarly ? "\u25BE" : "\u25B4";
-			const foldRange = `${formatTime(foldStart * 60)}\u2013${formatTime(foldEnd * 60)}`;
-
-			// Time label with fold toggle
+			// ── Unfolded: same as normal time label, just with fold-zone class ──
 			const timeLabel = this.gridEl.createDiv({
-				cls: "weekflow-time-label weekflow-fold-label-unfolded weekflow-fold-zone",
+				cls: "weekflow-time-label weekflow-fold-zone",
+				text: formatTime(h * 60),
 			});
 			timeLabel.style.gridColumn = "1";
 			timeLabel.style.gridRow = `${row}`;
-			timeLabel.createSpan({ text: formatTime(h * 60) });
-			const foldBtn = timeLabel.createSpan({ cls: "weekflow-fold-toggle-btn" });
-			foldBtn.setText(arrow);
-			foldBtn.setAttribute("title", `Hide ${foldRange}`);
-			foldBtn.setAttribute("aria-label", `Hide ${foldRange}`);
-			timeLabel.addEventListener("click", () => toggleFold());
 			if (h % 6 === 0) timeLabel.addClass("weekflow-time-landmark");
+			timeLabel.addEventListener("click", () => toggleFold());
 
 			// Normal 10-min grid cells (same as regular hours)
 			for (let i = 0; i < this.visibleDays; i++) {
