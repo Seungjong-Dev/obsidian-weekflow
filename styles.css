@@ -469,7 +469,7 @@
 
 /* Unfold zone: same background as fold bar for visual consistency */
 .weekflow-fold-zone {
-	background: var(--background-secondary) !important;
+	background: var(--background-secondary);
 	cursor: pointer;
 }
 
@@ -534,7 +534,8 @@
 }
 
 .weekflow-cell.weekflow-cell-selected,
-.weekflow-cell.weekflow-cell-selected:hover {
+.weekflow-cell.weekflow-cell-selected:hover,
+.weekflow-cell.weekflow-fold-zone.weekflow-cell-selected {
 	background: var(--interactive-accent-hover);
 	opacity: 0.3;
 }
