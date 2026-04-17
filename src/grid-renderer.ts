@@ -2438,13 +2438,20 @@ export class GridRenderer {
 		const wrapperRect = wrapper.getBoundingClientRect();
 		const cursorRect = this.vimCursorEl.getBoundingClientRect();
 
-		// Cursor is above the visible area
-		if (cursorRect.top < wrapperRect.top) {
-			wrapper.scrollTop -= (wrapperRect.top - cursorRect.top + 8);
+		// Account for sticky header height
+		const headerEl = this.gridEl?.querySelector(".weekflow-header-cell") as HTMLElement | null;
+		const headerHeight = headerEl ? headerEl.getBoundingClientRect().height + 2 : 0; // +2 for border
+
+		const visibleTop = wrapperRect.top + headerHeight;
+		const visibleBottom = wrapperRect.bottom;
+
+		// Cursor is above the visible area (behind sticky header)
+		if (cursorRect.top < visibleTop) {
+			wrapper.scrollTop -= (visibleTop - cursorRect.top + 4);
 		}
 		// Cursor is below the visible area
-		else if (cursorRect.bottom > wrapperRect.bottom) {
-			wrapper.scrollTop += (cursorRect.bottom - wrapperRect.bottom + 8);
+		else if (cursorRect.bottom > visibleBottom) {
+			wrapper.scrollTop += (cursorRect.bottom - visibleBottom + 4);
 		}
 	}
 
