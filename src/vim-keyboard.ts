@@ -404,24 +404,9 @@ export class VimKeyboardManager {
 		const today = window.moment().format("YYYY-MM-DD");
 		const todayIdx = this.ctx.dates.findIndex(d => d.format("YYYY-MM-DD") === today);
 
-		if (todayIdx < 0) {
-			// Today is not in this week — navigate to today's week
-			this.cursor.minutes = Math.min(minutes, 1430);
-			this.ctx.navigateToToday();
-			return;
-		}
-
-		this.cursor.dayIndex = todayIdx;
-		// Shift view to show today
-		if (todayIdx < this.ctx.dayOffset || todayIdx >= this.ctx.dayOffset + this.ctx.visibleDays) {
-			this.ctx.shiftView(todayIdx);
-		}
+		// Delegate entirely — navigateToToday handles week change, view shift, and cursor
 		this.cursor.minutes = Math.min(minutes, 1430);
-		this.ctx.unfoldIfNeeded(this.cursor.minutes);
-		if (this.mode === "normal") this.ctx.refoldIfCursorLeft(this.cursor.minutes);
-		this.renderCursor();
-		this.updateIndicator();
-		this.ctx.scrollToMinutes(this.cursor.minutes);
+		this.ctx.navigateToToday();
 	}
 
 	// ── Block queries ──

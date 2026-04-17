@@ -1829,14 +1829,31 @@ export class WeekFlowView extends ItemView {
 				}
 			},
 			navigateToToday: async () => {
-				await this.goToThisWeek();
-				// After refresh, find today and set cursor
 				const today = window.moment().format("YYYY-MM-DD");
-				const todayIdx = this.dates.findIndex(d => d.format("YYYY-MM-DD") === today);
+				let todayIdx = this.dates.findIndex(d => d.format("YYYY-MM-DD") === today);
+
+				// Different week — navigate first
+				if (todayIdx < 0) {
+					await this.goToThisWeek();
+					todayIdx = this.dates.findIndex(d => d.format("YYYY-MM-DD") === today);
+				}
+
 				if (todayIdx >= 0 && this.vimManager) {
+					// Shift view if today is outside visible range
+					if (todayIdx < this.currentDayOffset || todayIdx >= this.currentDayOffset + this.currentVisibleDays) {
+						const maxOffset = 7 - this.currentVisibleDays;
+						this.currentDayOffset = Math.max(0, Math.min(maxOffset, todayIdx));
+						this.updatePage();
+						this.updateVimContext();
+					}
 					const now = new Date();
 					const minutes = Math.round((now.getHours() * 60 + now.getMinutes()) / 10) * 10;
 					this.vimManager.setCursorFromClick(todayIdx, Math.min(minutes, 1430));
+					this.gridRenderer?.unfoldIfNeeded(this.vimManager.getCursor().minutes);
+					// Wait one frame for layout to settle before scrolling
+					requestAnimationFrame(() => {
+						this.gridRenderer?.scrollToMinutes(this.vimManager!.getCursor().minutes);
+					});
 				}
 			},
 			navigateWeek: (delta: number, landDayIndex: number) => {
