@@ -424,28 +424,29 @@
 	user-select: none;
 }
 
-/* Fold bar — single clickable bar for collapsed early/late hours */
+/* Fold bar — paper crease for collapsed early/late hours */
 .weekflow-fold-bar {
 	display: flex;
 	align-items: center;
 	justify-content: center;
 	gap: 6px;
-	background: var(--background-secondary);
-	border-top: 1px solid var(--background-modifier-border);
-	border-bottom: 1px solid var(--background-modifier-border);
+	background: color-mix(in srgb, var(--background-secondary) 30%, var(--background-primary));
+	border-top: 1px dashed color-mix(in srgb, var(--background-modifier-border) 50%, transparent);
+	border-bottom: 1px dashed color-mix(in srgb, var(--background-modifier-border) 50%, transparent);
 	cursor: pointer;
 	font-size: 10px;
 	color: var(--text-faint);
+	letter-spacing: 0.02em;
 	user-select: none;
 	z-index: 1;
 	transition: background 0.15s ease, color 0.15s ease;
 }
 .weekflow-fold-bar:hover {
-	background: var(--background-modifier-hover);
+	background: color-mix(in srgb, var(--background-secondary) 60%, var(--background-primary));
 	color: var(--text-muted);
 }
 .weekflow-fold-bar:active {
-	background: color-mix(in srgb, var(--background-modifier-hover) 80%, var(--background-modifier-border));
+	background: color-mix(in srgb, var(--background-secondary) 75%, var(--background-primary));
 }
 
 .weekflow-fold-bar-label {
@@ -459,8 +460,8 @@
 }
 
 .weekflow-fold-bar-indicator {
-	background: color-mix(in srgb, var(--text-faint) 40%, transparent);
-	color: var(--text-muted);
+	background: transparent;
+	color: var(--text-faint);
 	font-size: 9px;
 	min-width: 14px;
 	height: 14px;
@@ -468,8 +469,15 @@
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-	padding: 0 3px;
+	padding: 0 4px;
 	font-weight: 600;
+	border: 1px solid color-mix(in srgb, var(--text-faint) 40%, transparent);
+	transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+.weekflow-fold-bar:hover .weekflow-fold-bar-indicator {
+	background: color-mix(in srgb, var(--text-faint) 15%, transparent);
+	border-color: color-mix(in srgb, var(--text-faint) 55%, transparent);
+	color: var(--text-muted);
 }
 
 /* Unfold zone: distinguishes fold-zone rows from main hours */
@@ -477,13 +485,25 @@
 	background: var(--background-secondary);
 }
 
-/* Only time labels in fold zone are clickable to re-fold */
-.weekflow-time-label.weekflow-fold-zone {
-	cursor: pointer;
-	transition: color 0.15s ease;
+/* Fold zone cells — stronger tint + banding rhythm */
+.weekflow-cell.weekflow-fold-zone {
+	background: color-mix(in srgb, var(--background-secondary) 50%, var(--background-primary));
 }
-.weekflow-time-label.weekflow-fold-zone:hover {
-	color: var(--text-normal);
+.weekflow-cell.weekflow-fold-zone.weekflow-hour-even {
+	background: color-mix(in srgb, var(--background-secondary) 70%, var(--background-primary));
+}
+.weekflow-cell.weekflow-fold-zone.weekflow-weekend {
+	background: color-mix(in srgb, var(--background-secondary) 60%, var(--background-primary));
+}
+.weekflow-cell.weekflow-fold-zone.weekflow-hour-even.weekflow-weekend {
+	background: color-mix(in srgb, var(--background-secondary) 80%, var(--background-primary));
+}
+
+/* Fold bar unfolded state — subtler to not compete with the grid content */
+.weekflow-fold-bar.weekflow-fold-bar-unfolded {
+	background: color-mix(in srgb, var(--background-secondary) 50%, var(--background-primary));
+	border-top-style: dashed;
+	border-bottom-style: dashed;
 }
 
 /* Time label — improved readability */
