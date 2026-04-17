@@ -229,8 +229,9 @@ export class VimKeyboardManager {
 
 	private buildKeyMaps(): void {
 		// ── Normal mode single keys ──
-		this.singleKeyMap.set("h", () => this.moveCursor(0, -10));
-		this.singleKeyMap.set("l", () => this.moveCursor(0, 10));
+		this.singleKeyMap.set("h", () => this.moveHorizontal(-10));
+		this.singleKeyMap.set("l", () => this.moveHorizontal(10));
+		this.singleKeyMap.set("0", () => this.jumpLineStart());
 		this.singleKeyMap.set("j", () => this.moveCursor(0, 60));
 		this.singleKeyMap.set("k", () => this.moveCursor(0, -60));
 		this.singleKeyMap.set("i", () => this.actionEdit());
@@ -252,6 +253,7 @@ export class VimKeyboardManager {
 		this.shiftKeyMap.set("G", () => this.jumpEnd());
 		this.shiftKeyMap.set("O", () => this.actionNewBlockAbove());
 		this.shiftKeyMap.set("V", () => this.enterVisualModeLine());
+		this.shiftKeyMap.set("$", () => this.jumpLineEnd());
 
 		// ── Ctrl keys ──
 		this.ctrlKeyMap.set("r", () => { this.ctx.redo(); });
@@ -304,8 +306,50 @@ export class VimKeyboardManager {
 		this.ctx.scrollToMinutes(newMinutes);
 	}
 
+	/** Horizontal 10-min movement — wraps to adjacent day within the same hour row. */
+	private moveHorizontal(delta: number): void {
+		let newMinutes = this.cursor.minutes + delta;
+		let newDay = this.cursor.dayIndex;
+		const hourStart = Math.floor(this.cursor.minutes / 60) * 60;
+
+		if (newMinutes < hourStart) {
+			// Wrap to previous day, same hour row end (XX:50)
+			newDay--;
+			if (newDay < 0) return;
+			newMinutes = hourStart + 50;
+		} else if (newMinutes > hourStart + 50) {
+			// Wrap to next day, same hour row start (XX:00)
+			newDay++;
+			if (newDay > 6) return;
+			newMinutes = hourStart;
+		}
+
+		this.cursor = { dayIndex: newDay, minutes: newMinutes };
+		this.ctx.unfoldIfNeeded(newMinutes);
+		if (this.mode === "normal") {
+			this.ctx.refoldIfCursorLeft(newMinutes);
+		}
+		this.renderCursor();
+		this.updateIndicator();
+		this.ctx.scrollToMinutes(newMinutes);
+	}
+
 	private moveCursorDay(delta: number): void {
 		this.moveCursor(delta, 0);
+	}
+
+	/** Jump to start of current hour row (XX:00). */
+	private jumpLineStart(): void {
+		this.cursor.minutes = Math.floor(this.cursor.minutes / 60) * 60;
+		this.renderCursor();
+		this.updateIndicator();
+	}
+
+	/** Jump to end of current hour row (XX:50). */
+	private jumpLineEnd(): void {
+		this.cursor.minutes = Math.floor(this.cursor.minutes / 60) * 60 + 50;
+		this.renderCursor();
+		this.updateIndicator();
 	}
 
 	private jumpStart(): void {
@@ -458,10 +502,12 @@ export class VimKeyboardManager {
 
 	private enterVisualModeLine(): void {
 		this.mode = "visual";
+		const hourStart = Math.floor(this.cursor.minutes / 60) * 60;
 		this.visual = {
-			anchor: { ...this.cursor },
-			head: { ...this.cursor },
+			anchor: { dayIndex: this.cursor.dayIndex, minutes: hourStart },
+			head: { dayIndex: this.cursor.dayIndex, minutes: hourStart + 50 },
 		};
+		this.cursor = { ...this.visual.head };
 		this.renderVisual();
 		this.updateIndicator();
 	}

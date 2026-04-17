@@ -1234,10 +1234,12 @@ export class WeekFlowView extends ItemView {
 			const content = input.value.trim();
 			if (!content) {
 				this.dismissInlineEditor();
+				this.vimManager?.exitInsertMode();
 				return;
 			}
 			this.dismissInlineEditor();
 			this.gridRenderer?.clearSelection();
+			this.vimManager?.exitInsertMode();
 			await this.createBlockFromResult(
 				{
 					content,
@@ -1253,6 +1255,7 @@ export class WeekFlowView extends ItemView {
 		const cancel = () => {
 			this.dismissInlineEditor();
 			this.gridRenderer?.clearSelection();
+			this.vimManager?.exitInsertMode();
 		};
 
 		input.addEventListener("input", () => {
