@@ -185,9 +185,21 @@ export class GridRenderer {
 		return false;
 	}
 
+	/**
+	 * When folded: the boundary hour (dayStartHour-1 or dayEndHour) becomes the fold bar.
+	 * When unfolded: the first hour of the range (0 or dayEndHour) becomes the fold bar,
+	 * freeing the boundary hour to render as a normal time row.
+	 */
 	private isBoundaryHour(h: number): boolean {
-		return (h === this.settings.dayStartHour - 1 && this.settings.dayStartHour > 0) ||
-			(h === this.settings.dayEndHour && this.settings.dayEndHour < 24);
+		if (this.settings.dayStartHour > 0) {
+			if (this.earlyFolded && h === this.settings.dayStartHour - 1) return true;
+			if (!this.earlyFolded && h === 0) return true;
+		}
+		if (this.settings.dayEndHour < 24) {
+			if (this.lateFolded && h === this.settings.dayEndHour) return true;
+			if (!this.lateFolded && h === this.settings.dayEndHour) return true;
+		}
+		return false;
 	}
 
 	private getFoldedHourCount(): number {
@@ -349,9 +361,11 @@ export class GridRenderer {
 			const row = h + 2;
 			const folded = this.isHourFolded(h);
 
-			// Boundary rows: always render fold bar (both folded and unfolded)
+			// Boundary rows: render fold bar
 			if (this.isBoundaryHour(h)) {
-				const isEarly = h === this.settings.dayStartHour - 1;
+				const isEarlyFolded = this.earlyFolded && h === this.settings.dayStartHour - 1;
+				const isEarlyUnfolded = !this.earlyFolded && h === 0;
+				const isEarly = isEarlyFolded || isEarlyUnfolded;
 				const foldStart = isEarly ? 0 : this.settings.dayEndHour;
 				const foldEnd = isEarly ? this.settings.dayStartHour : 24;
 				const isFolded = isEarly ? this.earlyFolded : this.lateFolded;
