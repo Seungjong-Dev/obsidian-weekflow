@@ -185,6 +185,13 @@ export class GridRenderer {
 		return false;
 	}
 
+	/** Check if hour is in an unfolded fold zone (visible but normally hidden). */
+	private isInUnfoldedZone(h: number): "early" | "late" | false {
+		if (h < this.settings.dayStartHour && !this.earlyFolded) return "early";
+		if (h >= this.settings.dayEndHour && !this.lateFolded) return "late";
+		return false;
+	}
+
 	/** Grid row offset: header is row 1, hours start at row 2. */
 	private readonly HOUR_ROW_OFFSET = 2;
 
@@ -258,7 +265,7 @@ export class GridRenderer {
 
 			// Time label with fold toggle
 			const timeLabel = this.gridEl.createDiv({
-				cls: "weekflow-time-label weekflow-fold-label-unfolded",
+				cls: "weekflow-time-label weekflow-fold-label-unfolded weekflow-fold-zone",
 			});
 			timeLabel.style.gridColumn = "1";
 			timeLabel.style.gridRow = `${row}`;
@@ -267,10 +274,7 @@ export class GridRenderer {
 			foldBtn.setText(arrow);
 			foldBtn.setAttribute("title", `Hide ${foldRange}`);
 			foldBtn.setAttribute("aria-label", `Hide ${foldRange}`);
-			foldBtn.addEventListener("click", (e) => {
-				e.stopPropagation();
-				toggleFold();
-			});
+			timeLabel.addEventListener("click", () => toggleFold());
 			if (h % 6 === 0) timeLabel.addClass("weekflow-time-landmark");
 
 			// Normal 10-min grid cells (same as regular hours)
@@ -280,7 +284,7 @@ export class GridRenderer {
 				for (let slot = 0; slot < 6; slot++) {
 					const minutes = h * 60 + slot * 10;
 					const col = dayColStart + slot;
-					const cell = this.gridEl.createDiv({ cls: "weekflow-cell" });
+					const cell = this.gridEl.createDiv({ cls: "weekflow-cell weekflow-fold-zone" });
 					cell.style.gridColumn = `${col}`;
 					cell.style.gridRow = `${row}`;
 					if (slot === 0) cell.addClass("weekflow-cell-day-start");
@@ -430,6 +434,9 @@ export class GridRenderer {
 
 			if (folded) continue;
 
+			// Check if this hour is in an unfolded fold zone
+			const unfoldZone = this.isInUnfoldedZone(h);
+
 			// Normal (unfolded) time label
 			const timeLabel = this.gridEl.createDiv({
 				cls: "weekflow-time-label",
@@ -440,6 +447,13 @@ export class GridRenderer {
 			// Landmark hours: 6, 12, 18, 0
 			if (h % 6 === 0) {
 				timeLabel.addClass("weekflow-time-landmark");
+			}
+			if (unfoldZone) {
+				timeLabel.addClass("weekflow-fold-zone");
+				timeLabel.addEventListener("click", () => {
+					if (unfoldZone === "early") this.toggleEarlyFold();
+					else this.toggleLateFold();
+				});
 			}
 
 			for (let i = 0; i < this.visibleDays; i++) {
@@ -461,6 +475,8 @@ export class GridRenderer {
 					const cellDate = this.dates[d];
 					const cellDow = cellDate.day();
 					if (cellDow === 0 || cellDow === 6) cell.addClass("weekflow-weekend");
+					// Fold zone styling
+					if (unfoldZone) cell.addClass("weekflow-fold-zone");
 
 					cell.dataset.day = String(d);
 					cell.dataset.minutes = String(minutes);

@@ -467,6 +467,12 @@
 	padding: 0 3px;
 }
 
+/* Unfold zone: visually distinct background for normally-folded hours */
+.weekflow-fold-zone {
+	background: color-mix(in srgb, var(--background-secondary) 50%, transparent) !important;
+	cursor: pointer;
+}
+
 /* Unfolded fold label: time label with fold toggle button */
 .weekflow-fold-label-unfolded {
 	display: flex;
@@ -475,16 +481,9 @@
 }
 
 .weekflow-fold-toggle-btn {
-	cursor: pointer;
 	font-size: 9px;
 	color: var(--text-faint);
-	opacity: 0.4;
-	transition: opacity 0.15s;
-}
-
-.weekflow-fold-toggle-btn:hover {
-	opacity: 1;
-	color: var(--text-muted);
+	opacity: 0.5;
 }
 
 /* Time label — improved readability */
