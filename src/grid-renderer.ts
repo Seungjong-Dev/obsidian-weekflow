@@ -185,21 +185,9 @@ export class GridRenderer {
 		return false;
 	}
 
-	/**
-	 * When folded: the boundary hour (dayStartHour-1 or dayEndHour) becomes the fold bar.
-	 * When unfolded: the first hour of the range (0 or dayEndHour) becomes the fold bar,
-	 * freeing the boundary hour to render as a normal time row.
-	 */
 	private isBoundaryHour(h: number): boolean {
-		if (this.settings.dayStartHour > 0) {
-			if (this.earlyFolded && h === this.settings.dayStartHour - 1) return true;
-			if (!this.earlyFolded && h === 0) return true;
-		}
-		if (this.settings.dayEndHour < 24) {
-			if (this.lateFolded && h === this.settings.dayEndHour) return true;
-			if (!this.lateFolded && h === this.settings.dayEndHour) return true;
-		}
-		return false;
+		return (h === this.settings.dayStartHour - 1 && this.settings.dayStartHour > 0) ||
+			(h === this.settings.dayEndHour && this.settings.dayEndHour < 24);
 	}
 
 	private getFoldedHourCount(): number {
@@ -309,7 +297,12 @@ export class GridRenderer {
 
 		// 24-hour grid with fold bar for early/late hours
 		const rowTemplate = Array.from({ length: 24 }, (_, h) => {
-			if (this.isBoundaryHour(h)) return `${this.FOLD_BAR_HEIGHT}px`;
+			if (this.isBoundaryHour(h)) {
+				const isEarly = h === this.settings.dayStartHour - 1;
+				const isFolded = isEarly ? this.earlyFolded : this.lateFolded;
+				// When folded: compact fold bar. When unfolded: normal row height (cells visible behind fold bar)
+				return isFolded ? `${this.FOLD_BAR_HEIGHT}px` : 'minmax(40px, 1fr)';
+			}
 			if (this.isHourFolded(h)) return '0px';
 			return 'minmax(40px, 1fr)';
 		}).join(' ');
@@ -363,14 +356,13 @@ export class GridRenderer {
 
 			// Boundary rows: render fold bar
 			if (this.isBoundaryHour(h)) {
-				const isEarlyFolded = this.earlyFolded && h === this.settings.dayStartHour - 1;
-				const isEarlyUnfolded = !this.earlyFolded && h === 0;
-				const isEarly = isEarlyFolded || isEarlyUnfolded;
+				const isEarly = h === this.settings.dayStartHour - 1;
 				const foldStart = isEarly ? 0 : this.settings.dayEndHour;
 				const foldEnd = isEarly ? this.settings.dayStartHour : 24;
 				const isFolded = isEarly ? this.earlyFolded : this.lateFolded;
 				this.renderFoldBar(h, foldStart, foldEnd, isEarly, isFolded);
-				continue;
+				if (isFolded) continue;
+				// When unfolded: fall through to also render normal cells for this hour
 			}
 
 			if (folded) continue; // Non-boundary folded rows: skip
