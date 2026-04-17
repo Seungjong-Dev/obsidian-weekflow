@@ -35,7 +35,8 @@ export interface VimContext {
 	undo: () => Promise<void>;
 	redo: () => Promise<void>;
 
-	// Rendering callbacks
+	// UI callbacks
+	showHelpModal: () => void;
 	renderCursor: (pos: CursorPosition) => void;
 	clearCursor: () => void;
 	renderVisualHighlight: (startMinutes: number, endMinutes: number, dayIndex: number) => void;
@@ -427,7 +428,7 @@ export class VimKeyboardManager {
 	}
 
 	private actionHelp(): void {
-		// Will be implemented in Phase 5
+		this.ctx.showHelpModal();
 	}
 
 	// ── Visual mode ──

@@ -506,6 +506,21 @@ export class WeekFlowSettingTab extends PluginSettingTab {
 			})
 		);
 
+		// Keyboard
+		containerEl.createEl("h3", { text: "Keyboard" });
+
+		new Setting(containerEl)
+			.setName("Vim keyboard mode")
+			.setDesc("Enable nvim-style keyboard shortcuts (hjkl navigation, dd delete, etc.). Requires reload. Disabled on mobile.")
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.vimMode)
+					.onChange(async (value) => {
+						this.plugin.settings.vimMode = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
 		// Categories
 		containerEl.createEl("h3", { text: "Categories" });
 

@@ -462,7 +462,11 @@ export class WeekFlowView extends ItemView {
 			this.dates,
 			this.weekData,
 			{
-				onCellDragStart: () => {},
+				onCellDragStart: (dayIndex: number, minutes: number) => {
+					if (this.vimManager) {
+						this.vimManager.setCursorFromClick(dayIndex, minutes);
+					}
+				},
 				onCellDragMove: () => {},
 				onCellDragEnd: () => this.onDragEnd(),
 				onBlockClick: (dayIndex, item) =>
@@ -1800,6 +1804,7 @@ export class WeekFlowView extends ItemView {
 			undo: () => this.undo(),
 			redo: () => this.redo(),
 
+			showHelpModal: () => this.showVimHelpModal(),
 			renderCursor: (pos: CursorPosition) => {
 				this.gridRenderer?.renderVimCursor(pos.dayIndex, pos.minutes);
 			},
@@ -1835,5 +1840,70 @@ export class WeekFlowView extends ItemView {
 		if (this.vimManager) {
 			this.vimManager.updateContext(this.buildVimContext());
 		}
+	}
+
+	private showVimHelpModal(): void {
+		const modal = new VimHelpModal(this.app);
+		modal.open();
+	}
+}
+
+// ── Vim Help Modal ──
+
+import { Modal } from "obsidian";
+
+class VimHelpModal extends Modal {
+	onOpen() {
+		const { contentEl } = this;
+		contentEl.addClass("weekflow-vim-help");
+		contentEl.createEl("h2", { text: "Keyboard Shortcuts" });
+
+		const sections: [string, [string, string][]][] = [
+			["Navigation", [
+				["h / l", "10min left / right"],
+				["j / k", "1 hour down / up"],
+				["H / L", "Previous / next day"],
+				["gg", "Jump to day start"],
+				["G", "Jump to day end"],
+				["gt", "Jump to current time"],
+			]],
+			["Block Operations", [
+				["i / Enter", "Edit block or create new"],
+				["o / O", "New block below / above"],
+				["dd", "Delete block"],
+				["x", "Toggle complete (plan ↔ actual)"],
+				["< / >", "Shift block time ±10min"],
+				["+ / -", "Resize block ±10min"],
+				["cc", "Replace block content"],
+			]],
+			["Visual Mode", [
+				["v / V", "Enter visual selection"],
+				["j / k / h / l", "Extend selection"],
+				["Enter", "Create block from selection"],
+				["dd", "Delete blocks in selection"],
+				["Esc", "Cancel selection"],
+			]],
+			["General", [
+				["u", "Undo"],
+				["Ctrl+r", "Redo"],
+				["Esc", "Cancel / Normal mode"],
+				["?", "This help"],
+			]],
+		];
+
+		for (const [title, keys] of sections) {
+			contentEl.createEl("h3", { text: title });
+			const table = contentEl.createEl("table");
+			for (const [key, desc] of keys) {
+				const row = table.createEl("tr");
+				const keyCell = row.createEl("td");
+				keyCell.createEl("kbd", { text: key });
+				row.createEl("td", { text: desc });
+			}
+		}
+	}
+
+	onClose() {
+		this.contentEl.empty();
 	}
 }

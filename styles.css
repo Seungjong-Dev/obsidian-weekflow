@@ -2111,3 +2111,38 @@
 .weekflow-grid-wrapper:focus {
 	outline: none;
 }
+
+/* Vim help modal */
+.weekflow-vim-help h3 {
+	margin-top: 16px;
+	margin-bottom: 4px;
+	font-size: 13px;
+	color: var(--text-muted);
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
+}
+
+.weekflow-vim-help table {
+	width: 100%;
+	border-collapse: collapse;
+}
+
+.weekflow-vim-help td {
+	padding: 3px 8px;
+	font-size: 13px;
+}
+
+.weekflow-vim-help td:first-child {
+	width: 120px;
+	white-space: nowrap;
+}
+
+.weekflow-vim-help kbd {
+	display: inline-block;
+	padding: 1px 5px;
+	font-size: 12px;
+	font-family: var(--font-monospace);
+	background: var(--background-secondary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 3px;
+}
