@@ -39,6 +39,9 @@ export interface VimContext {
 	showHelpModal: () => void;
 	unfoldIfNeeded: (minutes: number) => void;
 	refoldIfCursorLeft: (minutes: number) => void;
+	shiftView: (dayIndex: number) => void;
+	navigateWeek: (delta: number, landDayIndex: number) => void;
+	navigateToToday: () => void;
 	renderCursor: (pos: CursorPosition) => void;
 	clearCursor: () => void;
 	renderVisualHighlight: (startMinutes: number, endMinutes: number, dayIndex: number) => void;
@@ -292,7 +295,9 @@ export class VimKeyboardManager {
 		// Clamp minutes to 0..1430
 		newMinutes = Math.max(0, Math.min(1430, newMinutes));
 		// Clamp day to visible range
-		newDay = Math.max(0, Math.min(6, newDay));
+		const minDay = this.ctx.dayOffset;
+		const maxDay = this.ctx.dayOffset + this.ctx.visibleDays - 1;
+		newDay = Math.max(minDay, Math.min(maxDay, newDay));
 
 		this.cursor = { dayIndex: newDay, minutes: newMinutes };
 		// Unfold if cursor moves into a folded time range
@@ -306,21 +311,21 @@ export class VimKeyboardManager {
 		this.ctx.scrollToMinutes(newMinutes);
 	}
 
-	/** Horizontal 10-min movement — wraps to adjacent day within the same hour row. */
+	/** Horizontal 10-min movement — wraps to adjacent day within the same hour row (visible range only). */
 	private moveHorizontal(delta: number): void {
 		let newMinutes = this.cursor.minutes + delta;
 		let newDay = this.cursor.dayIndex;
 		const hourStart = Math.floor(this.cursor.minutes / 60) * 60;
+		const minDay = this.ctx.dayOffset;
+		const maxDay = this.ctx.dayOffset + this.ctx.visibleDays - 1;
 
 		if (newMinutes < hourStart) {
-			// Wrap to previous day, same hour row end (XX:50)
 			newDay--;
-			if (newDay < 0) return;
+			if (newDay < minDay) return;
 			newMinutes = hourStart + 50;
 		} else if (newMinutes > hourStart + 50) {
-			// Wrap to next day, same hour row start (XX:00)
 			newDay++;
-			if (newDay > 6) return;
+			if (newDay > maxDay) return;
 			newMinutes = hourStart;
 		}
 
@@ -335,7 +340,31 @@ export class VimKeyboardManager {
 	}
 
 	private moveCursorDay(delta: number): void {
-		this.moveCursor(delta, 0);
+		let newDay = this.cursor.dayIndex + delta;
+
+		// Cross week boundary
+		if (newDay < 0) {
+			this.cursor.dayIndex = 6;
+			this.ctx.navigateWeek(-1, 6);
+			return;
+		}
+		if (newDay > 6) {
+			this.cursor.dayIndex = 0;
+			this.ctx.navigateWeek(1, 0);
+			return;
+		}
+
+		this.cursor.dayIndex = newDay;
+		// Shift view if cursor moved outside visible range
+		if (newDay < this.ctx.dayOffset || newDay >= this.ctx.dayOffset + this.ctx.visibleDays) {
+			this.ctx.shiftView(newDay);
+		}
+		this.ctx.unfoldIfNeeded(this.cursor.minutes);
+		if (this.mode === "normal") {
+			this.ctx.refoldIfCursorLeft(this.cursor.minutes);
+		}
+		this.renderCursor();
+		this.updateIndicator();
 	}
 
 	/** Jump to start of current hour row (XX:00). */
@@ -372,10 +401,21 @@ export class VimKeyboardManager {
 	private jumpNow(): void {
 		const now = new Date();
 		const minutes = this.snapMinutes(now.getHours() * 60 + now.getMinutes());
-		// Find today in dates
 		const today = window.moment().format("YYYY-MM-DD");
 		const todayIdx = this.ctx.dates.findIndex(d => d.format("YYYY-MM-DD") === today);
-		if (todayIdx >= 0) this.cursor.dayIndex = todayIdx;
+
+		if (todayIdx < 0) {
+			// Today is not in this week — navigate to today's week
+			this.cursor.minutes = Math.min(minutes, 1430);
+			this.ctx.navigateToToday();
+			return;
+		}
+
+		this.cursor.dayIndex = todayIdx;
+		// Shift view to show today
+		if (todayIdx < this.ctx.dayOffset || todayIdx >= this.ctx.dayOffset + this.ctx.visibleDays) {
+			this.ctx.shiftView(todayIdx);
+		}
 		this.cursor.minutes = Math.min(minutes, 1430);
 		this.ctx.unfoldIfNeeded(this.cursor.minutes);
 		if (this.mode === "normal") this.ctx.refoldIfCursorLeft(this.cursor.minutes);

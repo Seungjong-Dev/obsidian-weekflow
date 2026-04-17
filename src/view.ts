@@ -872,9 +872,9 @@ export class WeekFlowView extends ItemView {
 		}
 	}
 
-	goToThisWeek(): void {
+	async goToThisWeek(): Promise<void> {
 		this.currentDate = window.moment();
-		this.refresh();
+		await this.refresh();
 	}
 
 	private async navigateWeek(delta: number) {
@@ -1826,6 +1826,35 @@ export class WeekFlowView extends ItemView {
 				if (this.gridRenderer) {
 					const rerendered = this.gridRenderer.refoldIfCursorLeft(minutes);
 					if (rerendered) this.vimManager?.restoreCursor();
+				}
+			},
+			navigateToToday: async () => {
+				await this.goToThisWeek();
+				// After refresh, find today and set cursor
+				const today = window.moment().format("YYYY-MM-DD");
+				const todayIdx = this.dates.findIndex(d => d.format("YYYY-MM-DD") === today);
+				if (todayIdx >= 0 && this.vimManager) {
+					const now = new Date();
+					const minutes = Math.round((now.getHours() * 60 + now.getMinutes()) / 10) * 10;
+					this.vimManager.setCursorFromClick(todayIdx, Math.min(minutes, 1430));
+				}
+			},
+			navigateWeek: (delta: number, landDayIndex: number) => {
+				// Set pending offset so view lands showing the target day
+				const maxOffset = 7 - this.currentVisibleDays;
+				this.pendingDayOffset = Math.max(0, Math.min(maxOffset, landDayIndex));
+				this.navigateWeek(delta);
+			},
+			shiftView: (dayIndex: number) => {
+				const maxOffset = 7 - this.currentVisibleDays;
+				let offset = this.currentDayOffset;
+				if (dayIndex < offset) offset = dayIndex;
+				else if (dayIndex >= offset + this.currentVisibleDays) offset = dayIndex - this.currentVisibleDays + 1;
+				offset = Math.max(0, Math.min(maxOffset, offset));
+				if (offset !== this.currentDayOffset) {
+					this.currentDayOffset = offset;
+					this.updatePage();
+					this.updateVimContext();
 				}
 			},
 			renderCursor: (pos: CursorPosition) => {
