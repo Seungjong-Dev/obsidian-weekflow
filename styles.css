@@ -467,22 +467,25 @@
 	padding: 0 3px;
 }
 
-/* Fold boundary — time label at the edge of a fold zone (when unfolded) */
-.weekflow-fold-boundary {
-	border-top: 1px dashed var(--background-modifier-border);
-}
-
-.weekflow-fold-boundary-btn {
+/* Fold separator — full-width bar at fold boundary when unfolded */
+.weekflow-fold-separator {
+	height: 20px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+	background: var(--background-secondary);
+	border-top: 1px solid var(--background-modifier-border);
+	border-bottom: 1px solid var(--background-modifier-border);
 	cursor: pointer;
-	font-size: 9px;
+	font-size: 10px;
 	color: var(--text-faint);
-	margin-left: 2px;
-	opacity: 0.5;
-	transition: opacity 0.15s;
+	user-select: none;
+	z-index: 1;
 }
 
-.weekflow-fold-boundary-btn:hover {
-	opacity: 1;
+.weekflow-fold-separator:hover {
+	background: var(--background-modifier-hover);
 	color: var(--text-muted);
 }
 
