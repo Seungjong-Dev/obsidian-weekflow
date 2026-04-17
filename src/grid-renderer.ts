@@ -2430,16 +2430,21 @@ export class GridRenderer {
 		this.vimVisualEls = [];
 	}
 
-	scrollToMinutes(minutes: number): void {
-		// If cursor element exists, scroll to it directly (works in all directions)
-		if (this.vimCursorEl) {
-			this.vimCursorEl.scrollIntoView({ block: "nearest", behavior: "instant" as ScrollBehavior });
-			return;
+	scrollToMinutes(_minutes: number): void {
+		if (!this.vimCursorEl) return;
+		const wrapper = this.containerEl;
+		if (!wrapper) return;
+
+		const wrapperRect = wrapper.getBoundingClientRect();
+		const cursorRect = this.vimCursorEl.getBoundingClientRect();
+
+		// Cursor is above the visible area
+		if (cursorRect.top < wrapperRect.top) {
+			wrapper.scrollTop -= (wrapperRect.top - cursorRect.top + 8);
 		}
-		const hour = Math.floor(minutes / 60);
-		const cells = this.gridEl?.querySelectorAll(`.weekflow-cell[data-minutes="${hour * 60}"]`);
-		if (cells && cells.length > 0) {
-			(cells[0] as HTMLElement).scrollIntoView({ block: "nearest", behavior: "instant" as ScrollBehavior });
+		// Cursor is below the visible area
+		else if (cursorRect.bottom > wrapperRect.bottom) {
+			wrapper.scrollTop += (cursorRect.bottom - wrapperRect.bottom + 8);
 		}
 	}
 
