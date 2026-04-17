@@ -438,10 +438,14 @@
 	color: var(--text-faint);
 	user-select: none;
 	z-index: 1;
+	transition: background 0.15s ease, color 0.15s ease;
 }
 .weekflow-fold-bar:hover {
 	background: var(--background-modifier-hover);
 	color: var(--text-muted);
+}
+.weekflow-fold-bar:active {
+	background: color-mix(in srgb, var(--background-modifier-hover) 80%, var(--background-modifier-border));
 }
 
 .weekflow-fold-bar-label {
@@ -455,8 +459,8 @@
 }
 
 .weekflow-fold-bar-indicator {
-	background: var(--text-faint);
-	color: var(--background-primary);
+	background: color-mix(in srgb, var(--text-faint) 40%, transparent);
+	color: var(--text-muted);
 	font-size: 9px;
 	min-width: 14px;
 	height: 14px;
@@ -465,12 +469,21 @@
 	align-items: center;
 	justify-content: center;
 	padding: 0 3px;
+	font-weight: 600;
 }
 
-/* Unfold zone: same background as fold bar for visual consistency */
+/* Unfold zone: distinguishes fold-zone rows from main hours */
 .weekflow-fold-zone {
 	background: var(--background-secondary);
+}
+
+/* Only time labels in fold zone are clickable to re-fold */
+.weekflow-time-label.weekflow-fold-zone {
 	cursor: pointer;
+	transition: color 0.15s ease;
+}
+.weekflow-time-label.weekflow-fold-zone:hover {
+	color: var(--text-normal);
 }
 
 /* Time label — improved readability */
