@@ -467,6 +467,26 @@
 	padding: 0 3px;
 }
 
+/* Unfolded fold label: time label with fold toggle button */
+.weekflow-fold-label-unfolded {
+	display: flex;
+	align-items: center;
+	gap: 2px;
+}
+
+.weekflow-fold-toggle-btn {
+	cursor: pointer;
+	font-size: 9px;
+	color: var(--text-faint);
+	opacity: 0.4;
+	transition: opacity 0.15s;
+}
+
+.weekflow-fold-toggle-btn:hover {
+	opacity: 1;
+	color: var(--text-muted);
+}
+
 /* Time label — improved readability */
 .weekflow-time-label {
 	font-variant-numeric: tabular-nums;
