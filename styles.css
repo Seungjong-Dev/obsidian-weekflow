@@ -18,7 +18,7 @@
 .weekflow-container .weekflow-block:focus-visible,
 .weekflow-container .weekflow-block-toggle:focus-visible,
 .weekflow-container .weekflow-block-more:focus-visible,
-.weekflow-container .weekflow-fold-bar:focus-visible,
+.weekflow-container .weekflow-fold-bar-overlay:focus-visible,
 .weekflow-container .weekflow-panel-item:focus-visible,
 .weekflow-container .weekflow-category-dot:focus-visible,
 .weekflow-container .weekflow-stats-range-btn:focus-visible,
@@ -425,11 +425,13 @@
 }
 
 /* Fold bar — single clickable bar for collapsed early/late hours */
-.weekflow-fold-bar {
+/* Fold bar overlay — positioned at boundary, does NOT consume a grid row */
+.weekflow-fold-bar-overlay {
 	display: flex;
 	align-items: center;
-	justify-content: center;
 	gap: 6px;
+	height: 28px;
+	padding: 0 8px;
 	background: var(--background-secondary);
 	border-top: 1px solid var(--background-modifier-border);
 	border-bottom: 1px solid var(--background-modifier-border);
@@ -439,33 +441,13 @@
 	user-select: none;
 	z-index: 1;
 }
-.weekflow-fold-bar:hover {
+.weekflow-fold-bar-overlay:hover {
 	background: var(--background-modifier-hover);
 	color: var(--text-muted);
 }
 
-/* Time label — improved readability */
-.weekflow-time-label {
-	font-variant-numeric: tabular-nums;
-}
-
-/* Landmark hours (0, 6, 12, 18) — stronger visual weight */
-.weekflow-time-landmark {
-	font-weight: 600;
-	color: var(--text-normal);
-	font-size: 11px;
-}
-
-/* Label cell: time label area */
-.weekflow-fold-bar-label {
-	justify-content: flex-end;
-	padding-right: 6px;
-	border-right: 1px solid var(--background-modifier-border);
-}
-
-/* Per-day cell: day-start border */
-.weekflow-fold-bar-day {
-	border-left: 1px solid var(--background-modifier-border);
+.weekflow-fold-bar-label-text {
+	white-space: nowrap;
 }
 
 .weekflow-fold-bar-indicator {
@@ -479,6 +461,18 @@
 	align-items: center;
 	justify-content: center;
 	padding: 0 3px;
+}
+
+/* Time label — improved readability */
+.weekflow-time-label {
+	font-variant-numeric: tabular-nums;
+}
+
+/* Landmark hours (0, 6, 12, 18) — stronger visual weight */
+.weekflow-time-landmark {
+	font-weight: 600;
+	color: var(--text-normal);
+	font-size: 11px;
 }
 
 /* Cells — now horizontal 10-min slots within each hour row */
@@ -1818,7 +1812,7 @@
 	min-height: 36px;
 }
 
-.is-mobile .weekflow-fold-bar {
+.is-mobile .weekflow-fold-bar-overlay {
 	min-height: 36px;
 	font-size: 12px;
 }
