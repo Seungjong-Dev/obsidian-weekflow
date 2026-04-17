@@ -18,6 +18,8 @@ import { ReviewPanelController } from "./review-panel";
 import { showPresetMenu } from "./preset-manager";
 import { BlockActions } from "./block-actions";
 import { collectOverdueItems, collectInboxPanelItems } from "./panel-data";
+import { VimKeyboardManager, type VimMode, type CursorPosition } from "./vim-keyboard";
+import { Scope } from "obsidian";
 
 export class WeekFlowView extends ItemView {
 	plugin: WeekFlowPlugin;
@@ -48,6 +50,9 @@ export class WeekFlowView extends ItemView {
 
 	// Block actions
 	private blockActions: BlockActions | null = null;
+
+	// Vim keyboard
+	private vimManager: VimKeyboardManager | null = null;
 
 	// Responsive layout
 	private resizeObserver: ResizeObserver | null = null;
@@ -131,9 +136,21 @@ export class WeekFlowView extends ItemView {
 			}
 		});
 		this.resizeObserver.observe(this.contentEl);
+
+		// Vim keyboard mode
+		if (this.plugin.settings.vimMode && !isMobileDevice()) {
+			this.scope = new Scope(this.app.scope);
+			this.vimManager = new VimKeyboardManager(this.buildVimContext());
+			this.vimManager.registerScope(this.scope);
+		}
 	}
 
 	async onClose() {
+		if (this.vimManager && this.scope) {
+			this.vimManager.unregisterScope(this.scope);
+			this.vimManager.destroy();
+			this.vimManager = null;
+		}
 		if (this.resizeObserver) {
 			this.resizeObserver.disconnect();
 			this.resizeObserver = null;
@@ -435,6 +452,9 @@ export class WeekFlowView extends ItemView {
 
 		// Grid wrapper
 		const gridWrapper = contentArea.createDiv({ cls: "weekflow-grid-wrapper" });
+		if (this.vimManager) {
+			gridWrapper.tabIndex = 0;
+		}
 
 		this.gridRenderer = new GridRenderer(
 			gridWrapper,
@@ -494,6 +514,16 @@ export class WeekFlowView extends ItemView {
 			const tabIcon = collapsedTab.createSpan();
 			setIcon(tabIcon, "chevron-up");
 			collapsedTab.addEventListener("click", () => this.toggleReviewPanel());
+		}
+
+		// Vim mode indicator
+		if (this.vimManager) {
+			const indicator = contentArea.createDiv({ cls: "weekflow-vim-mode-indicator" });
+			indicator.dataset.mode = "normal";
+			indicator.createSpan({ cls: "weekflow-vim-mode-label", text: "-- NORMAL --" });
+			indicator.createSpan({ cls: "weekflow-vim-mode-info" });
+			this.updateVimContext();
+			this.vimManager.restoreCursor();
 		}
 
 		// Dropdown panel (narrow mode only)
@@ -1741,5 +1771,69 @@ export class WeekFlowView extends ItemView {
 		}
 		this.recalcDayOffset = true;
 		await this.refresh();
+	}
+
+	// ── Vim Keyboard Context ──
+
+	private buildVimContext() {
+		return {
+			dates: this.dates,
+			weekData: this.weekData,
+			settings: this.plugin.settings,
+			visibleDays: this.currentVisibleDays,
+			dayOffset: this.currentDayOffset,
+
+			deleteBlock: (dayIndex: number, item: TimelineItem) => this.deleteBlock(dayIndex, item),
+			completeBlock: (dayIndex: number, item: TimelineItem) => this.onBlockComplete(dayIndex, item),
+			uncompleteBlock: (dayIndex: number, item: TimelineItem) => this.onBlockUncomplete(dayIndex, item),
+			resizeBlock: (item: TimelineItem, dayIndex: number, newStart: number, newEnd: number) =>
+				this.onBlockResize(item, dayIndex, newStart, newEnd),
+			moveBlock: (item: TimelineItem, fromDay: number, toDay: number, newStart: number, newDuration?: number) =>
+				this.onBlockDragEnd(item, fromDay, toDay, newStart, newDuration),
+			openBlockEdit: (dayIndex: number, item: TimelineItem) => this.onBlockClick(dayIndex, item),
+			openInlineEditor: (dayIndex: number, startMinutes: number, endMinutes: number) => {
+				if (this.gridRenderer) {
+					// Simulate cell drag to trigger inline editor
+					this.gridRenderer.simulateCellSelection(dayIndex, startMinutes, endMinutes);
+				}
+			},
+			undo: () => this.undo(),
+			redo: () => this.redo(),
+
+			renderCursor: (pos: CursorPosition) => {
+				this.gridRenderer?.renderVimCursor(pos.dayIndex, pos.minutes);
+			},
+			clearCursor: () => {
+				this.gridRenderer?.clearVimCursor();
+			},
+			renderVisualHighlight: (start: number, end: number, dayIndex: number) => {
+				this.gridRenderer?.renderVimVisualHighlight(start, end, dayIndex);
+			},
+			clearVisualHighlight: () => {
+				this.gridRenderer?.clearVimVisualHighlight();
+			},
+			scrollToMinutes: (minutes: number) => {
+				this.gridRenderer?.scrollToMinutes(minutes);
+			},
+			updateModeIndicator: (mode: VimMode, info: string) => {
+				const el = this.contentEl.querySelector(".weekflow-vim-mode-indicator") as HTMLElement | null;
+				if (!el) return;
+				el.dataset.mode = mode;
+				const label = el.querySelector(".weekflow-vim-mode-label") as HTMLElement | null;
+				const infoEl = el.querySelector(".weekflow-vim-mode-info") as HTMLElement | null;
+				if (label) label.textContent = `-- ${mode.toUpperCase()} --`;
+				if (infoEl) infoEl.textContent = info;
+			},
+			focusGrid: () => {
+				const gw = this.contentEl.querySelector(".weekflow-grid-wrapper") as HTMLElement | null;
+				gw?.focus();
+			},
+		};
+	}
+
+	private updateVimContext(): void {
+		if (this.vimManager) {
+			this.vimManager.updateContext(this.buildVimContext());
+		}
 	}
 }

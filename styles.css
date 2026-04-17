@@ -2044,3 +2044,70 @@
 	z-index: 30;
 	pointer-events: auto;
 }
+
+/* ── Vim Keyboard Mode ── */
+
+.weekflow-vim-cursor {
+	border: 2px solid var(--interactive-accent);
+	border-radius: 3px;
+	pointer-events: none;
+	z-index: 4;
+	animation: weekflow-cursor-blink 1.2s ease-in-out infinite;
+}
+
+@keyframes weekflow-cursor-blink {
+	0%, 100% { opacity: 0.8; }
+	50% { opacity: 0.35; }
+}
+
+.weekflow-vim-visual {
+	background: color-mix(in srgb, var(--interactive-accent) 20%, transparent);
+	pointer-events: none;
+	z-index: 3;
+}
+
+.weekflow-vim-mode-indicator {
+	height: 24px;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 0 12px;
+	font-family: var(--font-monospace);
+	font-size: 11px;
+	background: var(--background-secondary);
+	border-top: 1px solid var(--background-modifier-border);
+	user-select: none;
+	flex-shrink: 0;
+}
+
+.weekflow-vim-mode-label {
+	font-weight: 700;
+	letter-spacing: 0.5px;
+}
+
+.weekflow-vim-mode-indicator[data-mode="normal"] .weekflow-vim-mode-label {
+	color: var(--interactive-accent);
+}
+
+.weekflow-vim-mode-indicator[data-mode="insert"] .weekflow-vim-mode-label {
+	color: var(--color-green, #4ade80);
+}
+
+.weekflow-vim-mode-indicator[data-mode="visual"] .weekflow-vim-mode-label {
+	color: var(--color-yellow, #facc15);
+}
+
+.weekflow-vim-mode-info {
+	color: var(--text-muted);
+	font-variant-numeric: tabular-nums;
+}
+
+.is-mobile .weekflow-vim-cursor,
+.is-mobile .weekflow-vim-visual,
+.is-mobile .weekflow-vim-mode-indicator {
+	display: none;
+}
+
+.weekflow-grid-wrapper:focus {
+	outline: none;
+}

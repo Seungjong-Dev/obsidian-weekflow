@@ -100,6 +100,9 @@ export interface WeekFlowSettings {
 	// Calendar
 	calendarSources: CalendarSource[];
 	calendarCacheDuration: number; // minutes
+
+	// Vim keyboard mode
+	vimMode: boolean;
 }
 
 export const DEFAULT_SETTINGS: WeekFlowSettings = {
@@ -132,6 +135,7 @@ export const DEFAULT_SETTINGS: WeekFlowSettings = {
 	logTimestampFormat: "HH:mm",
 	calendarSources: [],
 	calendarCacheDuration: 30,
+	vimMode: true,
 };
 
 export interface ParseWarning {

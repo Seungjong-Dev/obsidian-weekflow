@@ -132,6 +132,10 @@ export class GridRenderer {
 	private touchBlockSelection: TouchBlockSelection | null = null;
 	private actionBarEl: HTMLElement | null = null;
 
+	// Vim cursor
+	private vimCursorEl: HTMLElement | null = null;
+	private vimVisualEls: HTMLElement[] = [];
+
 	// Swipe detection state
 	private swipeStartX = 0;
 	private swipeStartY = 0;
@@ -775,6 +779,13 @@ export class GridRenderer {
 
 	getSelection(): SelectionRange | null {
 		return this.selectionRange;
+	}
+
+	/** Programmatically set a cell selection (for vim keyboard mode). */
+	simulateCellSelection(dayIndex: number, startMinutes: number, endMinutes: number): void {
+		this.selectionRange = { dayIndex, startMinutes, endMinutes };
+		this.updateSelectionHighlight();
+		this.callbacks.onCellDragEnd?.();
 	}
 
 	/** Return bounding rect of the currently selected cells (relative to viewport) */
@@ -2368,5 +2379,64 @@ export class GridRenderer {
 			if (cat) return cat.color;
 		}
 		return "#888888";
+	}
+
+	// ── Vim Cursor ──
+
+	renderVimCursor(dayIndex: number, minutes: number): void {
+		this.clearVimCursor();
+		if (!this.gridEl) return;
+
+		const visibleIndex = dayIndex - this.dayOffset;
+		if (visibleIndex < 0 || visibleIndex >= this.visibleDays) return;
+
+		const segments = this.getHourSegments(minutes, minutes + 10);
+		if (segments.length === 0) return;
+
+		const seg = segments[0];
+		const dayColStart = visibleIndex * 6 + 2;
+
+		const cursor = this.gridEl.createDiv({ cls: "weekflow-vim-cursor" });
+		cursor.style.gridRow = `${seg.row}`;
+		cursor.style.gridColumn = `${dayColStart + seg.slotStart} / ${dayColStart + seg.slotEnd}`;
+		this.vimCursorEl = cursor;
+	}
+
+	clearVimCursor(): void {
+		this.vimCursorEl?.remove();
+		this.vimCursorEl = null;
+	}
+
+	renderVimVisualHighlight(startMinutes: number, endMinutes: number, dayIndex: number): void {
+		this.clearVimVisualHighlight();
+		if (!this.gridEl) return;
+
+		const visibleIndex = dayIndex - this.dayOffset;
+		if (visibleIndex < 0 || visibleIndex >= this.visibleDays) return;
+
+		const segments = this.getHourSegments(startMinutes, endMinutes);
+		const dayColStart = visibleIndex * 6 + 2;
+
+		for (const seg of segments) {
+			const el = this.gridEl.createDiv({ cls: "weekflow-vim-visual" });
+			el.style.gridRow = `${seg.row}`;
+			el.style.gridColumn = `${dayColStart + seg.slotStart} / ${dayColStart + seg.slotEnd}`;
+			this.vimVisualEls.push(el);
+		}
+	}
+
+	clearVimVisualHighlight(): void {
+		for (const el of this.vimVisualEls) el.remove();
+		this.vimVisualEls = [];
+	}
+
+	scrollToMinutes(minutes: number): void {
+		const gridWrapper = this.containerEl;
+		if (!gridWrapper) return;
+		const hour = Math.floor(minutes / 60);
+		const cells = this.gridEl?.querySelectorAll(`.weekflow-cell[data-minutes="${hour * 60}"]`);
+		if (cells && cells.length > 0) {
+			(cells[0] as HTMLElement).scrollIntoView({ block: "nearest", behavior: "smooth" });
+		}
 	}
 }
