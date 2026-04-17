@@ -86,6 +86,28 @@ export default class WeekFlowPlugin extends Plugin {
 			callback: () => this.activateStatsView(),
 		});
 
+		this.addCommand({
+			id: "weekflow-toggle-early-fold",
+			name: "Toggle early hours fold",
+			checkCallback: (checking: boolean) => {
+				const view = this.getWeekFlowView();
+				if (!view) return false;
+				if (!checking) view.toggleEarlyFold();
+				return true;
+			},
+		});
+
+		this.addCommand({
+			id: "weekflow-toggle-late-fold",
+			name: "Toggle late hours fold",
+			checkCallback: (checking: boolean) => {
+				const view = this.getWeekFlowView();
+				if (!view) return false;
+				if (!checking) view.toggleLateFold();
+				return true;
+			},
+		});
+
 		this.addSettingTab(new WeekFlowSettingTab(this.app, this));
 
 		// Register CLI handlers (Obsidian 1.12.2+)

@@ -169,12 +169,12 @@ export class GridRenderer {
 		this.dayOffset = dayOffset;
 	}
 
-	private toggleEarlyFold(): void {
+	toggleEarlyFold(): void {
 		this.earlyFolded = !this.earlyFolded;
 		this.render();
 	}
 
-	private toggleLateFold(): void {
+	toggleLateFold(): void {
 		this.lateFolded = !this.lateFolded;
 		this.render();
 	}
@@ -233,7 +233,12 @@ export class GridRenderer {
 			labelCell.setText(`${arrow} ${foldRange}`);
 			labelCell.setAttribute("aria-label", `Show ${foldRange}`);
 			labelCell.setAttribute("title", `Show ${foldRange}`);
+			labelCell.setAttribute("role", "button");
+			labelCell.setAttribute("tabindex", "0");
 			labelCell.addEventListener("click", toggleFold);
+			labelCell.addEventListener("keydown", (e) => {
+				if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleFold(); }
+			});
 
 			for (let i = 0; i < this.visibleDays; i++) {
 				const d = this.dayOffset + i;
@@ -241,6 +246,8 @@ export class GridRenderer {
 				const dayCell = this.gridEl.createDiv({ cls: "weekflow-fold-bar weekflow-fold-bar-day" });
 				dayCell.style.gridRow = `${row}`;
 				dayCell.style.gridColumn = `${colStart} / span 6`;
+				dayCell.setAttribute("role", "button");
+				dayCell.setAttribute("tabindex", "-1");
 
 				const dateKey = this.dates[d].format("YYYY-MM-DD");
 				const items = this.weekData.get(dateKey) || [];

@@ -1433,6 +1433,14 @@ export class WeekFlowView extends ItemView {
 		this.togglePanel();
 	}
 
+	toggleEarlyFold(): void {
+		this.gridRenderer?.toggleEarlyFold();
+	}
+
+	toggleLateFold(): void {
+		this.gridRenderer?.toggleLateFold();
+	}
+
 	private isElementOverflowing(el: HTMLElement, container: HTMLElement): boolean {
 		return el.offsetLeft + el.offsetWidth > container.clientWidth;
 	}
