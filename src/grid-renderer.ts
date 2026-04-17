@@ -189,13 +189,12 @@ export class GridRenderer {
 	private readonly HOUR_ROW_OFFSET = 2;
 
 	/**
-	 * Boundary hour = last hour of a folded range. When folded, this row
-	 * is replaced by the fold bar. When unfolded, it renders as a normal row.
+	 * Boundary hour = the row that always shows the fold bar (both folded and unfolded).
+	 * This row is always 28px and shows fold bar instead of normal cells.
 	 */
 	private isBoundaryHour(h: number): boolean {
-		if (h === this.settings.dayStartHour - 1 && this.settings.dayStartHour > 0 && this.earlyFolded) return true;
-		if (h === this.settings.dayEndHour && this.settings.dayEndHour < 24 && this.lateFolded) return true;
-		return false;
+		return (h === this.settings.dayStartHour - 1 && this.settings.dayStartHour > 0) ||
+			(h === this.settings.dayEndHour && this.settings.dayEndHour < 24);
 	}
 
 	private getFoldedHourCount(): number {
@@ -206,50 +205,56 @@ export class GridRenderer {
 		return count;
 	}
 
-	/** Render fold bar in a grid row (replaces that row's normal cells). */
-	private renderFoldBarInRow(h: number, foldStart: number, foldEnd: number, isEarly: boolean): void {
+	/** Render fold bar in a grid row (always replaces that row's normal cells). */
+	private renderFoldBarInRow(h: number, foldStart: number, foldEnd: number, isEarly: boolean, isFolded: boolean): void {
 		if (!this.gridEl) return;
-		const row = h + this.HOUR_ROW_OFFSET;
+		const startRow = h + this.HOUR_ROW_OFFSET;
 
-		const arrow = isEarly ? "\u25B4" : "\u25BE";
+		const arrow = isFolded
+			? (isEarly ? "\u25B4" : "\u25BE")
+			: (isEarly ? "\u25BE" : "\u25B4");
+
 		const toggleFold = () => {
 			if (isEarly) this.toggleEarlyFold();
 			else this.toggleLateFold();
 		};
 
+		const foldLabel = isFolded ? "Show" : "Hide";
 		const foldRange = `${formatTime(foldStart * 60)}\u2013${formatTime(foldEnd * 60)}`;
 
-		// Label cell (time label column)
+		// Label cell (column 1, time label area)
 		const labelCell = this.gridEl.createDiv({ cls: "weekflow-fold-bar weekflow-fold-bar-label" });
-		labelCell.style.gridRow = `${row}`;
+		labelCell.style.gridRow = `${startRow}`;
 		labelCell.style.gridColumn = `1`;
 		labelCell.setText(`${arrow} ${foldRange}`);
-		labelCell.setAttribute("aria-label", `Show ${foldRange}`);
-		labelCell.setAttribute("title", `Show ${foldRange}`);
+		labelCell.setAttribute("aria-label", `${foldLabel} ${foldRange}`);
+		labelCell.setAttribute("title", `${foldLabel} ${foldRange}`);
 		labelCell.addEventListener("click", toggleFold);
 
-		// Per-day cells
+		// Per-day cells (each spanning 6 columns)
 		for (let i = 0; i < this.visibleDays; i++) {
 			const d = this.dayOffset + i;
 			const colStart = i * 6 + 2;
 
 			const dayCell = this.gridEl.createDiv({ cls: "weekflow-fold-bar weekflow-fold-bar-day" });
-			dayCell.style.gridRow = `${row}`;
+			dayCell.style.gridRow = `${startRow}`;
 			dayCell.style.gridColumn = `${colStart} / span 6`;
 
-			const dateKey = this.dates[d].format("YYYY-MM-DD");
-			const items = this.weekData.get(dateKey) || [];
-			let dayHiddenCount = 0;
-			for (const item of items) {
-				const displayTime = item.checkbox === "actual" && item.actualTime
-					? item.actualTime : item.planTime;
-				if (displayTime.start < foldEnd * 60 && displayTime.end > foldStart * 60) {
-					dayHiddenCount++;
+			if (isFolded) {
+				const dateKey = this.dates[d].format("YYYY-MM-DD");
+				const items = this.weekData.get(dateKey) || [];
+				let dayHiddenCount = 0;
+				for (const item of items) {
+					const displayTime = item.checkbox === "actual" && item.actualTime
+						? item.actualTime : item.planTime;
+					if (displayTime.start < foldEnd * 60 && displayTime.end > foldStart * 60) {
+						dayHiddenCount++;
+					}
 				}
-			}
-			if (dayHiddenCount > 0) {
-				dayCell.createSpan({ text: arrow + " " });
-				dayCell.createSpan({ cls: "weekflow-fold-bar-indicator", text: `${dayHiddenCount}` });
+				if (dayHiddenCount > 0) {
+					dayCell.createSpan({ text: arrow + " " });
+					dayCell.createSpan({ cls: "weekflow-fold-bar-indicator", text: `${dayHiddenCount}` });
+				}
 			}
 
 			dayCell.addEventListener("click", toggleFold);
@@ -297,15 +302,10 @@ export class GridRenderer {
 		this.gridEl.style.gridTemplateColumns =
 			`60px repeat(${cols}, 1fr)`;
 
-		// Grid rows: header + 24 hours. Boundary hours get fold bar height when folded.
+		// Grid rows: header + 24 hours. Boundary hours always get fold bar height.
 		const rowTemplate = Array.from({ length: 24 }, (_, h) => {
 			if (this.isBoundaryHour(h)) return `${this.FOLD_BAR_HEIGHT}px`;
 			if (this.isHourFolded(h)) return '0px';
-			// Separator host row: extra height for separator bar + normal cells
-			const isSepHost =
-				(h === this.settings.dayStartHour && this.settings.dayStartHour > 0 && !this.earlyFolded) ||
-				(h === this.settings.dayEndHour - 1 && this.settings.dayEndHour < 24 && !this.lateFolded);
-			if (isSepHost) return 'minmax(60px, 1fr)';
 			return 'minmax(40px, 1fr)';
 		}).join(' ');
 		this.gridEl.style.gridTemplateRows = `auto ${rowTemplate}`;
@@ -356,12 +356,13 @@ export class GridRenderer {
 			const row = h + this.HOUR_ROW_OFFSET;
 			const folded = this.isHourFolded(h);
 
-			// Boundary hours: fold bar replaces this row when folded
+			// Boundary rows: always render fold bar (both folded and unfolded)
 			if (this.isBoundaryHour(h)) {
 				const isEarly = h === this.settings.dayStartHour - 1;
 				const foldStart = isEarly ? 0 : this.settings.dayEndHour;
 				const foldEnd = isEarly ? this.settings.dayStartHour : 24;
-				this.renderFoldBarInRow(h, foldStart, foldEnd, isEarly);
+				const isFolded = isEarly ? this.earlyFolded : this.lateFolded;
+				this.renderFoldBarInRow(h, foldStart, foldEnd, isEarly, isFolded);
 				continue;
 			}
 
@@ -377,32 +378,6 @@ export class GridRenderer {
 			// Landmark hours: 6, 12, 18, 0
 			if (h % 6 === 0) {
 				timeLabel.addClass("weekflow-time-landmark");
-			}
-
-			// Fold separator bar — sits at the FIRST normal hour after the fold zone
-			// Early: top of dayStartHour row (between h=5 and h=6)
-			// Late: bottom of dayEndHour-1 row (between h=21 and h=22)
-			const isEarlySep = h === this.settings.dayStartHour && this.settings.dayStartHour > 0 && !this.earlyFolded;
-			const isLateSep = h === this.settings.dayEndHour - 1 && this.settings.dayEndHour < 24 && !this.lateFolded;
-			if (isEarlySep || isLateSep) {
-				const foldStart = isEarlySep ? 0 : this.settings.dayEndHour;
-				const foldEnd = isEarlySep ? this.settings.dayStartHour : 24;
-				const arrow = isEarlySep ? "\u25B4" : "\u25BE";
-				const foldRange = `${formatTime(foldStart * 60)}\u2013${formatTime(foldEnd * 60)}`;
-
-				const sep = this.gridEl.createDiv({ cls: "weekflow-fold-separator" });
-				sep.style.gridRow = `${row}`;
-				sep.style.gridColumn = `1 / -1`;
-				// Early: stick to top of first normal row. Late: stick to bottom of last normal row.
-				sep.style.alignSelf = isEarlySep ? "start" : "end";
-				sep.setText(`${arrow} ${foldRange}`);
-				sep.setAttribute("title", `Hide ${foldRange}`);
-				sep.setAttribute("aria-label", `Hide ${foldRange}`);
-				sep.addEventListener("click", (e) => {
-					e.stopPropagation();
-					if (isEarlySep) this.toggleEarlyFold();
-					else this.toggleLateFold();
-				});
 			}
 
 			for (let i = 0; i < this.visibleDays; i++) {

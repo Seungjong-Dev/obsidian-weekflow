@@ -467,28 +467,6 @@
 	padding: 0 3px;
 }
 
-/* Fold separator — full-width bar at fold boundary when unfolded */
-.weekflow-fold-separator {
-	height: 20px;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	gap: 6px;
-	background: var(--background-secondary);
-	border-top: 1px solid var(--background-modifier-border);
-	border-bottom: 1px solid var(--background-modifier-border);
-	cursor: pointer;
-	font-size: 10px;
-	color: var(--text-faint);
-	user-select: none;
-	z-index: 1;
-}
-
-.weekflow-fold-separator:hover {
-	background: var(--background-modifier-hover);
-	color: var(--text-muted);
-}
-
 /* Time label — improved readability */
 .weekflow-time-label {
 	font-variant-numeric: tabular-nums;
