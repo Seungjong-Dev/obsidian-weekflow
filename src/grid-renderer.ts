@@ -2431,12 +2431,31 @@ export class GridRenderer {
 	}
 
 	scrollToMinutes(minutes: number): void {
-		const gridWrapper = this.containerEl;
-		if (!gridWrapper) return;
+		// If cursor element exists, scroll to it directly (works in all directions)
+		if (this.vimCursorEl) {
+			this.vimCursorEl.scrollIntoView({ block: "nearest", behavior: "smooth" });
+			return;
+		}
 		const hour = Math.floor(minutes / 60);
 		const cells = this.gridEl?.querySelectorAll(`.weekflow-cell[data-minutes="${hour * 60}"]`);
 		if (cells && cells.length > 0) {
 			(cells[0] as HTMLElement).scrollIntoView({ block: "nearest", behavior: "smooth" });
 		}
+	}
+
+	/** Unfold the time range containing the given minute if it is currently folded. */
+	unfoldIfNeeded(minutes: number): boolean {
+		const hour = Math.floor(minutes / 60);
+		if (hour < this.settings.dayStartHour && this.earlyFolded) {
+			this.earlyFolded = false;
+			this.render();
+			return true;
+		}
+		if (hour >= this.settings.dayEndHour && this.lateFolded) {
+			this.lateFolded = false;
+			this.render();
+			return true;
+		}
+		return false;
 	}
 }

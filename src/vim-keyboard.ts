@@ -37,6 +37,7 @@ export interface VimContext {
 
 	// UI callbacks
 	showHelpModal: () => void;
+	unfoldIfNeeded: (minutes: number) => void;
 	renderCursor: (pos: CursorPosition) => void;
 	clearCursor: () => void;
 	renderVisualHighlight: (startMinutes: number, endMinutes: number, dayIndex: number) => void;
@@ -291,9 +292,12 @@ export class VimKeyboardManager {
 		newDay = Math.max(0, Math.min(6, newDay));
 
 		this.cursor = { dayIndex: newDay, minutes: newMinutes };
+		// Unfold if cursor moves into a folded time range
+		this.ctx.unfoldIfNeeded(newMinutes);
 		this.renderCursor();
 		this.updateIndicator();
-		this.ctx.scrollToMinutes(newMinutes);
+		// Use requestAnimationFrame so cursor element exists before scrolling
+		requestAnimationFrame(() => this.ctx.scrollToMinutes(newMinutes));
 	}
 
 	private moveCursorDay(delta: number): void {
