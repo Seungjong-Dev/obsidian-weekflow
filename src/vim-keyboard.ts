@@ -296,8 +296,7 @@ export class VimKeyboardManager {
 		this.ctx.unfoldIfNeeded(newMinutes);
 		this.renderCursor();
 		this.updateIndicator();
-		// Use requestAnimationFrame so cursor element exists before scrolling
-		requestAnimationFrame(() => this.ctx.scrollToMinutes(newMinutes));
+		this.ctx.scrollToMinutes(newMinutes);
 	}
 
 	private moveCursorDay(delta: number): void {
