@@ -185,17 +185,13 @@ export class GridRenderer {
 		return false;
 	}
 
-	/**
-	 * The last hour of a folded range hosts the fold bar overlay.
-	 * Only true when that range is actually folded.
-	 */
-	private isFoldBarHost(h: number): boolean {
-		if (h === this.settings.dayStartHour - 1 && this.settings.dayStartHour > 0 && this.earlyFolded) return true;
-		if (h === this.settings.dayEndHour && this.settings.dayEndHour < 24 && this.lateFolded) return true;
-		return false;
-	}
+	/** Grid row offset: header(1) + early fold bar(1) = hours start at row 3. */
+	private readonly HOUR_ROW_OFFSET = 3;
+	private readonly EARLY_FOLD_ROW = 2;
+	// Late fold row is computed: 24 + HOUR_ROW_OFFSET = 27
+	private get LATE_FOLD_ROW() { return 24 + this.HOUR_ROW_OFFSET; }
 
-	/** No hour is a boundary — kept for compatibility with block segment filtering. */
+	/** No hour is a boundary — fold bars have dedicated rows. */
 	private isBoundaryHour(_h: number): boolean {
 		return false;
 	}
@@ -226,9 +222,8 @@ export class GridRenderer {
 	private renderFoldBarOverlay(foldStart: number, foldEnd: number, isEarly: boolean, isFolded: boolean): void {
 		if (!this.gridEl) return;
 
-		// Position: on the last folded hour (which has 28px height for the fold bar)
-		const anchorHour = isEarly ? this.settings.dayStartHour - 1 : this.settings.dayEndHour;
-		const anchorRow = anchorHour + 2;
+		// Position: dedicated fold bar rows (not in any hour row)
+		const anchorRow = isEarly ? this.EARLY_FOLD_ROW : this.LATE_FOLD_ROW;
 
 		const arrow = isFolded
 			? (isEarly ? "\u25B4" : "\u25BE")
@@ -278,18 +273,18 @@ export class GridRenderer {
 	}
 
 	private getNormalRowHeight(bodyHeight: number): number {
-		let foldBarHostCount = 0;
+		let foldBarSize = 0;
+		if (this.earlyFolded && this.settings.dayStartHour > 0) foldBarSize += this.FOLD_BAR_HEIGHT;
+		if (this.lateFolded && this.settings.dayEndHour < 24) foldBarSize += this.FOLD_BAR_HEIGHT;
 		let normalCount = 0;
 		for (let h = 0; h < 24; h++) {
-			if (this.isFoldBarHost(h)) foldBarHostCount++;
-			else if (!this.isHourFolded(h)) normalCount++;
+			if (!this.isHourFolded(h)) normalCount++;
 		}
 		if (normalCount === 0) return bodyHeight / 24;
-		return (bodyHeight - foldBarHostCount * this.FOLD_BAR_HEIGHT) / normalCount;
+		return (bodyHeight - foldBarSize) / normalCount;
 	}
 
 	private getRowHeight(h: number, normalRowHeight: number): number {
-		if (this.isFoldBarHost(h)) return this.FOLD_BAR_HEIGHT;
 		if (this.isHourFolded(h)) return 0;
 		return normalRowHeight;
 	}
@@ -318,13 +313,16 @@ export class GridRenderer {
 		this.gridEl.style.gridTemplateColumns =
 			`60px repeat(${cols}, 1fr)`;
 
-		// 24-hour grid — folded hours get 0px (fold bar hosts get 28px), all others normal
-		const rowTemplate = Array.from({ length: 24 }, (_, h) => {
-			if (this.isFoldBarHost(h)) return `${this.FOLD_BAR_HEIGHT}px`;
+		// Grid rows: header + early fold bar + 24 hours + late fold bar
+		const earlyFoldRow = (this.earlyFolded && this.settings.dayStartHour > 0)
+			? `${this.FOLD_BAR_HEIGHT}px` : '0px';
+		const lateFoldRow = (this.lateFolded && this.settings.dayEndHour < 24)
+			? `${this.FOLD_BAR_HEIGHT}px` : '0px';
+		const hourRows = Array.from({ length: 24 }, (_, h) => {
 			if (this.isHourFolded(h)) return '0px';
 			return 'minmax(40px, 1fr)';
 		}).join(' ');
-		this.gridEl.style.gridTemplateRows = `auto ${rowTemplate}`;
+		this.gridEl.style.gridTemplateRows = `auto ${earlyFoldRow} ${hourRows} ${lateFoldRow}`;
 
 		// ── Header row ──
 		const corner = this.gridEl.createDiv({
@@ -369,7 +367,7 @@ export class GridRenderer {
 
 		// ── Hour rows with 10-min cells (24 hours: 0-23) ──
 		for (let h = 0; h < 24; h++) {
-			const row = h + 2;
+			const row = h + this.HOUR_ROW_OFFSET;
 			const folded = this.isHourFolded(h);
 
 			// Folded hours: skip cell rendering (fold bars rendered separately as overlays)
@@ -957,7 +955,7 @@ export class GridRenderer {
 		const colStart = visibleIndex * 6 + 2;
 		// Place in the middle of the visible hour range
 		const midHour = Math.floor((this.settings.dayStartHour + this.settings.dayEndHour) / 2);
-		const row = midHour + 2;
+		const row = midHour + this.HOUR_ROW_OFFSET;
 
 		const hint = this.gridEl.createDiv({ cls: "weekflow-empty-day-hint" });
 		hint.style.gridColumn = `${colStart} / span 6`;
@@ -968,7 +966,7 @@ export class GridRenderer {
 	/**
 	 * Convert an absolute-minute range (0-1440) into grid row/slot segments.
 	 * Each segment corresponds to one hour row in the 24-hour grid.
-	 * row = absoluteHour + 2 (row 1 is the header).
+	 * row = absoluteHour + HOUR_ROW_OFFSET (row 1 = header, row 2 = early fold bar).
 	 */
 	private getHourSegments(
 		startMinute: number,
@@ -989,7 +987,7 @@ export class GridRenderer {
 			const slotEnd = Math.ceil((segEnd - hourStartMin) / 10);
 
 			segments.push({
-				row: h + 2,
+				row: h + this.HOUR_ROW_OFFSET,
 				slotStart,
 				slotEnd: Math.min(slotEnd, 6),
 			});
@@ -1009,7 +1007,7 @@ export class GridRenderer {
 		const visibleIndex = dayIndex - this.dayOffset;
 		const dayColStart = visibleIndex * 6 + 2;
 		const segments = this.getHourSegments(displayTime.start, displayTime.end)
-			.filter(seg => !this.isHourFolded(seg.row - 2) && !this.isBoundaryHour(seg.row - 2));
+			.filter(seg => !this.isHourFolded(seg.row - this.HOUR_ROW_OFFSET) && !this.isBoundaryHour(seg.row - this.HOUR_ROW_OFFSET));
 		if (segments.length === 0) return;
 
 		const color = this.getCategoryColor(item.tags);
@@ -1564,7 +1562,7 @@ export class GridRenderer {
 		const dayColStart = (dayIndex - this.dayOffset) * 6 + 2;
 		const color = this.getCategoryColor(item.tags);
 		const segments = this.getHourSegments(item.planTime.start, item.planTime.end)
-			.filter(seg => !this.isHourFolded(seg.row - 2) && !this.isBoundaryHour(seg.row - 2));
+			.filter(seg => !this.isHourFolded(seg.row - this.HOUR_ROW_OFFSET) && !this.isBoundaryHour(seg.row - this.HOUR_ROW_OFFSET));
 		if (segments.length === 0) return;
 		const subSlotStart = item.planTime.start % 10;
 		const subSlotEnd = item.planTime.end % 10;
@@ -1686,7 +1684,7 @@ export class GridRenderer {
 		}
 
 		const startHour = Math.floor(minStart / 60);
-		const row = startHour + 2;
+		const row = startHour + this.HOUR_ROW_OFFSET;
 		const dayColStart = (dayIndex - this.dayOffset) * 6 + 2;
 
 		const groupIdx = this.overlapGroupMap.get(group[0].id)!;
@@ -1883,7 +1881,7 @@ export class GridRenderer {
 
 		const currentHour = today.hour();
 		const currentMinute = today.minute();
-		const row = currentHour + 2;
+		const row = currentHour + this.HOUR_ROW_OFFSET;
 
 		// Folded/boundary hour → hide
 		if (this.isHourFolded(currentHour) || this.isBoundaryHour(currentHour)) {
