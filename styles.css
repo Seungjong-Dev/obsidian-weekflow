@@ -467,9 +467,9 @@
 	padding: 0 3px;
 }
 
-/* Unfold zone: visually distinct background for normally-folded hours */
+/* Unfold zone: same background as fold bar for visual consistency */
 .weekflow-fold-zone {
-	background: color-mix(in srgb, var(--background-secondary) 50%, transparent) !important;
+	background: var(--background-secondary) !important;
 	cursor: pointer;
 }
 
