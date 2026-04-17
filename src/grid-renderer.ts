@@ -374,6 +374,23 @@ export class GridRenderer {
 				timeLabel.addClass("weekflow-time-landmark");
 			}
 
+			// Fold boundary indicators (when unfolded) — clickable to re-fold
+			const isEarlyBoundary = h === this.settings.dayStartHour - 1 && this.settings.dayStartHour > 0 && !this.earlyFolded;
+			const isLateBoundary = h === this.settings.dayEndHour && this.settings.dayEndHour < 24 && !this.lateFolded;
+			if (isEarlyBoundary || isLateBoundary) {
+				timeLabel.addClass("weekflow-fold-boundary");
+				const foldBtn = timeLabel.createSpan({ cls: "weekflow-fold-boundary-btn" });
+				foldBtn.setText(isEarlyBoundary ? "\u25B4" : "\u25BE");
+				const foldStart = isEarlyBoundary ? 0 : this.settings.dayEndHour;
+				const foldEnd = isEarlyBoundary ? this.settings.dayStartHour : 24;
+				foldBtn.setAttribute("title", `Hide ${formatTime(foldStart * 60)}\u2013${formatTime(foldEnd * 60)}`);
+				foldBtn.addEventListener("click", (e) => {
+					e.stopPropagation();
+					if (isEarlyBoundary) this.toggleEarlyFold();
+					else this.toggleLateFold();
+				});
+			}
+
 			for (let i = 0; i < this.visibleDays; i++) {
 				const d = this.dayOffset + i;
 				const dayColStart = i * 6 + 2;

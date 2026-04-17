@@ -467,6 +467,25 @@
 	padding: 0 3px;
 }
 
+/* Fold boundary — time label at the edge of a fold zone (when unfolded) */
+.weekflow-fold-boundary {
+	border-top: 1px dashed var(--background-modifier-border);
+}
+
+.weekflow-fold-boundary-btn {
+	cursor: pointer;
+	font-size: 9px;
+	color: var(--text-faint);
+	margin-left: 2px;
+	opacity: 0.5;
+	transition: opacity 0.15s;
+}
+
+.weekflow-fold-boundary-btn:hover {
+	opacity: 1;
+	color: var(--text-muted);
+}
+
 /* Time label — improved readability */
 .weekflow-time-label {
 	font-variant-numeric: tabular-nums;
