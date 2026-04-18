@@ -143,14 +143,21 @@ export class VimKeyboardManager {
 			return;
 		}
 
-		// Insert mode — only Escape returns to Normal
-		if (this.mode === "insert") {
-			if (e.key === "Escape") {
+		// Escape — handle in all modes, stopPropagation to prevent Obsidian focus switch
+		if (e.key === "Escape") {
+			e.preventDefault();
+			e.stopPropagation();
+			if (this.mode === "insert") {
 				this.exitInsertMode();
-				e.preventDefault();
-				return false;
+			} else {
+				this.actionEscape();
 			}
-			return; // let input handle it
+			return false;
+		}
+
+		// Insert mode — let input handle everything else
+		if (this.mode === "insert") {
+			return;
 		}
 
 		// Ctrl combos
@@ -247,7 +254,6 @@ export class VimKeyboardManager {
 		this.singleKeyMap.set(">", () => this.actionShiftBlock(10));
 		this.singleKeyMap.set("+", () => this.actionResizeBlock(10));
 		this.singleKeyMap.set("-", () => this.actionResizeBlock(-10));
-		this.singleKeyMap.set("Escape", () => this.actionEscape());
 		this.singleKeyMap.set("?", () => this.actionHelp());
 
 		// ── Shift keys ──
@@ -277,7 +283,6 @@ export class VimKeyboardManager {
 		this.visualSingleKeyMap.set("j", () => this.visualExtend(0, 60));
 		this.visualSingleKeyMap.set("k", () => this.visualExtend(0, -60));
 		this.visualSingleKeyMap.set("Enter", () => this.visualCreateBlock());
-		this.visualSingleKeyMap.set("Escape", () => this.exitVisualMode());
 
 		this.visualMultiKeyMap.set("dd", () => this.visualDeleteBlocks());
 	}
