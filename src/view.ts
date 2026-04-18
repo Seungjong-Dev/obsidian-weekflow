@@ -528,6 +528,13 @@ export class WeekFlowView extends ItemView {
 			indicator.createSpan({ cls: "weekflow-vim-mode-info" });
 			this.updateVimContext();
 			this.vimManager.restoreCursor();
+			// Scroll to cursor position after layout settles
+			requestAnimationFrame(() => {
+				if (this.vimManager && this.gridRenderer) {
+					this.gridRenderer.unfoldIfNeeded(this.vimManager.getCursor().minutes);
+					this.gridRenderer.scrollToMinutes(this.vimManager.getCursor().minutes);
+				}
+			});
 		}
 
 		// Dropdown panel (narrow mode only)

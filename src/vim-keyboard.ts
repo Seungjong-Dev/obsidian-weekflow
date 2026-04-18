@@ -73,9 +73,14 @@ export class VimKeyboardManager {
 
 	constructor(ctx: VimContext) {
 		this.ctx = ctx;
+		// Initialize cursor at today + current time
+		const today = window.moment().format("YYYY-MM-DD");
+		const todayIdx = ctx.dates.findIndex(d => d.format("YYYY-MM-DD") === today);
+		const now = new Date();
+		const minutes = Math.round((now.getHours() * 60 + now.getMinutes()) / 10) * 10;
 		this.cursor = {
-			dayIndex: ctx.dayOffset,
-			minutes: ctx.settings.dayStartHour * 60,
+			dayIndex: todayIdx >= 0 ? todayIdx : ctx.dayOffset,
+			minutes: Math.min(minutes, 1430),
 		};
 		this.buildKeyMaps();
 	}
