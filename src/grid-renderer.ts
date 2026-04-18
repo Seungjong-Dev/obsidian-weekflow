@@ -2408,6 +2408,10 @@ export class GridRenderer {
 		return this.gridEl.querySelector(`.weekflow-block[data-item-id="${itemId}"]`) as HTMLElement | null;
 	}
 
+	getCategoryColorForItem(item: { tags: string[] }): string {
+		return this.getCategoryColor(item.tags);
+	}
+
 	private getCategoryColor(tags: string[]): string {
 		for (const tag of tags) {
 			const cat = this.settings.categories.find((c) => c.tag === tag);

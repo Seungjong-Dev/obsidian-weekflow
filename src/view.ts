@@ -1919,6 +1919,15 @@ export class WeekFlowView extends ItemView {
 			uncompleteBlock: (dayIndex: number, item: TimelineItem) => this.onBlockUncomplete(dayIndex, item),
 			resizeBlock: (item: TimelineItem, dayIndex: number, newStart: number, newEnd: number) =>
 				this.onBlockResize(item, dayIndex, newStart, newEnd),
+			previewResize: (item: TimelineItem, dayIndex: number, newStart: number, newEnd: number) => {
+				if (!this.gridRenderer) return;
+				const color = this.gridRenderer.getCategoryColorForItem(item);
+				const formatTime = (m: number) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+				this.gridRenderer.renderExternalGhost(dayIndex, newStart, newEnd, color, `${formatTime(newStart)}-${formatTime(newEnd)}`);
+			},
+			clearPreviewResize: () => {
+				this.gridRenderer?.removeExternalGhost();
+			},
 			moveBlock: (item: TimelineItem, fromDay: number, toDay: number, newStart: number, newDuration?: number) =>
 				this.onBlockDragEnd(item, fromDay, toDay, newStart, newDuration),
 			deferBlock: (dayIndex: number, item: TimelineItem) => {

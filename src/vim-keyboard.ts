@@ -29,6 +29,8 @@ export interface VimContext {
 	completeBlock: (dayIndex: number, item: TimelineItem) => Promise<void>;
 	uncompleteBlock: (dayIndex: number, item: TimelineItem) => Promise<void>;
 	resizeBlock: (item: TimelineItem, dayIndex: number, newStart: number, newEnd: number) => Promise<void>;
+	previewResize: (item: TimelineItem, dayIndex: number, newStart: number, newEnd: number) => void;
+	clearPreviewResize: () => void;
 	moveBlock: (item: TimelineItem, fromDay: number, toDay: number, newStart: number, newDuration?: number) => Promise<void>;
 	openBlockEdit: (dayIndex: number, item: TimelineItem) => void;
 	openInlineEditor: (dayIndex: number, startMinutes: number, endMinutes: number) => void;
@@ -71,6 +73,7 @@ export class VimKeyboardManager {
 	private timeEditTimeout: ReturnType<typeof setTimeout> | null = null;
 	private timeEditOriginal: { start: number; end: number } | null = null;
 	private timeEditPreview: number | null = null;
+	private timeEditBlock: { dayIndex: number; item: TimelineItem } | null = null;
 
 	private singleKeyMap = new Map<string, () => void>();
 	private shiftKeyMap = new Map<string, () => void>();
@@ -554,6 +557,7 @@ export class VimKeyboardManager {
 		this.timeEditDigits = "";
 		this.timeEditOriginal = { start: time.start, end: time.end };
 		this.timeEditPreview = target === "start" ? time.start : time.end;
+		this.timeEditBlock = block;
 	}
 
 	private onTimeEditKey(e: KeyboardEvent): boolean | void {
@@ -626,7 +630,7 @@ export class VimKeyboardManager {
 	}
 
 	private applyTimeEditPreview(minutes: number): void {
-		const block = this.getBlockAtCursor();
+		const block = this.timeEditBlock;
 		if (!block || !this.timeEditOriginal) return;
 
 		let newStart = this.timeEditOriginal.start;
@@ -638,11 +642,12 @@ export class VimKeyboardManager {
 		// Validate
 		if (newStart >= newEnd) return;
 
-		this.ctx.resizeBlock(block.item, block.dayIndex, newStart, newEnd);
+		// Visual preview only — no save
+		this.ctx.previewResize(block.item, block.dayIndex, newStart, newEnd);
 	}
 
 	private confirmTimeEdit(minutes: number): void {
-		const block = this.getBlockAtCursor();
+		const block = this.timeEditBlock;
 		if (!block || !this.timeEditOriginal) {
 			this.cancelTimeEdit();
 			return;
@@ -660,19 +665,13 @@ export class VimKeyboardManager {
 			return;
 		}
 
+		this.ctx.clearPreviewResize();
 		this.ctx.resizeBlock(block.item, block.dayIndex, newStart, newEnd);
 		this.exitTimeEditMode();
 	}
 
 	private cancelTimeEdit(): void {
-		// Restore original time
-		if (this.timeEditOriginal) {
-			const block = this.getBlockAtCursor();
-			if (block) {
-				this.ctx.resizeBlock(block.item, block.dayIndex,
-					this.timeEditOriginal.start, this.timeEditOriginal.end);
-			}
-		}
+		this.ctx.clearPreviewResize();
 		this.exitTimeEditMode();
 	}
 
@@ -685,6 +684,7 @@ export class VimKeyboardManager {
 		this.timeEditDigits = "";
 		this.timeEditOriginal = null;
 		this.timeEditPreview = null;
+		this.timeEditBlock = null;
 	}
 
 	private actionChangeContent(): void {
