@@ -1399,6 +1399,7 @@ export class WeekFlowView extends ItemView {
 			const oldTags = [...items[idx].tags];
 			items[idx].tags = [tag];
 			await this.guardedSave(this.dates[dayIndex], items);
+			this.renderView();
 
 			this.undoManager.push({
 				description: "Change tag",
@@ -1422,23 +1423,24 @@ export class WeekFlowView extends ItemView {
 		};
 
 		const onKey = (e: KeyboardEvent) => {
+			// stopImmediatePropagation to prevent vim Escape handler from firing
 			if (e.key === "j" || e.key === "ArrowDown") {
 				e.preventDefault();
-				e.stopPropagation();
+				e.stopImmediatePropagation();
 				selectedIdx = (selectedIdx + 1) % categories.length;
 				renderItems();
 			} else if (e.key === "k" || e.key === "ArrowUp") {
 				e.preventDefault();
-				e.stopPropagation();
+				e.stopImmediatePropagation();
 				selectedIdx = (selectedIdx - 1 + categories.length) % categories.length;
 				renderItems();
 			} else if (e.key === "Enter") {
 				e.preventDefault();
-				e.stopPropagation();
+				e.stopImmediatePropagation();
 				selectTag(categories[selectedIdx].tag);
 			} else if (e.key === "Escape") {
 				e.preventDefault();
-				e.stopPropagation();
+				e.stopImmediatePropagation();
 				dismiss();
 			}
 		};
