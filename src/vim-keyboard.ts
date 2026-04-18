@@ -63,6 +63,7 @@ export class VimKeyboardManager {
 	private pendingKeys = "";
 	private pendingTimeout: ReturnType<typeof setTimeout> | null = null;
 	private scopeHandlers: any[] = [];
+	private suspended = false;
 
 	private singleKeyMap = new Map<string, () => void>();
 	private shiftKeyMap = new Map<string, () => void>();
@@ -112,6 +113,10 @@ export class VimKeyboardManager {
 	getMode(): VimMode { return this.mode; }
 	getCursor(): CursorPosition { return { ...this.cursor }; }
 
+	/** Suspend all key handling (for external popups like tag picker). */
+	suspend(): void { this.suspended = true; }
+	resume(): void { this.suspended = false; }
+
 	setCursorFromClick(dayIndex: number, minutes: number): void {
 		this.cursor = { dayIndex, minutes: this.snapMinutes(minutes) };
 		this.renderCursor();
@@ -145,6 +150,9 @@ export class VimKeyboardManager {
 	// ── Key dispatch ──
 
 	private onKey(e: KeyboardEvent): boolean | void {
+		// Skip all handling when suspended (external popup is open)
+		if (this.suspended) return;
+
 		// Skip if target is an input/textarea
 		if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || (e.target as HTMLElement)?.isContentEditable) {
 			return;

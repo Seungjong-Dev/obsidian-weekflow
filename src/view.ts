@@ -1419,6 +1419,7 @@ export class WeekFlowView extends ItemView {
 			picker.remove();
 			document.removeEventListener("keydown", onKey, true);
 			document.removeEventListener("pointerdown", onClickOutside, true);
+			this.vimManager?.resume();
 			this.vimManager?.exitInsertMode();
 		};
 
@@ -1454,8 +1455,9 @@ export class WeekFlowView extends ItemView {
 		document.addEventListener("keydown", onKey, true);
 		document.addEventListener("pointerdown", onClickOutside, true);
 
-		// Enter insert mode to block vim keys
+		// Suspend vim + enter insert mode while picker is open
 		this.vimManager?.enterInsertMode();
+		this.vimManager?.suspend();
 		renderItems();
 	}
 
