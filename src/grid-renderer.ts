@@ -855,9 +855,12 @@ export class GridRenderer {
 		this.removeExternalGhost();
 		if (!this.gridEl) return;
 
-		const clampedStart = Math.max(0, Math.round(startMin / 10) * 10);
-		const clampedEnd = Math.min(1440, Math.round(endMin / 10) * 10);
+		const clampedStart = Math.max(0, startMin);
+		const clampedEnd = Math.min(1440, endMin);
 		if (clampedEnd <= clampedStart) return;
+
+		const subSlotStart = clampedStart % 10;
+		const subSlotEnd = clampedEnd % 10;
 
 		const dayColStart = (dayIndex - this.dayOffset) * 6 + 2;
 		const segments = this.getHourSegments(clampedStart, clampedEnd);
@@ -874,6 +877,16 @@ export class GridRenderer {
 			ghost.style.gridColumn = `${dayColStart + seg.slotStart} / ${dayColStart + seg.slotEnd}`;
 			ghost.style.backgroundColor = `color-mix(in srgb, ${color} 25%, transparent)`;
 			ghost.style.borderColor = color;
+
+			// Sub-slot offset for minute-level precision via margin
+			const slots = seg.slotEnd - seg.slotStart;
+			if (i === 0 && subSlotStart !== 0) {
+				ghost.style.marginLeft = `${(subSlotStart / 10) * (100 / slots)}%`;
+			}
+			if (i === segments.length - 1 && subSlotEnd !== 0) {
+				ghost.style.marginRight = `${((10 - subSlotEnd) / 10) * (100 / slots)}%`;
+			}
+
 			if (i === widestIdx) ghost.setText(label);
 			this.externalGhostEls.push(ghost);
 		});
