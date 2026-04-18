@@ -1352,6 +1352,111 @@ export class WeekFlowView extends ItemView {
 		}
 	}
 
+	// ── Tag Picker (ct command) ──
+
+	private showTagPicker(dayIndex: number, item: TimelineItem): void {
+		const categories = this.plugin.settings.categories;
+		if (categories.length === 0) return;
+
+		// Find cursor element position for anchoring
+		const cursorEl = this.contentEl.querySelector(".weekflow-vim-cursor") as HTMLElement | null;
+		if (!cursorEl) return;
+
+		const currentTag = item.tags[0] || "";
+
+		// Create picker overlay
+		const picker = document.createElement("div");
+		picker.className = "weekflow-tag-picker";
+		const cursorRect = cursorEl.getBoundingClientRect();
+		picker.style.position = "fixed";
+		picker.style.left = `${cursorRect.left}px`;
+		picker.style.top = `${cursorRect.bottom + 4}px`;
+		picker.style.zIndex = "1000";
+		document.body.appendChild(picker);
+
+		let selectedIdx = categories.findIndex(c => c.tag === currentTag);
+		if (selectedIdx < 0) selectedIdx = 0;
+
+		const renderItems = () => {
+			picker.empty();
+			categories.forEach((cat, i) => {
+				const btn = picker.createDiv({ cls: "weekflow-tag-picker-item" });
+				if (i === selectedIdx) btn.addClass("is-selected");
+				const dot = btn.createSpan({ cls: "weekflow-tag-picker-dot" });
+				dot.style.backgroundColor = cat.color;
+				btn.createSpan({ text: `${cat.label} #${cat.tag}` });
+				btn.addEventListener("click", () => selectTag(cat.tag));
+			});
+		};
+
+		const selectTag = async (tag: string) => {
+			dismiss();
+			const dateKey = this.dates[dayIndex].format("YYYY-MM-DD");
+			const items = this.weekData.get(dateKey) || [];
+			const idx = items.findIndex(i => i.id === item.id);
+			if (idx === -1) return;
+
+			const oldTags = [...items[idx].tags];
+			items[idx].tags = [tag];
+			await this.guardedSave(this.dates[dayIndex], items);
+
+			this.undoManager.push({
+				description: "Change tag",
+				execute: async () => {},
+				undo: async () => {
+					const items = this.weekData.get(dateKey) || [];
+					const idx = items.findIndex(i => i.id === item.id);
+					if (idx !== -1) {
+						items[idx].tags = oldTags;
+						await this.guardedSave(this.dates[dayIndex], items);
+					}
+				},
+			});
+		};
+
+		const dismiss = () => {
+			picker.remove();
+			document.removeEventListener("keydown", onKey, true);
+			document.removeEventListener("pointerdown", onClickOutside, true);
+			this.vimManager?.exitInsertMode();
+		};
+
+		const onKey = (e: KeyboardEvent) => {
+			if (e.key === "j" || e.key === "ArrowDown") {
+				e.preventDefault();
+				e.stopPropagation();
+				selectedIdx = (selectedIdx + 1) % categories.length;
+				renderItems();
+			} else if (e.key === "k" || e.key === "ArrowUp") {
+				e.preventDefault();
+				e.stopPropagation();
+				selectedIdx = (selectedIdx - 1 + categories.length) % categories.length;
+				renderItems();
+			} else if (e.key === "Enter") {
+				e.preventDefault();
+				e.stopPropagation();
+				selectTag(categories[selectedIdx].tag);
+			} else if (e.key === "Escape") {
+				e.preventDefault();
+				e.stopPropagation();
+				dismiss();
+			}
+		};
+
+		const onClickOutside = (e: PointerEvent) => {
+			if (!picker.contains(e.target as Node)) {
+				dismiss();
+			}
+		};
+
+		document.addEventListener("keydown", onKey, true);
+		document.addEventListener("pointerdown", onClickOutside, true);
+
+		// Enter insert mode to block vim keys
+		this.vimManager?.enterInsertMode();
+		renderItems();
+	}
+
 	// ── Block Click → Edit Modal ──
 
 	private onBlockClick(dayIndex: number, item: TimelineItem) {
@@ -1812,6 +1917,20 @@ export class WeekFlowView extends ItemView {
 				this.onBlockResize(item, dayIndex, newStart, newEnd),
 			moveBlock: (item: TimelineItem, fromDay: number, toDay: number, newStart: number, newDuration?: number) =>
 				this.onBlockDragEnd(item, fromDay, toDay, newStart, newDuration),
+			deferBlock: (dayIndex: number, item: TimelineItem) => {
+				const nextDay = dayIndex + 1;
+				if (nextDay > 6) {
+					// Cross week — defer to next week's first day
+					this.pendingDayOffset = 0;
+					// TODO: cross-week defer needs more work; for now just move within week
+					return Promise.resolve();
+				}
+				const time = item.planTime;
+				return this.onBlockDragEnd(item, dayIndex, nextDay, time.start);
+			},
+			changeTag: (dayIndex: number, item: TimelineItem) => {
+				this.showTagPicker(dayIndex, item);
+			},
 			openBlockEdit: (dayIndex: number, item: TimelineItem) => this.onBlockClick(dayIndex, item),
 			openInlineEditor: (dayIndex: number, startMinutes: number, endMinutes: number) => {
 				if (this.gridRenderer) {

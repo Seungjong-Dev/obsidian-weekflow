@@ -32,6 +32,8 @@ export interface VimContext {
 	moveBlock: (item: TimelineItem, fromDay: number, toDay: number, newStart: number, newDuration?: number) => Promise<void>;
 	openBlockEdit: (dayIndex: number, item: TimelineItem) => void;
 	openInlineEditor: (dayIndex: number, startMinutes: number, endMinutes: number) => void;
+	deferBlock: (dayIndex: number, item: TimelineItem) => Promise<void>;
+	changeTag: (dayIndex: number, item: TimelineItem) => void;
 	undo: () => Promise<void>;
 	redo: () => Promise<void>;
 
@@ -277,10 +279,14 @@ export class VimKeyboardManager {
 		this.multiKeyMap.set("gt", () => this.jumpNow());
 		this.multiKeyMap.set("dd", () => this.actionDelete());
 		this.multiKeyMap.set("cc", () => this.actionChangeContent());
+		this.multiKeyMap.set("cd", () => this.actionDefer());
+		this.multiKeyMap.set("ct", () => this.actionChangeTag());
 		this.multiKeyPrefixes.add("gg");
 		this.multiKeyPrefixes.add("gt");
 		this.multiKeyPrefixes.add("dd");
 		this.multiKeyPrefixes.add("cc");
+		this.multiKeyPrefixes.add("cd");
+		this.multiKeyPrefixes.add("ct");
 
 		// ── Visual mode keys ──
 		this.visualSingleKeyMap.set("h", () => this.visualExtend(0, -10));
@@ -502,6 +508,16 @@ export class VimKeyboardManager {
 		const newEnd = time.end + delta;
 		if (newEnd <= time.start || newEnd > 1440) return;
 		this.ctx.resizeBlock(block.item, block.dayIndex, time.start, newEnd);
+	}
+
+	private actionDefer(): void {
+		const block = this.getBlockAtCursor();
+		if (block) this.ctx.deferBlock(block.dayIndex, block.item);
+	}
+
+	private actionChangeTag(): void {
+		const block = this.getBlockAtCursor();
+		if (block) this.ctx.changeTag(block.dayIndex, block.item);
 	}
 
 	private actionChangeContent(): void {
