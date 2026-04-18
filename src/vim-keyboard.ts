@@ -65,6 +65,13 @@ export class VimKeyboardManager {
 	private scopeHandlers: any[] = [];
 	private suspended = false;
 
+	// Time edit sub-mode (cs/ce)
+	private timeEditMode: "start" | "end" | null = null;
+	private timeEditDigits = "";
+	private timeEditTimeout: ReturnType<typeof setTimeout> | null = null;
+	private timeEditOriginal: { start: number; end: number } | null = null;
+	private timeEditPreview: number | null = null;
+
 	private singleKeyMap = new Map<string, () => void>();
 	private shiftKeyMap = new Map<string, () => void>();
 	private ctrlKeyMap = new Map<string, () => void>();
@@ -156,6 +163,11 @@ export class VimKeyboardManager {
 		// Skip if target is an input/textarea
 		if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || (e.target as HTMLElement)?.isContentEditable) {
 			return;
+		}
+
+		// Time edit sub-mode — intercept all keys
+		if (this.timeEditMode) {
+			return this.onTimeEditKey(e);
 		}
 
 		// Escape — handle in all modes, stopPropagation to prevent Obsidian focus switch
@@ -289,12 +301,16 @@ export class VimKeyboardManager {
 		this.multiKeyMap.set("cc", () => this.actionChangeContent());
 		this.multiKeyMap.set("cd", () => this.actionDefer());
 		this.multiKeyMap.set("ct", () => this.actionChangeTag());
+		this.multiKeyMap.set("cs", () => this.enterTimeEditMode("start"));
+		this.multiKeyMap.set("ce", () => this.enterTimeEditMode("end"));
 		this.multiKeyPrefixes.add("gg");
 		this.multiKeyPrefixes.add("gt");
 		this.multiKeyPrefixes.add("dd");
 		this.multiKeyPrefixes.add("cc");
 		this.multiKeyPrefixes.add("cd");
 		this.multiKeyPrefixes.add("ct");
+		this.multiKeyPrefixes.add("cs");
+		this.multiKeyPrefixes.add("ce");
 
 		// ── Visual mode keys ──
 		this.visualSingleKeyMap.set("h", () => this.visualExtend(0, -10));
@@ -526,6 +542,149 @@ export class VimKeyboardManager {
 	private actionChangeTag(): void {
 		const block = this.getBlockAtCursor();
 		if (block) this.ctx.changeTag(block.dayIndex, block.item);
+	}
+
+	// ── Time edit sub-mode (cs/ce) ──
+
+	private enterTimeEditMode(target: "start" | "end"): void {
+		const block = this.getBlockAtCursor();
+		if (!block) return;
+		const time = block.item.planTime;
+		this.timeEditMode = target;
+		this.timeEditDigits = "";
+		this.timeEditOriginal = { start: time.start, end: time.end };
+		this.timeEditPreview = target === "start" ? time.start : time.end;
+	}
+
+	private onTimeEditKey(e: KeyboardEvent): boolean | void {
+		e.preventDefault();
+		e.stopPropagation();
+
+		if (e.key === "Escape") {
+			this.cancelTimeEdit();
+			return false;
+		}
+
+		if (e.key === "Enter") {
+			if (this.timeEditPreview != null) {
+				this.confirmTimeEdit(this.timeEditPreview);
+			} else {
+				this.cancelTimeEdit();
+			}
+			return false;
+		}
+
+		// Navigation keys
+		if (e.key === "h" || e.key === "l" || e.key === "j" || e.key === "k") {
+			const delta = e.key === "h" ? -10 : e.key === "l" ? 10 : e.key === "j" ? 60 : -60;
+			const current = this.timeEditPreview ?? (this.timeEditMode === "start"
+				? this.timeEditOriginal!.start : this.timeEditOriginal!.end);
+			const newVal = Math.max(0, Math.min(1430, current + delta));
+			this.timeEditPreview = newVal;
+			this.applyTimeEditPreview(newVal);
+			return false;
+		}
+
+		// Digit keys
+		if (e.key >= "0" && e.key <= "9") {
+			if (this.timeEditTimeout) {
+				clearTimeout(this.timeEditTimeout);
+				this.timeEditTimeout = null;
+			}
+			this.timeEditDigits += e.key;
+
+			if (this.timeEditDigits.length === 4) {
+				// 4 digits: HHMM
+				const hh = parseInt(this.timeEditDigits.slice(0, 2));
+				const mm = parseInt(this.timeEditDigits.slice(2, 4));
+				if (hh >= 0 && hh <= 23 && mm >= 0 && mm <= 59) {
+					this.confirmTimeEdit(hh * 60 + mm);
+				} else {
+					this.cancelTimeEdit();
+				}
+			} else if (this.timeEditDigits.length === 2) {
+				// 2 digits: wait 300ms, then interpret as minutes of current hour
+				this.timeEditTimeout = setTimeout(() => {
+					const mm = parseInt(this.timeEditDigits);
+					if (mm >= 0 && mm <= 59) {
+						const hour = this.timeEditMode === "start"
+							? Math.floor(this.timeEditOriginal!.start / 60)
+							: Math.floor(this.timeEditOriginal!.end / 60);
+						this.confirmTimeEdit(hour * 60 + mm);
+					} else {
+						this.cancelTimeEdit();
+					}
+				}, 300);
+			}
+			// 1 or 3 digits: wait for more
+			return false;
+		}
+
+		// Any other key: cancel
+		this.cancelTimeEdit();
+		return false;
+	}
+
+	private applyTimeEditPreview(minutes: number): void {
+		const block = this.getBlockAtCursor();
+		if (!block || !this.timeEditOriginal) return;
+
+		let newStart = this.timeEditOriginal.start;
+		let newEnd = this.timeEditOriginal.end;
+
+		if (this.timeEditMode === "start") newStart = minutes;
+		else newEnd = minutes;
+
+		// Validate
+		if (newStart >= newEnd) return;
+
+		this.ctx.resizeBlock(block.item, block.dayIndex, newStart, newEnd);
+	}
+
+	private confirmTimeEdit(minutes: number): void {
+		const block = this.getBlockAtCursor();
+		if (!block || !this.timeEditOriginal) {
+			this.cancelTimeEdit();
+			return;
+		}
+
+		let newStart = this.timeEditOriginal.start;
+		let newEnd = this.timeEditOriginal.end;
+
+		if (this.timeEditMode === "start") newStart = minutes;
+		else newEnd = minutes;
+
+		// Validate: start must be before end
+		if (newStart >= newEnd) {
+			this.cancelTimeEdit();
+			return;
+		}
+
+		this.ctx.resizeBlock(block.item, block.dayIndex, newStart, newEnd);
+		this.exitTimeEditMode();
+	}
+
+	private cancelTimeEdit(): void {
+		// Restore original time
+		if (this.timeEditOriginal) {
+			const block = this.getBlockAtCursor();
+			if (block) {
+				this.ctx.resizeBlock(block.item, block.dayIndex,
+					this.timeEditOriginal.start, this.timeEditOriginal.end);
+			}
+		}
+		this.exitTimeEditMode();
+	}
+
+	private exitTimeEditMode(): void {
+		if (this.timeEditTimeout) {
+			clearTimeout(this.timeEditTimeout);
+			this.timeEditTimeout = null;
+		}
+		this.timeEditMode = null;
+		this.timeEditDigits = "";
+		this.timeEditOriginal = null;
+		this.timeEditPreview = null;
 	}
 
 	private actionChangeContent(): void {
