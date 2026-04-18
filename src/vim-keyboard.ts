@@ -578,14 +578,31 @@ export class VimKeyboardManager {
 			return false;
 		}
 
-		// Navigation keys
-		if (e.key === "h" || e.key === "l" || e.key === "j" || e.key === "k") {
-			const delta = e.key === "h" ? -10 : e.key === "l" ? 10 : e.key === "j" ? 60 : -60;
+		// Navigation keys (h/l = ±10min, Shift+H/L = ±1min, j/k = ±60min)
+		if (e.key === "h" || e.key === "l" || e.key === "j" || e.key === "k"
+			|| e.key === "H" || e.key === "L") {
+			let delta: number;
+			if (e.key === "H") delta = -1;
+			else if (e.key === "L") delta = 1;
+			else if (e.key === "h") delta = -10;
+			else if (e.key === "l") delta = 10;
+			else if (e.key === "j") delta = 60;
+			else delta = -60; // k
 			const current = this.timeEditPreview ?? (this.timeEditMode === "start"
 				? this.timeEditOriginal!.start : this.timeEditOriginal!.end);
-			const newVal = Math.max(0, Math.min(1430, current + delta));
+			const newVal = Math.max(0, Math.min(1440, current + delta));
 			this.timeEditPreview = newVal;
 			this.applyTimeEditPreview(newVal);
+			return false;
+		}
+
+		// $ = next hour boundary
+		if (e.key === "$") {
+			const current = this.timeEditPreview ?? (this.timeEditMode === "start"
+				? this.timeEditOriginal!.start : this.timeEditOriginal!.end);
+			const nextHour = Math.min(1440, (Math.floor(current / 60) + 1) * 60);
+			this.timeEditPreview = nextHour;
+			this.applyTimeEditPreview(nextHour);
 			return false;
 		}
 
@@ -610,10 +627,14 @@ export class VimKeyboardManager {
 				// 2 digits: wait 300ms, then interpret as minutes of current hour
 				this.timeEditTimeout = setTimeout(() => {
 					const mm = parseInt(this.timeEditDigits);
-					if (mm >= 0 && mm <= 59) {
-						const hour = this.timeEditMode === "start"
-							? Math.floor(this.timeEditOriginal!.start / 60)
-							: Math.floor(this.timeEditOriginal!.end / 60);
+					// Use floor((val-1)/60) so hour boundaries (e.g. 11:00) stay in previous row
+					const ref = this.timeEditMode === "start"
+						? this.timeEditOriginal!.start : this.timeEditOriginal!.end;
+					const hour = Math.floor(Math.max(0, ref - 1) / 60);
+					if (mm === 60) {
+						// 60 = next hour boundary
+						this.confirmTimeEdit((hour + 1) * 60);
+					} else if (mm >= 0 && mm <= 59) {
 						this.confirmTimeEdit(hour * 60 + mm);
 					} else {
 						this.cancelTimeEdit();
