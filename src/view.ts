@@ -1260,6 +1260,8 @@ export class WeekFlowView extends ItemView {
 		};
 
 		const cancel = () => {
+			const gw = this.containerEl.querySelector(".weekflow-grid-wrapper") as HTMLElement | null;
+			gw?.focus();
 			this.dismissInlineEditor();
 			this.gridRenderer?.clearSelection();
 			this.vimManager?.exitInsertMode();
@@ -1299,6 +1301,7 @@ export class WeekFlowView extends ItemView {
 				}
 				if (e.key === "Escape") {
 					e.preventDefault();
+					e.stopPropagation();
 					hideDropdown();
 					return;
 				}
@@ -1309,6 +1312,7 @@ export class WeekFlowView extends ItemView {
 				submit();
 			} else if (e.key === "Escape") {
 				e.preventDefault();
+				e.stopPropagation();
 				cancel();
 			} else if (e.key === "Tab") {
 				e.preventDefault();
