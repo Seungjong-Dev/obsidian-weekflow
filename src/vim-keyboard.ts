@@ -829,15 +829,29 @@ export class VimKeyboardManager {
 			const min = m % 60;
 			return `${String(h).padStart(2, "0")}:${String(min).padStart(2, "0")}`;
 		};
+		const formatDuration = (m: number) => {
+			const h = Math.floor(m / 60);
+			const min = m % 60;
+			if (h === 0) return `${min}m`;
+			if (min === 0) return `${h}h`;
+			return `${h}h ${min}m`;
+		};
 
 		let info: string;
 		if (this.mode === "visual" && this.visual) {
 			const range = this.getVisualRange()!;
 			const duration = range.end - range.start;
-			const hours = duration / 60;
-			info = `${formatTime(range.start)} → ${formatTime(range.end)} (${hours >= 1 ? hours + "h" : duration + "m"})`;
+			info = `${formatTime(range.start)} → ${formatTime(range.end)} (${formatDuration(duration)})`;
 		} else {
 			info = formatTime(this.cursor.minutes);
+			if (this.mode === "normal") {
+				const block = this.getBlockAtCursor();
+				if (block) {
+					const time = (block.item.checkbox === "actual" && block.item.actualTime)
+						? block.item.actualTime : block.item.planTime;
+					info += ` ▸ [${formatTime(time.start)}–${formatTime(time.end)}] ${block.item.content}`;
+				}
+			}
 		}
 
 		this.ctx.updateModeIndicator(this.mode, info);

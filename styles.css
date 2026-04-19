@@ -2144,6 +2144,11 @@
 .weekflow-vim-mode-info {
 	color: var(--text-muted);
 	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	min-width: 0;
+	flex: 1;
 }
 
 .is-mobile .weekflow-vim-cursor,
