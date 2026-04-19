@@ -34,6 +34,7 @@ export interface VimContext {
 	moveBlock: (item: TimelineItem, fromDay: number, toDay: number, newStart: number, newDuration?: number) => Promise<void>;
 	openBlockEdit: (dayIndex: number, item: TimelineItem) => void;
 	openInlineEditor: (dayIndex: number, startMinutes: number, endMinutes: number) => void;
+	openInlineEditorForBlock: (dayIndex: number, item: TimelineItem) => void;
 	deferBlock: (dayIndex: number, item: TimelineItem) => Promise<void>;
 	changeTag: (dayIndex: number, item: TimelineItem) => void;
 	undo: () => Promise<void>;
@@ -304,7 +305,6 @@ export class VimKeyboardManager {
 		this.multiKeyMap.set("gg", () => this.jumpStart());
 		this.multiKeyMap.set("gt", () => this.jumpNow());
 		this.multiKeyMap.set("dd", () => this.actionDelete());
-		this.multiKeyMap.set("cc", () => this.actionChangeContent());
 		this.multiKeyMap.set("cd", () => this.actionDefer());
 		this.multiKeyMap.set("ct", () => this.actionChangeTag());
 		this.multiKeyMap.set("cs", () => this.enterTimeEditMode("start"));
@@ -315,7 +315,6 @@ export class VimKeyboardManager {
 		this.multiKeyPrefixes.add("gg");
 		this.multiKeyPrefixes.add("gt");
 		this.multiKeyPrefixes.add("dd");
-		this.multiKeyPrefixes.add("cc");
 		this.multiKeyPrefixes.add("cd");
 		this.multiKeyPrefixes.add("ct");
 		this.multiKeyPrefixes.add("cs");
@@ -481,7 +480,8 @@ export class VimKeyboardManager {
 	private actionEdit(): void {
 		const block = this.getBlockAtCursor();
 		if (block) {
-			this.ctx.openBlockEdit(block.dayIndex, block.item);
+			this.enterInsertMode();
+			this.ctx.openInlineEditorForBlock(block.dayIndex, block.item);
 		} else {
 			// Open inline editor at cursor position (1 slot = 10 min)
 			const start = this.cursor.minutes;
@@ -715,14 +715,6 @@ export class VimKeyboardManager {
 		this.timeEditOriginal = null;
 		this.timeEditPreview = null;
 		this.timeEditBlock = null;
-	}
-
-	private actionChangeContent(): void {
-		const block = this.getBlockAtCursor();
-		if (block) {
-			this.enterInsertMode();
-			this.ctx.openBlockEdit(block.dayIndex, block.item);
-		}
 	}
 
 	private actionEscape(): void {

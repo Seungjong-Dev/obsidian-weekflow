@@ -143,6 +143,19 @@ export class WeekFlowView extends ItemView {
 			this.vimManager = new VimKeyboardManager(this.buildVimContext());
 			this.vimManager.registerScope(this.scope);
 		}
+
+		// Always intercept Escape while inline editor is open — prevents Obsidian
+		// from seeing Escape and shifting focus to a previous note when input loses focus.
+		// Specific-key handlers take priority over the vim wildcard handler.
+		if (!this.scope) this.scope = new Scope(this.app.scope);
+		this.scope.register([], "Escape", (e) => {
+			if (this.inlineEditorCancel) {
+				e.preventDefault();
+				this.inlineEditorCancel();
+				return false;
+			}
+			return;
+		});
 	}
 
 	async onClose() {
@@ -1106,11 +1119,52 @@ export class WeekFlowView extends ItemView {
 	}
 
 	private inlineEditorEl: HTMLElement | null = null;
+	private inlineEditorCancel: (() => void) | null = null;
+
+	private showInlineEditorForBlock(dayIndex: number, item: TimelineItem) {
+		const blockEl = this.containerEl.querySelector(`.weekflow-block[data-item-id="${item.id}"]`) as HTMLElement | null;
+		if (!blockEl) {
+			this.onBlockClick(dayIndex, item);
+			return;
+		}
+		const rect = blockEl.getBoundingClientRect();
+		const time = item.actualTime && item.checkbox === "actual" ? item.actualTime : item.planTime;
+		const selection = { dayIndex, startMinutes: time.start, endMinutes: time.end };
+		const effectiveMode: "plan" | "actual" = item.checkbox === "actual" ? "actual" : "plan";
+		this.showInlineEditor(rect, selection, effectiveMode, { item, dayIndex });
+	}
+
+	private async updateBlockContent(dayIndex: number, item: TimelineItem, newContent: string, newTag: string) {
+		const date = this.dates[dayIndex];
+		const dateKey = date.format("YYYY-MM-DD");
+		const items = this.weekData.get(dateKey) || [];
+		const idx = items.findIndex(i => i.id === item.id);
+		if (idx === -1) return;
+		const oldItem = { ...items[idx], planTime: { ...items[idx].planTime }, actualTime: items[idx].actualTime ? { ...items[idx].actualTime } : undefined, tags: [...items[idx].tags] };
+		items[idx].content = newContent;
+		items[idx].tags = newTag ? [newTag] : [];
+		await this.guardedSave(date, items);
+		const action: UndoableAction = {
+			description: "Edit block content",
+			execute: async () => {},
+			undo: async () => {
+				const items = this.weekData.get(dateKey) || [];
+				const idx = items.findIndex(i => i.id === oldItem.id);
+				if (idx !== -1) {
+					items[idx] = oldItem;
+					await this.guardedSave(date, items);
+				}
+			},
+		};
+		this.undoManager.pushExecuted(action);
+		await this.refresh();
+	}
 
 	private showInlineEditor(
 		rect: DOMRect,
 		selection: { dayIndex: number; startMinutes: number; endMinutes: number },
-		effectiveMode: "plan" | "actual"
+		effectiveMode: "plan" | "actual",
+		editTarget?: { item: TimelineItem; dayIndex: number }
 	) {
 		this.dismissInlineEditor();
 
@@ -1129,7 +1183,9 @@ export class WeekFlowView extends ItemView {
 		editor.style.zIndex = "20";
 
 		// Track selected category (mutable)
-		let activeTag = this.selectedCategory || this.plugin.settings.categories[0]?.tag || "";
+		let activeTag = editTarget
+			? (editTarget.item.tags[0] || this.selectedCategory || this.plugin.settings.categories[0]?.tag || "")
+			: (this.selectedCategory || this.plugin.settings.categories[0]?.tag || "");
 
 		// ── Row 1: Single category dot + Input ──
 		const inputRow = editor.createDiv({ cls: "weekflow-inline-editor-row" });
@@ -1174,13 +1230,18 @@ export class WeekFlowView extends ItemView {
 
 		const input = inputRow.createEl("input", {
 			type: "text",
-			placeholder: "Add content...",
+			placeholder: editTarget ? "Edit content..." : "Add content...",
 			cls: "weekflow-inline-editor-input",
 		});
+		if (editTarget) {
+			input.value = editTarget.item.content;
+		}
 
 		// ── Row 2: Tab hint ──
 		const hintRow = editor.createDiv({ cls: "weekflow-inline-editor-hint" });
-		hintRow.innerHTML = `<kbd>#</kbd> tag <kbd>></kbd> inbox <kbd>Enter</kbd> create <kbd>Tab</kbd> details <kbd>Esc</kbd> cancel`;
+		hintRow.innerHTML = editTarget
+			? `<kbd>#</kbd> tag <kbd>Enter</kbd> save <kbd>Tab</kbd> details <kbd>Esc</kbd> cancel`
+			: `<kbd>#</kbd> tag <kbd>></kbd> inbox <kbd>Enter</kbd> create <kbd>Tab</kbd> details <kbd>Esc</kbd> cancel`;
 
 		// ── Dropdown state (shared — only one active at a time) ──
 		let dropdownEl: HTMLElement | null = null;
@@ -1204,6 +1265,7 @@ export class WeekFlowView extends ItemView {
 		};
 
 		const getInboxQuery = (): { start: number; query: string } | null => {
+			if (editTarget) return null;
 			const val = input.value;
 			const cursor = input.selectionStart ?? val.length;
 			const idx = val.lastIndexOf(">", cursor - 1);
@@ -1316,16 +1378,20 @@ export class WeekFlowView extends ItemView {
 			this.dismissInlineEditor();
 			this.gridRenderer?.clearSelection();
 			this.vimManager?.exitInsertMode();
-			await this.createBlockFromResult(
-				{
-					content,
-					tag: activeTag,
-					startMinutes: selection.startMinutes,
-					endMinutes: selection.endMinutes,
-				},
-				selection,
-				effectiveMode
-			);
+			if (editTarget) {
+				await this.updateBlockContent(editTarget.dayIndex, editTarget.item, content, activeTag);
+			} else {
+				await this.createBlockFromResult(
+					{
+						content,
+						tag: activeTag,
+						startMinutes: selection.startMinutes,
+						endMinutes: selection.endMinutes,
+					},
+					selection,
+					effectiveMode
+				);
+			}
 		};
 
 		const cancel = () => {
@@ -1335,6 +1401,7 @@ export class WeekFlowView extends ItemView {
 			this.gridRenderer?.clearSelection();
 			this.vimManager?.exitInsertMode();
 		};
+		this.inlineEditorCancel = cancel;
 
 		input.addEventListener("input", () => {
 			const iq = getInboxQuery();
@@ -1404,17 +1471,24 @@ export class WeekFlowView extends ItemView {
 				const currentContent = input.value.trim();
 				this.dismissInlineEditor();
 				this.gridRenderer?.clearSelection();
-				new BlockModal(
-					this.app,
-					{ start: selection.startMinutes, end: selection.endMinutes },
-					effectiveMode,
-					this.plugin.settings.categories,
-					async (result) => {
-						await this.createBlockFromResult(result, selection, effectiveMode);
-					},
-					activeTag,
-					currentContent
-				).open();
+				if (editTarget) {
+					(async () => {
+						await this.updateBlockContent(editTarget.dayIndex, editTarget.item, currentContent, activeTag);
+						this.onBlockClick(editTarget.dayIndex, editTarget.item);
+					})();
+				} else {
+					new BlockModal(
+						this.app,
+						{ start: selection.startMinutes, end: selection.endMinutes },
+						effectiveMode,
+						this.plugin.settings.categories,
+						async (result) => {
+							await this.createBlockFromResult(result, selection, effectiveMode);
+						},
+						activeTag,
+						currentContent
+					).open();
+				}
 			}
 		});
 
@@ -1439,6 +1513,7 @@ export class WeekFlowView extends ItemView {
 			this.inlineEditorEl.remove();
 			this.inlineEditorEl = null;
 		}
+		this.inlineEditorCancel = null;
 	}
 
 	// ── Tag Picker (ct command) ──
@@ -2040,6 +2115,9 @@ export class WeekFlowView extends ItemView {
 					this.gridRenderer.simulateCellSelection(dayIndex, startMinutes, endMinutes);
 				}
 			},
+			openInlineEditorForBlock: (dayIndex: number, item: TimelineItem) => {
+				this.showInlineEditorForBlock(dayIndex, item);
+			},
 			undo: () => this.undo(),
 			redo: () => this.redo(),
 
@@ -2168,13 +2246,13 @@ class VimHelpModal extends Modal {
 				["gt", "Jump to current time"],
 			]],
 			["Block Operations", [
-				["i / Enter", "Edit block or create new"],
+				["i / Enter", "Edit block or create new (inline)"],
 				["o / O", "New block below / above"],
 				["dd", "Delete block"],
 				["x", "Toggle complete (plan ↔ actual)"],
 				["< / >", "Shift block time ±10min"],
 				["+ / -", "Resize block ±10min"],
-				["cc", "Replace block content"],
+				["Tab (in inline)", "Escalate to full modal"],
 			]],
 			["Visual Mode", [
 				["v / V", "Enter visual selection"],
