@@ -42,6 +42,7 @@ export interface VimContext {
 	// UI callbacks
 	togglePlanningPanel: () => void;
 	toggleReviewPanel: () => void;
+	toggleLogPanel: () => void;
 	showHelpModal: () => void;
 	unfoldIfNeeded: (minutes: number) => void;
 	refoldIfCursorLeft: (minutes: number) => void;
@@ -310,6 +311,7 @@ export class VimKeyboardManager {
 		this.multiKeyMap.set("ce", () => this.enterTimeEditMode("end"));
 		this.multiKeyMap.set("zi", () => { this.ctx.togglePlanningPanel(); });
 		this.multiKeyMap.set("zr", () => { this.ctx.toggleReviewPanel(); });
+		this.multiKeyMap.set("zl", () => { this.ctx.toggleLogPanel(); });
 		this.multiKeyPrefixes.add("gg");
 		this.multiKeyPrefixes.add("gt");
 		this.multiKeyPrefixes.add("dd");
@@ -320,6 +322,7 @@ export class VimKeyboardManager {
 		this.multiKeyPrefixes.add("ce");
 		this.multiKeyPrefixes.add("zi");
 		this.multiKeyPrefixes.add("zr");
+		this.multiKeyPrefixes.add("zl");
 
 		// ── Visual mode keys ──
 		this.visualSingleKeyMap.set("h", () => this.visualExtend(0, -10));

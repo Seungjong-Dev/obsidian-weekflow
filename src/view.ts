@@ -559,6 +559,22 @@ export class WeekFlowView extends ItemView {
 		}
 	}
 
+	private toggleReviewModePanel(target: "review" | "log") {
+		if (!this.reviewController) return;
+		const open = this.plugin.settings.reviewPanelOpen;
+		const mode = this.plugin.settings.reviewPanelMode || "review";
+		if (open && mode === target) {
+			this.reviewController.toggle();
+		} else {
+			if (!open) this.reviewController.toggle();
+			this.reviewController.setMode(target);
+		}
+	}
+
+	private toggleLogPanel() {
+		this.toggleReviewModePanel("log");
+	}
+
 	// ── Dropdown Panel (Narrow mode Planning Panel) ──
 
 	private renderDropdownPanel(container: HTMLElement): void {
@@ -1959,7 +1975,8 @@ export class WeekFlowView extends ItemView {
 			redo: () => this.redo(),
 
 			togglePlanningPanel: () => this.togglePlanningPanel(),
-			toggleReviewPanel: () => this.toggleReviewPanel(),
+			toggleReviewPanel: () => this.toggleReviewModePanel("review"),
+			toggleLogPanel: () => this.toggleLogPanel(),
 			showHelpModal: () => this.showVimHelpModal(),
 			unfoldIfNeeded: (minutes: number) => {
 				if (this.gridRenderer) {
@@ -2102,6 +2119,7 @@ class VimHelpModal extends Modal {
 				["Ctrl+r", "Redo"],
 				["zi", "Toggle inbox / planning panel"],
 				["zr", "Toggle review panel"],
+				["zl", "Toggle log panel"],
 				["Esc", "Cancel / Normal mode"],
 				["?", "This help"],
 			]],
