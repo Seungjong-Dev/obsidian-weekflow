@@ -1180,13 +1180,16 @@ export class WeekFlowView extends ItemView {
 
 		// ── Row 2: Tab hint ──
 		const hintRow = editor.createDiv({ cls: "weekflow-inline-editor-hint" });
-		hintRow.innerHTML = `<kbd>#</kbd> category <kbd>Enter</kbd> create <kbd>Tab</kbd> details <kbd>Esc</kbd> cancel`;
+		hintRow.innerHTML = `<kbd>#</kbd> tag <kbd>></kbd> inbox <kbd>Enter</kbd> create <kbd>Tab</kbd> details <kbd>Esc</kbd> cancel`;
 
-		// ── #tag autocomplete state ──
+		// ── Dropdown state (shared — only one active at a time) ──
 		let dropdownEl: HTMLElement | null = null;
 		let dropdownIndex = -1;
+		let dropdownMode: "tag" | "inbox" | null = null;
 		let filteredCats: typeof categories = [];
+		let filteredInbox: PanelItem[] = [];
 		const categories = this.plugin.settings.categories;
+		const inboxPanelItems = collectInboxPanelItems(this.inboxItems);
 
 		const getHashQuery = (): { start: number; query: string } | null => {
 			const val = input.value;
@@ -1200,6 +1203,15 @@ export class WeekFlowView extends ItemView {
 			return { start: hashIdx, query };
 		};
 
+		const getInboxQuery = (): { start: number; query: string } | null => {
+			const val = input.value;
+			const cursor = input.selectionStart ?? val.length;
+			const idx = val.lastIndexOf(">", cursor - 1);
+			if (idx === -1) return null;
+			if (idx !== 0 && val[idx - 1] !== " ") return null;
+			return { start: idx, query: val.slice(idx + 1, cursor) };
+		};
+
 		const updateDropdownHighlight = () => {
 			if (!dropdownEl) return;
 			dropdownEl.querySelectorAll(".weekflow-inline-autocomplete-item").forEach((el, i) => {
@@ -1210,7 +1222,9 @@ export class WeekFlowView extends ItemView {
 		const hideDropdown = () => {
 			if (dropdownEl) { dropdownEl.remove(); dropdownEl = null; }
 			dropdownIndex = -1;
+			dropdownMode = null;
 			filteredCats = [];
+			filteredInbox = [];
 		};
 
 		const selectFromDropdown = (cat: { tag: string }) => {
@@ -1227,9 +1241,22 @@ export class WeekFlowView extends ItemView {
 			input.focus();
 		};
 
+		const selectFromInboxDropdown = async (panelItem: PanelItem) => {
+			hideDropdown();
+			const cell = { dayIndex: selection.dayIndex, minutes: selection.startMinutes };
+			const gw = this.containerEl.querySelector(".weekflow-grid-wrapper") as HTMLElement | null;
+			gw?.focus();
+			this.dismissInlineEditor();
+			this.gridRenderer?.clearSelection();
+			this.vimManager?.exitInsertMode();
+			await this.blockActions!.onPanelDragEnd(panelItem, cell);
+		};
+
 		const showDropdown = (filtered: typeof categories) => {
 			filteredCats = filtered;
-			dropdownIndex = 0; // auto-highlight first
+			filteredInbox = [];
+			dropdownMode = "tag";
+			dropdownIndex = 0;
 
 			if (dropdownEl) dropdownEl.remove();
 			dropdownEl = editor.createDiv({ cls: "weekflow-inline-autocomplete" });
@@ -1246,6 +1273,32 @@ export class WeekFlowView extends ItemView {
 					e.preventDefault();
 					e.stopPropagation();
 					selectFromDropdown(cat);
+				});
+			});
+		};
+
+		const showInboxDropdown = (filtered: PanelItem[]) => {
+			filteredInbox = filtered;
+			filteredCats = [];
+			dropdownMode = "inbox";
+			dropdownIndex = 0;
+
+			if (dropdownEl) dropdownEl.remove();
+			dropdownEl = editor.createDiv({ cls: "weekflow-inline-autocomplete" });
+
+			filtered.forEach((pi, i) => {
+				const item = dropdownEl!.createDiv({ cls: "weekflow-inline-autocomplete-item" });
+				if (i === dropdownIndex) item.addClass("active");
+
+				const cat = pi.tags[0] ? categories.find(c => c.tag === pi.tags[0]) : undefined;
+				const dot = item.createDiv({ cls: "weekflow-inline-autocomplete-dot" });
+				dot.style.backgroundColor = cat?.color || "#888";
+				item.createSpan({ text: pi.content });
+
+				item.addEventListener("pointerdown", (e) => {
+					e.preventDefault();
+					e.stopPropagation();
+					selectFromInboxDropdown(pi);
 				});
 			});
 		};
@@ -1284,6 +1337,17 @@ export class WeekFlowView extends ItemView {
 		};
 
 		input.addEventListener("input", () => {
+			const iq = getInboxQuery();
+			if (iq) {
+				const q = iq.query.toLowerCase();
+				const filtered = inboxPanelItems.filter(pi =>
+					pi.content.toLowerCase().includes(q) ||
+					pi.tags.some(t => t.toLowerCase().includes(q))
+				);
+				if (filtered.length === 0) { hideDropdown(); return; }
+				showInboxDropdown(filtered);
+				return;
+			}
 			const hq = getHashQuery();
 			if (!hq) { hideDropdown(); return; }
 			const q = hq.query.toLowerCase();
@@ -1298,9 +1362,10 @@ export class WeekFlowView extends ItemView {
 		input.addEventListener("keydown", (e) => {
 			// Handle dropdown navigation first
 			if (dropdownEl) {
+				const listLen = dropdownMode === "inbox" ? filteredInbox.length : filteredCats.length;
 				if (e.key === "ArrowDown") {
 					e.preventDefault();
-					dropdownIndex = Math.min(dropdownIndex + 1, filteredCats.length - 1);
+					dropdownIndex = Math.min(dropdownIndex + 1, listLen - 1);
 					updateDropdownHighlight();
 					return;
 				}
@@ -1312,7 +1377,11 @@ export class WeekFlowView extends ItemView {
 				}
 				if (e.key === "Enter" && !e.isComposing && dropdownIndex >= 0) {
 					e.preventDefault();
-					selectFromDropdown(filteredCats[dropdownIndex]);
+					if (dropdownMode === "inbox") {
+						selectFromInboxDropdown(filteredInbox[dropdownIndex]);
+					} else {
+						selectFromDropdown(filteredCats[dropdownIndex]);
+					}
 					return;
 				}
 				if (e.key === "Escape") {
