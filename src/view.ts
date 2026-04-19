@@ -1954,6 +1954,8 @@ export class WeekFlowView extends ItemView {
 			undo: () => this.undo(),
 			redo: () => this.redo(),
 
+			togglePlanningPanel: () => this.togglePlanningPanel(),
+			toggleReviewPanel: () => this.toggleReviewPanel(),
 			showHelpModal: () => this.showVimHelpModal(),
 			unfoldIfNeeded: (minutes: number) => {
 				if (this.gridRenderer) {
@@ -2094,6 +2096,8 @@ class VimHelpModal extends Modal {
 			["General", [
 				["u", "Undo"],
 				["Ctrl+r", "Redo"],
+				["zi", "Toggle inbox / planning panel"],
+				["zr", "Toggle review panel"],
 				["Esc", "Cancel / Normal mode"],
 				["?", "This help"],
 			]],
