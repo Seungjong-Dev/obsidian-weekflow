@@ -12,6 +12,8 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
@@ -20,8 +22,18 @@ jobs:
       - run: npm install
       - run: npm run build
 
+      - name: Extract annotated tag message
+        id: tag_msg
+        run: |
+          {
+            echo 'body<<TAG_EOF'
+            git tag -l --format='%(contents)' "${GITHUB_REF_NAME}"
+            echo TAG_EOF
+          } >> "$GITHUB_OUTPUT"
+
       - uses: softprops/action-gh-release@v2
         with:
+          body: ${{ steps.tag_msg.outputs.body }}
           files: |
             main.js
             manifest.json
